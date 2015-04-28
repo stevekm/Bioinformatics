@@ -1,4 +1,8 @@
 from __future__ import division
+# this program repoorts the nucleotide content of a given DNA sequence
+# in future versions, allow for user input of DNA sequence
+# in future versions, allow for user input of desired nucleotide(s) for analysis
+# in future versions, round off output and display '%' symbol
 DNA="ACTGATCGATTACGTATAGTATTTGCTATCATACATATATATCGATGCGTTCAT"
 DNAlength=len(DNA)
 #print(len(DNA))
