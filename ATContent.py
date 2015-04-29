@@ -5,8 +5,6 @@ from __future__ import division
 DNA="ACTGATCGATTACGTATAGTATTTGCTATCATACATATATATCGATGCGTTCAT"
 print("DNA sequence is " + DNA)
 DNAlength=len(DNA)
-#print(len(DNA))
-#print(DNAlength)
 print("Sequence Length = " + str(DNAlength))
 Acontent=DNA.count("A")
 Tcontent=DNA.count("T")
