@@ -1,4 +1,5 @@
 from __future__ import division
+# from decimal import Decimal # this might help for the rounding...
 # The following DNA sequence has two exons;
 # The first exon runs from the start of the sequence to 
 # the sixty-third character, and the second exon runs from 
@@ -20,3 +21,4 @@ print("Percent coding DNA is " + str(PercentCoding))
 # print out the original genomic DNA sequence with
 # coding bases in uppercase and non-coding bases in lowercase
 print(DNA[0:62].upper() + DNA[63:89].lower() + DNA[90:DNALen].upper())
+
