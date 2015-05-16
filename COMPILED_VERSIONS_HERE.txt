@@ -1,8 +1,5 @@
 Projects here are source-code only. Find the latest compiled versions of each at the following URLs:
 
-ChIP_Seq_prostate_truncatedQC.pdf
-https://www.dropbox.com/s/jmlxj7wk7pem130/ChIP_Seq_prostate_truncatedQC.pdf?dl=0
-
 Exam_2_kellys.pdf
 https://www.dropbox.com/s/j4thctz4mqz517j/Exam_2_kellys.pdf?dl=0
 
