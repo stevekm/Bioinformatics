@@ -1,5 +1,23 @@
 #!/bin/bash
 
+# USAGE: bam_to_BigWig.sh $GENOME $BAM_INPUT_DIR $BIGWIG_OUTPUT_DIR
+# use with qsub array job based on number of samples!! Like this:
+########
+# EXAMPLE
+# the fastq.gz files are in this dir:
+# Input_Dir=~/projects/RNAseq-2015-09-29/inputs 
+# # count the number of entries to be processed:
+# Input_Entries=$(ls $Input_Dir/*R1.fastq.gz | wc -l)
+# 
+# # the name of the referrence genome
+# GENOME=mm9
+# # the location of the bams to be turned into BigWigs:
+# BAM_INPUT_DIR=/ifs/home/username/projects/RNAseq-2015-09-29/output_mm9/bam
+# # the location to output the BigWigs to:
+# BIGWIG_OUTPUT_DIR=/ifs/home/username/projects/RNAseq-2015-09-29/output_mm9/bam_to_bigWig_py
+# # ~/projects/RNAseq-2015-09-29/code/bam_to_BigWig.sh $GENOME $BAM_INPUT_DIR $BIGWIG_OUTPUT_FILE
+# qsub -t 1-$Input_Entries -pe threaded 1 ~/projects/RNAseq-2015-09-29/code/bam_to_BigWig.sh $GENOME $BAM_INPUT_DIR $BIGWIG_OUTPUT_DIR
+
 # need these for the python functions to work
 
 module load samtools/0.1.19
