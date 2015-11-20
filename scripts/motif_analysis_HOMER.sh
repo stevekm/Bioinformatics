@@ -1,6 +1,6 @@
 #!/bin/bash
 # called by the qsub_motif_analysis.sh script
-# USAGE: alignment_summary_stats_plots.sh /path/to/project/chipseq-analysis /path/to/project/chipseq-analysis_output genome
+# USAGE: motif_analysis_HOMER.sh /path/to/project/chipseq-analysis /path/to/project/chipseq-analysis_output genome
 # $0 path to script
 # $1 /path/to/project/chipseq-analysis
 # $2 /path/to/output_dir 
