@@ -5,6 +5,8 @@
 # args[8]: ANNOVAR_version
 # args[9]: VCF converted to TSV by VCFLIB <https://github.com/ekg/vcflib>
 
+# This script will convert the ANNOVAR annotated CSV files into a format that REDCap wants
+
 # get commands passed to the script
 args <- commandArgs()
 
