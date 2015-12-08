@@ -251,7 +251,9 @@ done
 # # 
 # # # 
 # upload the file # code works, but server has issues
-# echo -e "\nUploading the gene table file\n"
-# ${REDCAP_IMPORT_R} ${OUTPUT_GENE_TABLE} "${SERVICE}" ${TOKEN}
+echo -e "\nUploading the gene table file\n"
+OUTPUT_GENE_TABLE_fullpath=$(readlink -m $OUTPUT_GENE_TABLE)
+echo -e "\n${REDCAP_IMPORT_R} ${OUTPUT_GENE_TABLE_fullpath} SERVICE TOKEN\n"
+${REDCAP_IMPORT_R} ${OUTPUT_GENE_TABLE_fullpath} "${SERVICE}" ${TOKEN}
 
 
