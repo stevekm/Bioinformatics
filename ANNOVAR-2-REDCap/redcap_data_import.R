@@ -6,25 +6,26 @@
 
 # This script will import the annotation data to REDCap
 
-install.packages("httr") # might need this if httr is not already installed
+# install.packages("httr") # might need this if httr is not already installed
 library(httr)
 
 # get commands passed to the script
 args <- commandArgs()
-
-Gene_Table<-read.csv(file = args[6])
+Gene_Table_filepath<-args[6]
 Service_URL<-args[7]
 API_Token<-args[8]
 
+print("R: input is: ")
+print(args[6])
+
+
 #******************************
 #*** Import Records
+Gene_Table<-read.csv(file = Gene_Table_filepath)
 
-X <- read.csv(file = Gene_Table)
-# name_string <- names(X, collapse=',')
-# name_string <- names(X)
-name_string <- paste(colnames(X),collapse=',')
+name_string <- paste(colnames(Gene_Table),collapse=',')
 
-data_string <- capture.output(write.table(X, sep=',', 
+data_string <- capture.output(write.table(Gene_Table, sep=',', 
                                           col.names=FALSE, row.names=FALSE))
 x_string <- paste(c(name_string, data_string, ''), collapse='\n')
 
@@ -39,4 +40,5 @@ POST(url=Service_URL,
                returnContent='ids', # 'ids','count', or 'nothing'
                returnFormat ='csv' # 'csv', 'json', or 'xml'
      ))
+
 
