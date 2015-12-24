@@ -8,12 +8,12 @@
 ## Input can be a single .vcf or a dir with many of these, or a zip containing vcf or vcf.gz
 ## .vcf.gz will automatically be extracted before processing
 ## EXAMPLE:
-## ./code/vcf2annovar2redcap.sh ./sample_official_VCF ./redcap_project_files ./code/vcf2annovar2redcap_params.sh
+## ./code/vcf2annovar2redcap.sh ./variant_run.vcf.zip ./output_dir ./code/vcf2annovar2redcap_params.sh
 
 # This script will:
 # convert VCF files in the directory into a format that can be used by ANNOVAR for annotation
 # then, annotate the file with ANNOVAR
-# then, convert it to a TSV 
+# then, convert it to a TSV because thats handy
 # then, parse the ANNOVAR output in R and write out a CSV in the format we need for REDCap
 # output all files in the same directory containing VCFs
 
@@ -24,6 +24,11 @@ if (($# != 3)); then
   exit
 fi
 
+# load R 3.2.0
+module unload r/3.0.2
+module load r/3.2.0 # need this version of R to work with R package httr to upload to REDCap
+
+# 
 # # Input Script Args
 VCF_DIR=$1 # depricated, see below.. 
 OUT_DIR=$2
@@ -119,8 +124,8 @@ elif [ -d $1 ]; then
   # # # look for .gz, unzip them
   for i in $(find $VCF_DIR -type f -name "*.vcf.gz"); do
     # strip .gz from name
-	  zz=${i%%.gz} 
-	  gunzip -vc $i > $zz
+    zz=${i%%.gz} 
+    gunzip -vc $i > $zz
   done
 
 #   if [[ -z $(find $VCF_DIR -type f -name "*.vcf") ]]; then
@@ -163,40 +168,40 @@ for i in $FILES; do
   echo -e "\n---------------\n"
   echo -e "\nProcessing file $i\n"
 
-	# strip the file extension from the name 
-	zz=${i//.vcf/}
+  # strip the file extension from the name 
+  zz=${i//.vcf/}
 
-	# convert the vcf to annovar input format
-	if [[ -f ${i}.avinput ]]; then
-	  echo -e "\nANNOVAR input already exists, skipping conversion step"
-	else
-	  echo -e "\nConverting $(basename $i) to ANNOVAR format\nCommand:"
-	  echo -e "\n${ANNOVAR_CONVERT} -format vcf4old ${i} -includeinfo > ${i}.avinput"
-	  ${ANNOVAR_CONVERT} -format vcf4old ${i} -includeinfo > ${i}.avinput
-	fi
+  # convert the vcf to annovar input format
+  if [[ -f ${i}.avinput ]]; then
+    echo -e "\nANNOVAR input already exists, skipping conversion step"
+  else
+    echo -e "\nConverting $(basename $i) to ANNOVAR format\nCommand:"
+    echo -e "\n${ANNOVAR_CONVERT} -format vcf4old ${i} -includeinfo > ${i}.avinput"
+    ${ANNOVAR_CONVERT} -format vcf4old ${i} -includeinfo > ${i}.avinput
+  fi
 
-	# annotate with ANNOVAR table
-	if [[ -f $zz.${BUILD_VERSION}_multianno.csv ]]; then
-	  echo -e "\nANNOVAR table already exists, skipping annotation step"
-	else
-	  echo -e "\nAnnotating $(basename ${i}.avinput) with ANNOVAR\nCommand:"
-	  echo -e "\n${ANNOVAR_TABlE} ${i}.avinput ${DB_DIR} -buildver $BUILD_VERSION -out ${zz} -remove -protocol refGene,ljb26_all,cosmic68 -operation g,f,f -nastring . -csvout"
-	  ${ANNOVAR_TABlE} ${i}.avinput ${DB_DIR} -buildver $BUILD_VERSION -out ${zz} -remove -protocol refGene,ljb26_all,cosmic68 -operation g,f,f -nastring . -csvout
-	fi
+  # annotate with ANNOVAR table
+  if [[ -f $zz.${BUILD_VERSION}_multianno.csv ]]; then
+    echo -e "\nANNOVAR table already exists, skipping annotation step"
+  else
+    echo -e "\nAnnotating $(basename ${i}.avinput) with ANNOVAR\nCommand:"
+    echo -e "\n${ANNOVAR_TABlE} ${i}.avinput ${DB_DIR} -buildver $BUILD_VERSION -out ${zz} -remove -protocol refGene,ljb26_all,cosmic68 -operation g,f,f -nastring . -csvout"
+    ${ANNOVAR_TABlE} ${i}.avinput ${DB_DIR} -buildver $BUILD_VERSION -out ${zz} -remove -protocol refGene,ljb26_all,cosmic68,clinvar_20150629 -operation g,f,f,f -nastring . -csvout
+  fi
 
-	# convert the VCF to TSV for later
-	if [[ -f ${i}.tsv ]]; then
-	  echo -e "\nTSV file already exists for this sample, skipping conversion step"
+  # convert the VCF to TSV for later
+  if [[ -f ${i}.tsv ]]; then
+    echo -e "\nTSV file already exists for this sample, skipping conversion step"
     # # get the TSV file
     CONVERTED_TSV=${i}.tsv
     echo -e "\nTSV file is $CONVERTED_TSV"
-	else
-	  echo -e "\nConverting VCF to TSV"
-	  CONVERTED_TSV=${i}.tsv
-	  echo -e "\nCommand is:\n"
-	  echo -e "\n${VCF_to_TSV} ${i} > $CONVERTED_TSV"
-	  ${VCF_to_TSV} ${i} > $CONVERTED_TSV
-	fi
+  else
+    echo -e "\nConverting VCF to TSV"
+    CONVERTED_TSV=${i}.tsv
+    echo -e "\nCommand is:\n"
+    echo -e "\n${VCF_to_TSV} ${i} > $CONVERTED_TSV"
+    ${VCF_to_TSV} ${i} > $CONVERTED_TSV
+  fi
   
   # pass to R for processing for REDCap.. 
   # # get the TSV file
@@ -224,11 +229,12 @@ for i in $FILES; do
   echo -e "\nMaking gene table for upload to REDCap"
   echo -e "\nInput file is:\n${1}"
   echo -e "\nRun name is:\n${RUN_NAME}"
-  echo -e "\nR command is:\n${ANNOVAR2REDCAP} $ANNOTATED_CSV $i "$ANNOVAR_VERSION" $CONVERTED_TSV $OUTPUT_GENE_TABLE_BASENAME "$RUN_NAME""
-	${ANNOVAR2REDCAP} $ANNOTATED_CSV $i "$ANNOVAR_VERSION" $CONVERTED_TSV $OUTPUT_GENE_TABLE_BASENAME "$RUN_NAME"
-	
+  echo -e "\nR command is:\n${ANNOVAR2REDCAP} $ANNOTATED_CSV $i $ANNOVAR_VERSION $CONVERTED_TSV $OUTPUT_GENE_TABLE_BASENAME $RUN_NAME $REDCap_Data_Dictionary"
+  ${ANNOVAR2REDCAP} $ANNOTATED_CSV $i "$ANNOVAR_VERSION" $CONVERTED_TSV $OUTPUT_GENE_TABLE_BASENAME "$RUN_NAME" "$REDCap_Data_Dictionary"
+  
 done
 
+# exit # temp for development; skip the remaining steps!
 
 #
 # # 
@@ -246,14 +252,25 @@ for i in $VCF_DIR/*_gene_table.csv; do
    q=$(( $q + 1 ))                        # Increase the counter
 done
 
+# exit # temp for development; skip the remaining steps!
+
 
 #
 # # 
 # # # 
-# upload the file # code works, but server has issues
+# upload the file
 echo -e "\nUploading the gene table file\n"
 OUTPUT_GENE_TABLE_fullpath=$(readlink -m $OUTPUT_GENE_TABLE)
+
+# echo -e "${OUTPUT_GENE_TABLE_fullpath}"
 echo -e "\n${REDCAP_IMPORT_R} ${OUTPUT_GENE_TABLE_fullpath} SERVICE TOKEN\n"
-${REDCAP_IMPORT_R} ${OUTPUT_GENE_TABLE_fullpath} "${SERVICE}" ${TOKEN}
+# ${REDCAP_IMPORT_R} ${OUTPUT_GENE_TABLE} "${SERVICE}" ${TOKEN}
+Rscript ${REDCAP_IMPORT_R} ${OUTPUT_GENE_TABLE_fullpath} "${SERVICE}" ${TOKEN}
+
+
+
+# # # 
+# LOG_FILE=$(basename $0).$(date -u +%Y%m%dt%H%M%S).${HOSTNAME:-$(hostname)}.$$.${RANDOM}.log
+
 
 
