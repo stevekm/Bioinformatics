@@ -3,7 +3,7 @@
 
 - These scripts are designed to run on a HPC cluster using a variant of SGE job scheduler with `qsub`
 
-- Set up everything in the `workflow_scratchpad.sh` file, then run all the commands on the shell. This is nice because it keeps a verbose record of the relevant shell settings prior to running the scripts, including the `qsub` commands and settings. 
+- Set up everything in the `workflow_scratchpad.sh` file, then run all the commands on the shell. This keeps a verbose record of the relevant shell settings prior to running the scripts, including the `qsub` commands and settings. Individual scripts have their own logging functions as well, and `qsub` automatically logs all stdout and stderr. 
 
 - `motif_analysis_HOMER2_params.sh` contains HOMER settings and a few other things
  
