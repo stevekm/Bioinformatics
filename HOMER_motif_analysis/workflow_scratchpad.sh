@@ -7,12 +7,23 @@
 ProjDir="/ifs/home/$(whoami)/projects/project_directory"
 cd $ProjDir
 Results_Share_Dir="/ifs/home/$(whoami)/projects/project_directory/results_share_dir"
-Results_Peaks_Dir="$Results_Share_Dir/peaks" # dir that contains nothing but ".bed" and "_scores.bed" files for each sample
-Motif_Analysis_Outdir="$ProjDir/motif_analysis" # where to put the output of the analysis
-Motif_Analysis_Script="/ifs/home/$(whoami)/projects/project_directory/code/motif_analysis_HOMER3.sh" # primary script for qsub submission with commands to run
-chmod +x "$Motif_Analysis_Script" # make sure the script is executable 
-Motif_Analysis_Script_params="/ifs/home/$(whoami)/projects/project_directory/code/motif_analysis_HOMER2_params.sh" # commonly used HOMER parameters go here
-test_script="/ifs/home/$(whoami)/projects/project_directory/code/test.sh" # simple script to test the qsub
+# dir that contains nothing but ".bed" and "_scores.bed" files for each sample
+Results_Peaks_Dir="$Results_Share_Dir/peaks"
+
+# where to put the output of the analysis
+Motif_Analysis_Outdir="$ProjDir/motif_analysis"
+
+# primary scripts for qsub submission with commands to 
+Motif_Analysis_Script="/ifs/home/$(whoami)/projects/project_directory/code/motif_analysis_HOMER3.sh"
+Peak_Annotation_Script="/ifs/home/$(whoami)/projects/project_directory/code/peak_annotation_HOMER.sh"
+Tag_Dir_Script="/ifs/home/$(whoami)/projects/project_directory/code/make_tagDirectory_HOMER-bed.sh"
+# make sure the scripts are executable 
+chmod +x "$Motif_Analysis_Script"
+chmod +x "$Peak_Annotation_Script"
+chmod +x "$Tag_Dir_Script"
+
+# commonly used HOMER parameters go here
+Motif_Analysis_Script_params="/ifs/home/$(whoami)/projects/project_directory/code/motif_analysis_HOMER2_params.sh"
 
 
 #~~~ Shell Options ~~~~#
@@ -74,7 +85,14 @@ for i in "${Results_Share_Dir_BEDs[@]}"; do
   
   
   # submit the analysis job to qsub
-  qsub -q all.q -wd $tmp_motif_outdir -o :${tmp_motif_outdir}/ -e :${tmp_motif_outdir}/ -pe threaded 8-32 "$Motif_Analysis_Script" "${tmp_motif_outdir}" "${i}" "${Motif_Analysis_Script_params}"
+  # make Tag Directory
+  qsub -q all.q -wd $tmp_TagDir_outdir -o :${tmp_TagDir_outdir}/ -e :${tmp_TagDir_outdir}/ -pe threaded 4 "$Tag_Dir_Script" "${tmp_TagDir_outdir}" "${i}" "${Motif_Analysis_Script_params}"
+  
+  # Annotate Peaks
+  qsub -q all.q -wd $tmp_PeakAnnot_outdir -o :${tmp_PeakAnnot_outdir}/ -e :${tmp_PeakAnnot_outdir}/ -pe threaded 4 "$Peak_Annotation_Script" "${tmp_PeakAnnot_outdir}" "${i}" "${Motif_Analysis_Script_params}"
+  
+  # Motif Analysis
+ qsub -q all.q -wd $tmp_motif_outdir -o :${tmp_motif_outdir}/ -e :${tmp_motif_outdir}/ -pe threaded 8-24 "$Motif_Analysis_Script" "${tmp_motif_outdir}" "${i}" "${Motif_Analysis_Script_params}"
   # # for qsub; 
   # -q all.q : selects only nodes with name "all.q*"; excludes GPU, HighMem nodes
   # -wd $tmp_motif_outdir : sets the working directory for the script to execute from
