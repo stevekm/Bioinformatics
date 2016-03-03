@@ -16,6 +16,7 @@ THREADS=8
 
 # location of the motif location table script # this file will be updated and included later
 MOTIF_LOC_TABLE_SCRIPT=/ifs/home/$(whoami)/projects/code/motif_analysis_HOMER2_LocTable.R
+Peak_Types_RScript="/ifs/home/$(whoami)/projects/code/peak_types_plot.R"
 
 #  Selecting the size of the region for motif finding (-size # or -size given, default: 200)
 REGION_SIZE=200
