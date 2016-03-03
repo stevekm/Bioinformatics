@@ -65,9 +65,20 @@ fi
 mkdir -p $PREPARSED_DIR
 
 
+
 # annotate the BED file
 echo -e "Command is:\n"
 echo -e "annotatePeaks.pl $SAMPLE_INPUT_BED $GENOME -size -300,50 -annStats $ANNOT_OUT_DIR/annotation_stats.txt"
 annotatePeaks.pl "$SAMPLE_INPUT_BED" "$GENOME" -size -300,50 -annStats $ANNOT_OUT_DIR/annotation_stats.txt > annotated_peaks.txt
 #-genomeOntology $ANNOT_OUT_DIR/genomeOntology
 # -d $ANNOT_OUT_DIR/tag_directory
+
+# get the number of types of peaks
+Peak_Type_Stats=$ANNOT_OUT_DIR/peak_type_stats.txt
+
+# get the unique entries from the types of peak annotations, output in tab delim format
+tail -n +2 annotated_peaks.txt | cut -f8 | cut -d '(' -f1 | sort | uniq -c | sed -e 's/ *//' -e 's/ /\t/' -e "s/'//" -e 's/NA/Other/' -e 's/ //' > $Peak_Type_Stats
+# echo -e "$(cat annotated_peaks.txt | wc -l )\tTotal" >> $Peak_Type_Stats # maybe exclude this so the file is easier to work with downstream 
+# pass the file to R for plotting, table, etc.
+Rscript "$Peak_Types_RScript" "$ANNOT_OUT_DIR" "$Peak_Type_Stats"
+
