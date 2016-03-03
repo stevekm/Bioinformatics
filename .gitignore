@@ -1,2 +1,5 @@
 .Rproj.user/*
 benchmarking.Rproj
+output/*
+data/*
+Benchmarking.Rproj
