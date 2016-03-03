@@ -114,3 +114,5 @@ done
 ((globstar_set)) && shopt -u globstar
 #~~~~~~~~~~~~~~~~~~#
 
+# copy the peak stats to the share dir
+rsync -avz --exclude '*.sh.e*' --exclude '*.sh.o*' --exclude '*.sh.pe*' --exclude '*.sh.po*' --exclude 'log.*' $Peak_Stats_Outdir $Results_Share_Dir/
