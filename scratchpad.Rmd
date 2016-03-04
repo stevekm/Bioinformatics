@@ -60,7 +60,35 @@ disk IO is probably a bottleneck, producing inconsistent results
 
 
 
+```{r,engine='bash'}
+# write a script to track time for completion of HOMER with different thread numbers
+# don't use a wrapper script for this
 
+Input_BED="$HOME/projects/Benchmarking/data/Nkx2_ChIPSeq_mm9.bed"
+tmp_SAMPLE=$(basename $Input_BED)
+tmp_SAMPLE=${tmp_SAMPLE%.*}
+
+OutDir="$HOME/projects/Benchmarking/output/HOMERmotif"
+mkdir -p "$OutDir"
+
+
+tmp_Script="$HOME/projects/Benchmarking/code/time_track_HOMER3.sh"
+chmod +x "$tmp_Script"
+
+# make the tmp dirs
+for i in {32..1}; do
+  if [ -d "$OutDir/${i}" ]; then
+    rm -rf "$OutDir/${i}" # delete the dir if it exists
+  fi
+ mkdir -p "$OutDir/${i}"
+done
+
+# submit to wrapper 
+# tmp_LOG_FILE="${OutDir}/TIMER_LOG_$(date -u +%Y%m%dt%H%M%S).txt"
+tmp_LOG_FILE="${OutDir}/TIMER_LOG_HOMER3.txt"
+qsub -q all.q -wd $OutDir -o :${OutDir}/ -e :${OutDir}/ -pe threaded 32 "$tmp_Script" "${OutDir}" "${Input_BED}" "$tmp_LOG_FILE"
+
+```
 
 
 
