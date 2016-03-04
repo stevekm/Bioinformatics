@@ -92,44 +92,9 @@ qsub -q all.q -wd $OutDir -o :${OutDir}/ -e :${OutDir}/ -pe threaded 32 "$tmp_Sc
 
 
 
-```{r,engine='bash'}
-
-echo "stuff"
-TestObj="some entry here"
-
-R --vanilla --no-save << EOF
-# myRcommands(output="results.txt")
-# args <- commandArgs(TRUE)
-# 
-# cat("R: dput args:") # for development & troubleshooting
-# cat("\n")
-# cat(dput(args))
-# cat("\n\n")
-# sessionInfo()
-cat("\nThis Is R here\n")
-
-EOF
-
-
-ls
 
 
 
-# notes
-
-for i in {32..1}; do
-  start_time=$(date +%s)
-  echo -ne "$i\t" && echo run time is $(expr $(date +%s) - $start_time) s
-done
 
 
-start_time=`date +%s`
-<command-to-execute>
-end_time=`date +%s`
-echo execution time was `expr $end_time - $start_time` s.
 
-Or in bash:
-
-start_time=`date +%s`
-<command-to-execute> && echo run time is $(expr `date +%s` - $start_time) s
-```
