@@ -2,7 +2,6 @@
 title: "Benchmarking"
 author: "Stephen Kelly"
 date: "3/3/2016"
-output: html_document
 ---
 PWD: $HOME/projects/Benchmarking
 ```{r,engine='bash'}
