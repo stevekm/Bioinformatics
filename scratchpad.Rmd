@@ -59,7 +59,7 @@ qsub -q all.q -wd $OutDir -o :${OutDir}/ -e :${OutDir}/ -pe threaded 1 "$Timer_T
 disk IO is probably a bottleneck, producing inconsistent results
 
 
-
+http://homer.salk.edu/homer/ngs/peakMotifs.html
 ```{r,engine='bash'}
 # write a script to track time for completion of HOMER with different thread numbers
 # don't use a wrapper script for this
@@ -74,6 +74,7 @@ mkdir -p "$OutDir"
 
 tmp_Script="$HOME/projects/Benchmarking/code/time_track_HOMER3.sh"
 chmod +x "$tmp_Script"
+tmp_Script_filename=$(basename "$tmp_Script")
 
 # make the tmp dirs
 for i in {32..1}; do
@@ -85,7 +86,7 @@ done
 
 # submit to wrapper 
 # tmp_LOG_FILE="${OutDir}/TIMER_LOG_$(date -u +%Y%m%dt%H%M%S).txt"
-tmp_LOG_FILE="${OutDir}/TIMER_LOG_HOMER3.txt"
+tmp_LOG_FILE="${OutDir}/logs/TIMER_LOG_CPU-threads_${tmp_Script_filename}.txt"
 qsub -q all.q -wd $OutDir -o :${OutDir}/ -e :${OutDir}/ -pe threaded 32 "$tmp_Script" "${OutDir}" "${Input_BED}" "$tmp_LOG_FILE"
 
 ```
