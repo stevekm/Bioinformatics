@@ -10,7 +10,7 @@
 #  track type=bigWig name="My Big Wig" description="A Graph of Data from My Lab" bigDataUrl=http://myorg.edu/mylab/myBigWig.bw 
 
 # Custom function
-# function to paste the information together
+# function to paste the information together into a block of text that we can copy/paste into UCSC to upload a custom track
 
 UCSC_track_string_func<-function(file_name,URL_base,Track_Type){
   file_URL<-paste0(URL_base,file_name)
