@@ -6,8 +6,9 @@
 # https://genome.ucsc.edu/cgi-bin/hgCustom
 # more instructions here: # http://genome.ucsc.edu/goldenPath/help/bigWig.html
 
-# sample : 
+# sample UCSC entry: 
 #  track type=bigWig name="My Big Wig" description="A Graph of Data from My Lab" bigDataUrl=http://myorg.edu/mylab/myBigWig.bw 
+# ^ this is the format we need to create with this script
 
 # Custom function
 # function to paste the information together into a block of text that we can copy/paste into UCSC to upload a custom track
