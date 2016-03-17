@@ -31,3 +31,5 @@ for file in $FastqDir/*.fastq.gz; do
   # -q <node name prefix>; -wd working dir for the script; -o/e where to put the logs; -pe threaded <n> how many threads to reserve
 done
 ```
+
+(Its easier to have these commands available for easy editing & viewing than saving them as their own script).
