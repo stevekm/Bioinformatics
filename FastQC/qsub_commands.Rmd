@@ -30,6 +30,13 @@ for file in $FastqDir/*.fastq.gz; do
   qsub -q all.q -wd $tmp_outdir -o :${tmp_outdir}/ -e :${tmp_outdir}/ -pe threaded 4 "$FastQCscript" "${tmp_outdir}" "${file}"
   # -q <node name prefix>; -wd working dir for the script; -o/e where to put the logs; -pe threaded <n> how many threads to reserve
 done
+
+
+# make a dir with symlinks to all of the html files produced so they are easier to browse
+mkdir -p "$ProjDir/fastqc_link"
+
+find "$FastQC_outdir" -name "*.html" -exec ln -s {} "$ProjDir/fastqc_link" \;
+@
 ```
 
 (Its easier to have these commands available for easy editing & viewing than saving them as their own script).
