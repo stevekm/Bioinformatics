@@ -36,7 +36,7 @@ echo "GENOME is $GENOME"
 echo "THREADS is $THREADS"
 
 # ~~~~~~ Script Logging ~~~~~~~ #
-# save a copy of this script file 
+# save a hardcopy of this script file in case there are future changes
 zz=$(basename $0)
 # get the script dir
 za=$(dirname $0)
