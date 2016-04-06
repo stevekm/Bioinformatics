@@ -1,0 +1,39 @@
+Generate .bam and .bai alignment and index files for .fastq.gz raw input reads. Script set up to be submitted as a job on the HPC cluster
+
+```{r,engine='bash'}
+# directory of project
+ProjDir="$HOME/projects/alignment_2016-04-05"
+
+# local bam outputs
+mkdir -p $ProjDir/tmp_bam
+
+# place to output logs and files
+bam_dir="$ProjDir/tmp_bam"
+
+# client's results dir, symlinked
+bam_final_outputs="$ProjDir/results_bam"
+
+# dir with the fastq files to be processed, symlinked
+fastq_dir="$ProjDir/fastq"
+
+# use the hg19 genome
+tmp_genome="hg19"
+tmp_outdir="$bam_dir"
+tmp_script="$HOME/projects/alignment_2016-04-05/code/bowtie2_qsub.sh"
+# make sure the script is executable
+chmod +x "$tmp_script"
+
+cd "$ProjDir"
+
+# iterate over every fastq file
+for i in $fastq_dir/*.fastq.gz; do
+  tmp_fastq="$i"
+  # echo "$i"
+  qsub -wd $tmp_outdir -o :${tmp_outdir}/ -e :${tmp_outdir}/ -pe threaded 4-12 "$tmp_script" "$tmp_outdir" "$tmp_fastq" "$tmp_genome"
+done
+
+# copy the files to the client's directory
+find $ProjDir -type f \( -name "*.bam" -or -name "*.bai" \) -exec cp {} results_bam/ \;
+
+
+```
