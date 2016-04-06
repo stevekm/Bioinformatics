@@ -3,7 +3,7 @@
 set -x
 ##
 ## USAGE: bowtie2_qsub.sh /path/to/outdir /path/to/input_file.fastq.gz /path/to/ref_genome 
-## This script will bowtie2; this script should be submitted with qsub!
+## This script will run bowtie2; this script should be submitted with qsub!
 ## 
 
 # ~~~~~~ permissions ~~~~~~ #
