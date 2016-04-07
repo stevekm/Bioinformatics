@@ -1,3 +1,7 @@
+Need to make custom UCSC tracks for a large number of bigWig files, ~500 files, from a ChIP-Seq data set.
+
+Use some scripts to parse all of the files and create tracks, ordered by Histone and SampleID
+
 First, need to make a samplesheet in .csv format to parse in R. 
 
 ```{r,engine='bash'}
