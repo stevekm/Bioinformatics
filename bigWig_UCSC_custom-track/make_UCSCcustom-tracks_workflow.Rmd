@@ -144,6 +144,6 @@ for(k in seq_along(unique(file_sheet_sort[['Histone']]))){
 }
 
 # sample output: 
-# track type=bigWig name=ABC-S-H3K27AC bigDataUrl=https://myserver.edu/results/SmithLab/alignment/bigwigs/AGK-D-H3K27AC.bw visibility=full autoScale=off alwaysZero=on maxHeightPixels=100 graphType=bar viewLimits=0:0.3 
+# track type=bigWig name=ABC-S-H3K27AC bigDataUrl=https://myserver.edu/results/SmithLab/alignment/bigwigs/ABC-S-H3K27AC.bw visibility=full autoScale=off alwaysZero=on maxHeightPixels=100 graphType=bar viewLimits=0:0.3 
 
 ```
