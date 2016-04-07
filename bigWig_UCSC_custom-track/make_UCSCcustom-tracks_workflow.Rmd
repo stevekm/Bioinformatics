@@ -163,13 +163,23 @@ for(k in seq_along(unique(file_sheet_sort[['Histone']]))){
 
 
 some resources:
+
 https://genome.ucsc.edu/goldenpath/help/customTrack.html#MANAGE_CT
+
 https://genome.ucsc.edu/goldenpath/help/bigWig.html
+
 https://genome.ucsc.edu/FAQ/FAQformat.html
+
 https://genome.ucsc.edu/goldenpath/help/customTrack.html
+
 https://www.biostars.org/p/42844/
+
 http://genome.ucsc.edu/cgi-bin/hgSession
+
 https://www.researchgate.net/post/How_do_I_properly_visualize_custom_ChIP-seq_peaks_in_UCSC_genome_browser
+
 https://genome.ucsc.edu/goldenpath/help/hgTracksHelp.html
+
 https://genome.ucsc.edu/cgi-bin/hgSession?hgS_doMainPage=1
+
 https://genome.ucsc.edu/cgi-bin/hgCustom
