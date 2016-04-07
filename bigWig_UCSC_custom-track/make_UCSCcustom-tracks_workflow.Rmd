@@ -70,6 +70,19 @@ for i in $FILES; do
   cp "$i" "${bigWig_outdir}/${File}"
 done
 
+# preview the output
+# head bigWig_sheet.csv
+# SampleID,Patient,Type,Histone,Patient-Histone,Patient-Type,Type-Histone,File,URL
+# FFF-S-H3K9ME3,FFF,S,H3K9ME3,FFF-H3K9ME3,FFF-S,S-H3K9ME3,FFF-S-H3K9ME3.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/FFF-S-H3K9ME3.bw
+# FFF-S-INPUT,FFF,S,INPUT,FFF-INPUT,FFF-S,S-INPUT,FFF-S-INPUT.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/FFF-S-INPUT.bw
+# BBB-W-H3K4ME3,BBB,W,H3K4ME3,BBB-H3K4ME3,BBB-W,W-H3K4ME3,BBB-W-H3K4ME3.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/BBB-W-H3K4ME3.bw
+# SSS-W-INPUT,SSS,W,INPUT,SSS-INPUT,SSS-W,W-INPUT,SSS-W-INPUT.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/SSS-W-INPUT.bw
+# SSS-S-H3K27AC,SSS,S,H3K27AC,SSS-H3K27AC,SSS-S,S-H3K27AC,SSS-S-H3K27AC.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/SSS-S-H3K27AC.bw
+# SAA-S-H3K9AC,SAA,S,H3K9AC,SAA-H3K9AC,SAA-S,S-H3K9AC,SAA-S-H3K9AC.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/SAA-S-H3K9AC.bw
+# BBB-W-INPUT,BBB,W,INPUT,BBB-INPUT,BBB-W,W-INPUT,BBB-W-INPUT.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/BBB-W-INPUT.bw
+# PPP-S-INPUT,PPP,S,INPUT,PPP-INPUT,PPP-S,S-INPUT,PPP-S-INPUT.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/PPP-S-INPUT.bw
+# FFF-S-H3K9AC,FFF,S,H3K9AC,FFF-H3K9AC,FFF-S,S-H3K9AC,FFF-S-H3K9AC.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/FFF-S-H3K9AC.bw
+
 ```
 
 ```{r}
