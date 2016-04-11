@@ -41,7 +41,7 @@ cd $GREAT_dir
 mkdir -p ${GREAT_dir}/${tmp_mark}
 tail -n +2 ${tmp_diffbind_dir}/${tmp_mark}/${tmp_file} | cut -d ',' -f1-3 | sed -e 's/,/\t/g' -e 's/"//g' > ${GREAT_dir}/${tmp_mark}/${tmp_file}
 
-
+# convert all of the files 
 for i in H3K27AC H3K27ME3 H3K4ME3 H3K9AC H3K9ME3; do
   # get the CSV files to be converted
   FILES=${tmp_diffbind_dir}/${i}/*.csv
