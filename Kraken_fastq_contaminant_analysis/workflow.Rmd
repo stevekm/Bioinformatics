@@ -40,3 +40,9 @@ for i in ${FastqDir}/*.fastq.gz; do
 done
   
 ```
+http://ccb.jhu.edu/software/kraken/MANUAL.html
+http://www.ncbi.nlm.nih.gov/pmc/articles/PMC4053813/
+http://ccb.jhu.edu/software/kraken/
+
+also check out this:
+http://www.bioinformatics.babraham.ac.uk/projects/fastq_screen/
