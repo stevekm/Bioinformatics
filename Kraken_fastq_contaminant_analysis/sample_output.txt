@@ -1,0 +1,47 @@
+ 98.36	983580	983580	U	0	unclassified
+  1.64	16420	3343	-	1	root
+  1.31	13070	377	-	131567	  cellular organisms
+  1.09	10856	931	D	2759	    Eukaryota
+  0.99	9904	153	-	33154	      Opisthokonta
+  0.97	9721	25	K	33208	        Metazoa
+  0.97	9696	0	-	6072	          Eumetazoa
+  0.97	9696	488	-	33213	            Bilateria
+  0.91	9064	2	-	33511	              Deuterostomia
+  0.91	9062	0	P	7711	                Chordata
+  0.91	9062	0	-	89593	                  Craniata
+  0.91	9062	45	-	7742	                    Vertebrata
+  0.90	9017	13	-	7776	                      Gnathostomata
+  0.90	9004	0	-	117570	                        Teleostomi
+  0.90	9004	158	-	117571	                          Euteleostomi
+  0.88	8783	0	-	8287	                            Sarcopterygii
+  0.88	8783	0	-	1338369	                              Dipnotetrapodomorpha
+  0.88	8783	17	-	32523	                                Tetrapoda
+  0.88	8766	91	-	32524	                                  Amniota
+  0.87	8675	0	C	40674	                                    Mammalia
+  0.87	8675	0	-	32525	                                      Theria
+  0.87	8675	6	-	9347	                                        Eutheria
+  0.87	8669	188	-	1437010	                                          Boreoeutheria
+  0.84	8395	36	-	314146	                                            Euarchontoglires
+  0.70	7043	0	-	314147	                                              Glires
+  0.70	7043	41	O	9989	                                                Rodentia
+  0.69	6924	2	-	33553	                                                  Sciurognathi
+  0.69	6922	104	-	337687	                                                    Muroidea
+  0.68	6818	0	F	10066	                                                      Muridae
+  0.68	6818	360	-	39107	                                                        Murinae
+  0.65	6456	0	G	10088	                                                          Mus
+  0.65	6456	0	-	862507	                                                            Mus
+  0.65	6456	6456	S	10090	                                                              Mus musculus
+  0.13	1316	1	O	9443	                                              Primates
+  0.13	1315	2	-	376913	                                                Haplorrhini
+  0.13	1313	136	-	314293	                                                  Simiiformes
+  0.12	1176	11	-	9526	                                                    Catarrhini
+  0.12	1165	3	-	314295	                                                      Hominoidea
+  0.12	1162	48	F	9604	                                                        Hominidae
+  0.11	1112	258	-	207598	                                                          Homininae
+  0.18	1837	211	D	2	    Bacteria
+  0.14	1430	0	P	1224	      Proteobacteria
+  0.12	1167	0	C	28216	        Betaproteobacteria
+  0.12	1166	0	O	80840	          Burkholderiales
+  0.12	1165	0	F	506	            Alcaligenaceae
+  0.12	1163	1	G	222	              Achromobacter
+  0.12	1159	1159	S	217203	                Achromobacter spanius
