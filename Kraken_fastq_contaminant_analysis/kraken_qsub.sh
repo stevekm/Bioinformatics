@@ -52,7 +52,7 @@ cat "$0" >> $LOG_FILE
 # ~~~~~~~~~~~~ #
 
 # ~~~~~~ run command ~~~~~~ #
-# Thanks to igordot for help with this; https://github.com/igordot
+# Thanks to igordot for this; https://github.com/igordot
 zcat $INPUTFILE | head -4000000 | \
 $HOME/software/bin/kraken --fastq-input /dev/fd/0 | \
 $HOME/software/bin/kraken-report --show-zeros | awk -F $'\t' '$1>0.1' > kraken_contaminant_analysis.${SAMPLEID}.txt
