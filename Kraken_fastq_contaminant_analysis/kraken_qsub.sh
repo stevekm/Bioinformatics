@@ -55,7 +55,7 @@ cat "$0" >> $LOG_FILE
 # Thanks to igordot for help with this; https://github.com/igordot
 zcat $INPUTFILE | head -4000000 | \
 $HOME/software/bin/kraken --fastq-input /dev/fd/0 | \
-$HOME/software/bin/kraken-report --show-zeros > kraken_contaminant_analysis.${SAMPLEID}.txt # | awk -F $'\t' '$1>0.1' > kraken_contaminant_analysis.${SAMPLEID}.txt
+$HOME/software/bin/kraken-report --show-zeros | awk -F $'\t' '$1>0.1' > kraken_contaminant_analysis.${SAMPLEID}.txt
 
 # filter for top hits
 cat kraken_contaminant_analysis.${SAMPLEID}.txt | awk -F $'\t' '$1>1.0 && $4!="-"' | cut -f 1,2,4,5,6 > tophit.txt
