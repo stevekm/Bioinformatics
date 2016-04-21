@@ -134,7 +134,6 @@ samtools view "${SAMPLEID}.bam" | cut -f5 | sort -n | uniq -c > ${SAMPLEID}_mapq
 fi
 
 # make histogram of the mapq frequencies
-# in the future update to make sure that the arg passed was a file that ends in .Rnw
 Rscript --slave --no-save --no-restore - "${SAMPLEID}_mapq-scores_all.txt" <<EOF
   ## R code
   cat("\nR loaded\n")
