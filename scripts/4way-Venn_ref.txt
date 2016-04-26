@@ -1,0 +1,89 @@
+#       venn<-draw.pairwise.venn(area1=peaks_H3K4ME3+peaks_overlap,area2=peaks_H3K27AC+peaks_overlap,cross.area=peaks_overlap,category=c('H3K4ME3','H3K27AC'),fill=c('red','blue'),alpha=c(0.3,0.3),cex=c(2,2,2),cat.cex=c(1.25,1.25),main=SampleID,ind=FALSE)
+
+# http://www.inside-r.org/node/161234
+# Reference four-set diagram
+venn.plot <- draw.quad.venn(
+    area1 = 72,
+    area2 = 86,
+    area3 = 50,
+    area4 = 52,
+    n12 = 44,
+    n13 = 27,
+    n14 = 32,
+    n23 = 38,
+    n24 = 32,
+    n34 = 20,
+    n123 = 18,
+    n124 = 17,
+    n134 = 11,
+    n234 = 13,
+    n1234 = 6,
+    category = c("First", "Second", "Third", "Fourth"),
+    fill = c("orange", "red", "green", "blue"),
+    lty = "dashed",
+    cex = 2,
+    cat.cex = 2,
+    cat.col = c("orange", "red", "green", "blue")
+    );
+ 
+# Writing to file
+tiff(filename = "Quad_Venn_diagram.tiff", compression = "lzw");
+grid.draw(venn.plot);
+dev.off();
+
+#  #1-AR  #2-FOXA1  #3-NFIB  
+n123<-VennCounts_Compare[['Total']][7]#2981
+n12<-VennCounts_Compare[['Total']][6]#10798
+n13<-VennCounts_Compare[['Total']][5]#314
+n1<-VennCounts_Compare[['Total']][4]#8627
+n23<-VennCounts_Compare[['Total']][3]#592
+n2<-VennCounts_Compare[['Total']][2]#9081
+n3<-VennCounts_Compare[['Total']][1]#801
+sum(VennCounts_Compare[['Total']])#33914; total number of peaks
+
+venn <-draw.triple.venn(area1=n1+n12+n13+n123,#
+                      area2=n2+n23+n12+n123,#
+                      area3=n3+n23+n13+n123,#
+                      n12=n12+n123,#13779
+                      n13=n13+n123,#3295
+                      n23=n23+n123,#3573
+                      n123=n123,#2981
+                      category=c('AR','FOXA1','NFIB'),
+                      fill=c('red','blue','green'),
+                      alpha=c(rep(0.3,3)))
+
+require(VennDiagram)
+n1234<-1865
+n123<-6372
+n124<-292
+n12<-17486
+n134<-204
+n13<-791
+n14<-73
+n1<-14856
+n234<-123
+n23<-905
+n24<-82
+n2<-15023
+n34<-249
+n3<-2516
+n4<-468
+
+venn <-draw.quad.venn(area1=n1+n1234+n123+n124+n12+n134+n13+n14,
+                      area2=n2+n1234+n123+n124+n12+n234+n23+n24,
+                      area3=n3+n1234+n123+n134+n13+n234+n23+n34,
+                      area4=n4+n1234+n124+n134+n14+n234+n24+n34,
+                      n12=n12+n1234+n123+n124,
+                      n13=n13+n1234+n123+n134,
+                      n14=n14+n1234+n124+n134,
+                      n23=n23+n1234+n123+n234,
+                      n24=n24+n1234+n124+n234,
+                      n34=n34+n1234+n134+n234,
+                      n123=n123+n1234,
+                      n124=n124+n1234,
+                      n134=n134+n1234,
+                      n234=n234+n1234,
+                      n1234=n1234,
+                      category=c(1,2,3,4),
+                      fill=c('red','blue','green','yellow')
+)
