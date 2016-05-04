@@ -1,0 +1,6 @@
+natural log ratios of observed/expected peak overlaps, cmd = mergePeaks H3K27AC.bed H3K27ME3.bed H3K4ME3.bed H3K9AC.bed gencode.bed -prefix mergepeaks -venn venn.txt -matrix matrix.txt	H3K27AC.bed	H3K27ME3.bed	H3K4ME3.bed	H3K9AC.bed	gencode.bed
+H3K27AC.bed	-18.177515	-0.486605	1.178317	1.601995	0.112779
+H3K27ME3.bed	-0.486605	-17.876913	0.233057	-0.283914	-0.102685
+H3K4ME3.bed	1.178317	0.233057	-16.756478	1.944343	0.125187
+H3K9AC.bed	1.601995	-0.283914	1.944343	-15.757234	0.239215
+gencode.bed	0.113018	-0.102569	0.125368	0.239388	-0.222102
