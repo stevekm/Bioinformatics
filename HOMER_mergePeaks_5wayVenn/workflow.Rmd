@@ -1,0 +1,161 @@
+
+```{r,engine='bash'}
+# for all the patients merged per mark use the DiffBind peaks
+# /ifs/data/sequence/results/smithlab/2016-01-04/ChIP-Seq/diffbind/H3K27AC/diffbind-peaks.bed
+# /ifs/data/sequence/results/smithlab/2016-01-04/ChIP-Seq/diffbind/
+
+# dir with all the bed files to use
+peaks_dir="/ifs/data/sequence/results/smithlab/2016-01-04/ChIP-Seq/diffbind" # diffbind-peaks.bed
+
+# output dir for the overlapping
+overlap_dir="/$HOME/projects/SmithLab_ChIPSeq_2016-12-31/project_notes/peak_overlap/all_patients_per_mark"
+
+# our Gencode TSS region bed file that we created earlier
+gen_bed="/$HOME/projects/SmithLab_ChIPSeq_2016-12-31/project_data2/gencode.v19.annotation_TSSd500_10kbp.bed"
+
+# make the outdir
+mkdir -p "$overlap_dir"
+cd "$overlap_dir"
+
+# we already know the marks so iterate over them
+for i in H3K27AC H3K27ME3 H3K4ME3 H3K9AC; do
+  # get the mark
+  tmp_mark="$i"
+  echo "tmp_mark is $tmp_mark"
+  
+  # tmp_outdir="${overlap_dir}/${tmp_mark}"
+  # mkdir -p "$tmp_outdir"
+  # echo "tmp_outdir is $tmp_outdir"
+  
+  # set the filename for the output
+  tmp_outfilename="${tmp_mark}.bed"
+  echo "tmp_outfilename is $tmp_outfilename"
+  
+  # find the peak file that matches the name and copy it to the new outdir
+  find "${peaks_dir}/${tmp_mark}" -name "diffbind-peaks.bed" -exec cp {} "${overlap_dir}/${tmp_outfilename}" \;
+  
+  
+  echo ""
+  
+done
+
+# copy over the Gencode bed
+# cp "$gen_bed" "${overlap_dir}/gencode.bed"
+# nvm only keep the first 3 columns !!
+cat "$gen_bed" | cut -f1-3 > "${overlap_dir}/gencode.bed"
+
+# load HOMER
+module load homer/v4.6
+# run HOMER mergePeaks to find the overlaps
+mergePeaks H3K27AC.bed H3K27ME3.bed H3K4ME3.bed H3K9AC.bed gencode.bed -prefix mergepeaks -venn venn.txt -matrix matrix.txt
+
+# make a summary table.. becaus the venn table is hard to read!
+cat venn.txt | cut -f6- > venn_summary.tsv
+
+# load the correct version of R
+module unload r
+module load r/3.2.0
+
+Rscript --slave --no-save --no-restore - <<EOF
+  ## R code
+  library('VennDiagram')
+  library('gridExtra')
+  cat("\nR loaded\n")
+  args <- commandArgs(TRUE); cat("Script args are:\n"); args
+  
+  # I am hard coding in the values from the venn.txt because this is too complicated to parse and try to script
+  # convert to venn ranges; this makes the following step MUCH easier!
+  n1<-20289 # H3K27AC
+  n2<-36474 # H3K27ME3
+  n3<-11364 # H3K4ME3
+  n4<-96 # H3K9AC
+  n5<-7057 # gencode
+  
+  n12<-1690 # H3K27AC_diffbind-peaks.bed|H3K27ME3_diffbind-peaks.bed
+  n13<-6218 # H3K27AC_diffbind-peaks.bed|H3K4ME3_diffbind-peaks.bed
+  n14<-1693 # H3K27AC_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed
+  n15<-1624 # H3K27AC_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+  
+  n23<-2156 # H3K27ME3_diffbind-peaks.bed|H3K4ME3_diffbind-peaks.bed
+  n24<-12 # H3K27ME3_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed
+  n25<-3078 # H3K27ME3_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+  
+  n34<-43 # H3K4ME3_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed
+  n35<-843 # H3K4ME3_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+  
+  n45<-9 # H3K9AC_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+  
+  n123<-1420 # H3K27AC_diffbind-peaks.bed|H3K27ME3_diffbind-peaks.bed|H3K4ME3_diffbind-peaks.bed
+  n124<-147 # H3K27AC_diffbind-peaks.bed|H3K27ME3_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed
+  n125<-758 # H3K27AC_diffbind-peaks.bed|H3K27ME3_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+  
+  n134<-6156 # H3K27AC_diffbind-peaks.bed|H3K4ME3_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed
+  n135<-1732 # H3K27AC_diffbind-peaks.bed|H3K4ME3_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+  n145<-315 # H3K27AC_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+  
+  n234<-14 # H3K27ME3_diffbind-peaks.bed|H3K4ME3_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed
+  n235<-1747 # H3K27ME3_diffbind-peaks.bed|H3K4ME3_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+  n245<-1 # H3K27ME3_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+  
+  n345<-10 # H3K4ME3_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+
+  n1234<-1187 # H3K27AC_diffbind-peaks.bed|H3K27ME3_diffbind-peaks.bed|H3K4ME3_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed
+  n1235<-1797 # H3K27AC_diffbind-peaks.bed|H3K27ME3_diffbind-peaks.bed|H3K4ME3_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+  n1245<-87 # H3K27AC_diffbind-peaks.bed|H3K27ME3_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+  n1345<-6217 # H3K27AC_diffbind-peaks.bed|H3K4ME3_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+  n2345<-27 # H3K27ME3_diffbind-peaks.bed|H3K4ME3_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+  
+  n12345<-6735 # H3K27AC_diffbind-peaks.bed|H3K27ME3_diffbind-peaks.bed|H3K4ME3_diffbind-peaks.bed|H3K9AC_diffbind-peaks.bed|gencode.v19.annotation_TSSd500_10kbp.bed
+
+  # create the five way venn diagram object
+  venn <- draw.quintuple.venn(
+    area1 = n1 + n12 + n13 + n14 + n15 + n123 + n124 + n125 + n134 + n135 + n145 + n1234 + n1235 + n1245 + n1345 + n12345,
+    area2 = n2 + n12 + n23 + n24 + n25 + n123 + n124 + n125 + n234 + n235 + n245 + n1234 + n1235 + n1245 + n2345 + n12345,
+    area3 = n3 + n13 + n23 + n34 + n35 + n123 + n134 + n135 + n234 + n235 + n345 + n1234 + n1235 + n1345 + n2345 + n12345,
+    area4 = n4 + n14 + n24 + n34 + n45 + n124 + n134 + n145 + n234 + n245 + n345 + n1234 + n1245 + n1345 + n2345 + n12345,
+    area5 = n5 + n15 + n25 + n35 + n45 + n125 + n135 + n145 + n235 + n245 + n345 + n1235 + n1245 + n1345 + n2345 + n12345,
+    n12 = n12 + n123 + n124 + n125 + n1234 + n1235 + n1245 + n12345,
+    n13 = n13 + n123 + n134 + n135 + n1234 + n1235 + n1345 + n12345,
+    n14 = n14 + n124 + n134 + n145 + n1234 + n1245 + n1345 + n12345,
+    n15 = n15 + n125 + n135 + n145 + n1235 + n1245 + n1345 + n12345,
+    n23 = n23 + n123 + n234 + n235 + n1234 + n1235 + n2345 + n12345,
+    n24 = n24 + n124 + n234 + n245 + n1234 + n1245 + n2345 + n12345,
+    n25 = n25 + n125 + n235 + n245 + n1235 + n1245 + n2345 + n12345,
+    n34 = n34 + n134 + n234 + n345 + n1234 + n1345 + n2345 + n12345,
+    n35 = n35 + n135 + n235 + n345 + n1235 + n1345 + n2345 + n12345,
+    n45 = n45 + n145 + n245 + n345 + n1245 + n1345 + n2345 + n12345,
+    n123 = n123 + n1234 + n1235 + n12345,
+    n124 = n124 + n1234 + n1245 + n12345,
+    n125 = n125 + n1235 + n1245 + n12345,
+    n134 = n134 + n1234 + n1345 + n12345,
+    n135 = n135 + n1235 + n1345 + n12345,
+    n145 = n145 + n1245 + n1345 + n12345,
+    n234 = n234 + n1234 + n2345 + n12345,
+    n235 = n235 + n1235 + n2345 + n12345,
+    n245 = n245 + n1245 + n2345 + n12345,
+    n345 = n345 + n1345 + n2345 + n12345,
+    n1234 = n1234 + n12345,
+    n1235 = n1235 + n12345,
+    n1245 = n1245 + n12345,
+    n1345 = n1345 + n12345,
+    n2345 = n2345 + n12345,
+    n12345 = n12345,
+    category = c("H3K27AC", "H3K27ME3", "H3K4ME3", "H3K9AC", "Gencode"),
+    fill = c("dodgerblue", "goldenrod1", "darkorange1", "seagreen3", "orchid3"),
+    # cat.col = c("dodgerblue", "goldenrod1", "darkorange1", "seagreen3", "orchid3"),
+    cat.dist = 0.25,
+    cat.cex = 1.2,
+    margin = 0.1,
+    cex = c(1.5, 1.5, 1.5, 1.5, 1.5, 1, 0.8, 1, 0.8, 1, 0.8, 1, 0.8, 1, 0.8,
+            1, 0.55, 1, 0.55, 1, 0.55, 1, 0.55, 1, 0.55, 1, 1, 1, 1, 1, 1.5),
+    ind = FALSE
+  )
+
+  # plot the venn, save in a PDF
+  pdf("overlaps.pdf",width = 9,height = 9)
+  grid.arrange(gTree(children=venn), top="All Patients TSS 10kbp Region Peak Overlap") #, bottom="subtitle")
+  dev.off()
+  
+EOF
+
+```
