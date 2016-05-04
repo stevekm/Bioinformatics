@@ -1,0 +1,161 @@
+
+
+This workflow will find .bed files containing previously called peaks for each sample, merge peaks from the same treatment group together, then overlap peaks from each histone mark used in the ChIP-Seq experiment with each other and with TSS regions selected from the Gencode database to find the peaks in common and unique for each set. The number of peaks in each category will then be visualized in R by plotting Venn Diagrams.
+
+
+```{r,engine='bash'}
+# the reference bed file with Gencode TSS regions, already prepared
+gen_bed="$HOME/projects/SmithLab_ChIPSeq_2016-12-31/project_data2/gencode.v19.annotation_TSSd500_10kbp.bed"
+# the directory containing the results from the original peak calling
+pipeline_peaks_dir="$HOME/projects/SmithLab_ChIPSeq_2016-12-31/pipeline/peaks"
+# the output directory for the peak files
+overlap_dir="$HOME/projects/SmithLab_ChIPSeq_2016-12-31/project_notes/peak_overlap/peaks_per_sample_per_mark"
+# the output directory for the peak files after they've been merged with themselves
+merged_overlap_dir="$HOME/projects/SmithLab_ChIPSeq_2016-12-31/project_notes/peak_overlap/peaks_per_sample_per_mark_merged"
+# script for the venn diagrams
+venn_script="$HOME/projects/SmithLab_ChIPSeq_2016-12-31/project_notes/code/multi_peaks_Venn.R"
+# make the script executable
+chmod +x "$venn_script"
+
+# make the outdirs
+mkdir -p "$overlap_dir"
+mkdir -p "$merged_overlap_dir"
+
+# load the correct version of HOMER
+module load homer/v4.6
+
+# find all the peaks files that we want from the pipeline results
+# # peaks called by group, broad, using MACS peak caller, exclude the Input samples and peaks for histone mark H3K9ME3
+FILES=$(find $pipeline_peaks_dir/results/ -name "peaks.bed" -path "*/*group*broad*/*" ! -path "*/*INPUT/*" ! -path "*/*H3K9ME3/*")
+
+
+# COPY OVER THE PEAKS FILE INTO SUBDIR PER SAMPLE
+# # These peaks need to be merged with each other
+# # copy the peaks to the overlap_dir, in subdirectories per each sample
+for i in $FILES; do 
+# cd "$overlap_dir"
+  
+  # echo "$i"
+  # Get the sample ID from the directory name of the peaks file
+  # # get the dirname
+  tmp_dir=$(dirname "$i")
+  # echo "$tmp_dir"
+  tmp_name=$(basename "$tmp_dir")
+  # naming format is <SampleID>-<treatment>-<histoneMark>
+
+  # get the Sample ID and Histone mark
+  tmp_Sample=$(echo $tmp_name | cut -d '-' -f1)
+  tmp_Mark=$(echo $tmp_name | cut -d '-' -f3)
+  
+  # make the outdir per sample per mark
+  tmp_outdir="${overlap_dir}/${tmp_Sample}/${tmp_Mark}"
+  mkdir -p "$tmp_outdir"
+  echo "$tmp_outdir"
+  
+  # set the name of the file to output after copying
+  tmp_peaks="${tmp_name}.bed"
+  echo "$tmp_peaks"
+  
+  echo ""
+  # copy the peaks file to the output location
+  cp "$i" "${tmp_outdir}/${tmp_peaks}"
+done
+
+
+
+# OVERLAP THE PEAKS with each other
+# # Peaks of the same Sample and Mark need to be merged in order to get the peaks in common regardless of treatment
+for i in $FILES; do 
+  # reset the pwd at the beginning of the loop
+  cd "$overlap_dir"
+  
+  # get the sample information from the dirnames again
+  tmp_dir=$(dirname "$i")
+  # echo "$tmp_dir"
+  tmp_name=$(basename "$tmp_dir")
+  
+  # get the sample ID values again
+  tmp_Sample=$(echo $tmp_name | cut -d '-' -f1)
+  tmp_Mark=$(echo $tmp_name | cut -d '-' -f3)
+  
+  # set the output directory again
+  tmp_outdir="${overlap_dir}/${tmp_Sample}/${tmp_Mark}"
+  echo "$tmp_outdir"
+  mkdir -p "$tmp_outdir"
+  # switch to the output directory
+  cd "$tmp_outdir"
+  
+  # HOMER mergePeaks
+  # # use a simple glob to find all peak files in the dir and merge them, with output file prefix set as 'mergepeaks'
+  mergePeaks ${tmp_Sample}-[DR]-${tmp_Mark}.bed -prefix mergepeaks -venn venn.txt -matrix matrix.txt
+  
+  # make a dir for the merged results that were output
+  tmp_outdir="${merged_overlap_dir}/${tmp_Sample}"
+  mkdir -p "$tmp_outdir"
+
+  # copy over the merged results
+  # # my cp is aliased so need to call bin/cp instead to force overwriting 
+  /bin/cp -f mergepeaks_${tmp_Sample}*.bed*.bed ${tmp_outdir}/${tmp_Mark}.bed
+  
+done
+
+
+# OVERLAP THE MERGED PEAKS
+# # need to overlap all the peaks per sample together; overlap all the histone marks
+# # not all histone marks produced peaks, so the number of peak files present will be variable!
+# # iterate over every subdir in the merged peaks dir; each subdir corresponds to a sample, sample ID = subdir name
+for i in $(find "${merged_overlap_dir}/" -mindepth 1 -type d ); do
+  # reset the pwd
+  cd "${merged_overlap_dir}"
+  
+  # change to the subdir found
+  cd "$i"
+  # pwd
+
+  # copy over the gencode bed file that we prepared earlier
+  # /bin/cp -f "$gen_bed" ${tmp_outdir}/gencode.bed
+  # EDIT: instead just print the first 3 columns of the file!! HOMER was having warnings about duplicate names
+  cat "$gen_bed" | cut -f1-3 > gencode.bed
+  
+  # get the number of bed files present
+  # # I was going to use this for something but never got around to it
+  # find . -maxdepth 1 -mindepth 1 -name "*.bed" ! -name "mergepeaks*" -exec basename {} \;
+  num_bed=$(find . -maxdepth 1 -mindepth 1 -name "*.bed" ! -name "mergepeaks*" | wc -l)
+  echo "num_bed is $num_bed"
+  
+  # get the sample ID from the directory name
+  # sample ID is the dir name
+  tmp_Sample=$(basename "$i" )
+  echo "$tmp_Sample"
+  
+  # if [ $num_bed -eq 3 ]; then
+  # pwd
+  # ls
+
+  # use a glob to find just the source bed files for merging
+  # # if you don't do this then subsequent runs of the loop will try to merge the output of the last merge too
+  shopt -s extglob
+  # ls !(merge*).bed
+  # merge only the .bed files that don't start with the prefix 'merge' which is part of the output prefix
+  mergePeaks !(merge*).bed -prefix mergepeaks -venn venn.txt -matrix matrix.txt
+  # shopt -u extglob
+
+
+  # the venn.txt output is kind of hard to read so make a summary version of it that excludes the first columns
+  # have to calculate the number of columns to remove;
+  # number of fields to remove = numbed + 1
+  num_cut=$(($num_bed + 1))
+  cat venn.txt | cut -f ${num_cut}- > venn_summary.tsv
+  
+  # need to load the correct version of R to make the Venn
+  module unload r
+  module load r/3.2.0
+  "$venn_script" "$tmp_Sample" venn.txt
+  
+done
+
+# print all the summary venn files that we made into a big file for easier viewing
+find "$merged_overlap_dir" -name "venn_summary.tsv" -printf "%P\n" -exec cat {} \; -exec echo "" \; > ${merged_overlap_dir}/all_venn_summary.txt
+
+
+```
