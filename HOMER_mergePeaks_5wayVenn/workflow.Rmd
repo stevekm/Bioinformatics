@@ -1,6 +1,6 @@
 
 ```{r,engine='bash'}
-# for all the patients merged per mark use the DiffBind peaks
+# for all the samples merged per mark use the DiffBind peaks
 # /ifs/data/sequence/results/smithlab/2016-01-04/ChIP-Seq/diffbind/H3K27AC/diffbind-peaks.bed
 # /ifs/data/sequence/results/smithlab/2016-01-04/ChIP-Seq/diffbind/
 
@@ -8,7 +8,7 @@
 peaks_dir="/ifs/data/sequence/results/smithlab/2016-01-04/ChIP-Seq/diffbind" # diffbind-peaks.bed
 
 # output dir for the overlapping
-overlap_dir="/$HOME/projects/SmithLab_ChIPSeq_2016-12-31/project_notes/peak_overlap/all_patients_per_mark"
+overlap_dir="/$HOME/projects/SmithLab_ChIPSeq_2016-12-31/project_notes/peak_overlap/all_samples_per_mark"
 
 # our Gencode TSS region bed file that we created earlier
 gen_bed="/$HOME/projects/SmithLab_ChIPSeq_2016-12-31/project_data2/gencode.v19.annotation_TSSd500_10kbp.bed"
