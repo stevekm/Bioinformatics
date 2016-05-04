@@ -1,4 +1,4 @@
-#!/usr/bin/Rscript
+#!/usr/bin/env Rscript
 # USAGE: annovar2redcap.R path/to/annotation/file.csv
 # this will be args[6]
 
