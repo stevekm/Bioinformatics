@@ -1,0 +1,1 @@
+This workflow will aggregate peaks from many ChIP-Seq samples and create Venn diagrams in R. This supports sets of two, three, four, or five overlapping peaks. See the file workflow.Rmd for overview.
