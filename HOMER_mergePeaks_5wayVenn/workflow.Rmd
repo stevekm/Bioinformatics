@@ -153,7 +153,7 @@ Rscript --slave --no-save --no-restore - <<EOF
 
   # plot the venn, save in a PDF
   pdf("overlaps.pdf",width = 9,height = 9)
-  grid.arrange(gTree(children=venn), top="All Patients TSS 10kbp Region Peak Overlap") #, bottom="subtitle")
+  grid.arrange(gTree(children=venn), top="All Samples TSS 10kbp Region Peak Overlap") #, bottom="subtitle")
   dev.off()
   
 EOF
