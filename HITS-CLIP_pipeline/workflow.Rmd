@@ -1,0 +1,75 @@
+Set up the directories for analysis pipeline output here, submit script jobs to `qsub` to run on the HPC
+
+```{r,engine='bash'}
+# I usually just copy/paste this into the terminal (bash shell)
+
+# directory for the analysis project
+ProjDir="$HOME/projects/SmithLab_HITS-CLIP_2016-12-31"
+# dir for the pipeline output
+testOutdir="$ProjDir/pipeline_output"
+# dir containing the fastq.gz input files
+FastqDir="$ProjDir/run_data"
+# location of the sample sheet for the project
+samplesheet="$HOME/projects/SmithLab_HITS-CLIP_2016-12-31/samplesheet4.tsv"
+# location of the script to submit to qsub
+tmp_script="$HOME/projects/SmithLab_HITS-CLIP_2016-12-31/code/HITSCLIP_pipeline_trim16_qsub.sh"
+
+# set up the output directories
+mkdir -p "$testOutdir"
+chmod +x "$tmp_script"
+cd "$testOutdir"
+
+
+# set up dir for each sample, read from the samplesheet
+# sample sheet looks like this: 
+# sampleID    control genome  index   adapter dir file    filepath    ref_path    meme_db meme_db2
+# Sample1 TR  hg19    ATAG    AAGGAGTACCATGTGA    /ifs/data/sequence/results/smithlab/2016-12-31/fastq    Sample1_ATAG_L003_R1_001.fastq.gz   /ifs/data/sequence/results/smithlab/2016-12-31/fastq/Sample1_ATAG_L003_R1_001.fastq.gz  /local/data/iGenomes/Homo_sapiens/UCSC/hg19/Sequence/WholeGenomeFasta/genome.fa /ifs/home/user/data/motifs/motif_databases/HUMAN/HOCOMOCOv10_HUMAN_mono_meme_format.meme    /ifs/home/user/data/motifs/motif_databases/MIRBASE/Homo_sapiens_hsa.dna_encoded.meme
+
+# read each line from the sample sheet, except the header
+tail -n +2 $samplesheet | while read i; do
+  # echo "$i"
+
+  # make sure the line read from the sample sheet is not empty
+  if [[ ! -z "$i" ]]; then
+    # get the sample ID
+    tmp_sample=$(echo "$i" | cut -f1)
+    # echo "tmp_sample is $tmp_sample"
+    
+    # set a subdir for the sample analysis output
+    tmp_outdir="${testOutdir}/${tmp_sample}"
+    mkdir -p "$tmp_outdir"
+    # echo "tmp_outdir is $tmp_outdir"
+    
+    # set a subdir for the log files
+    tmp_logdir="${tmp_outdir}/logs"
+    mkdir -p "$tmp_logdir"
+    
+    # get the reference genome for Novoalign from the sample sheet
+    # next time, just hard code the full path in the sample sheet!
+    tmp_genome=$(echo "$i" | cut -f3)
+    tmp_genome="$HOME/data/genomes/${tmp_genome}/novoindex/${tmp_genome}"
+    # echo "tmp_genome is $tmp_genome"
+    
+    # path to the fasta file for the reference genome
+    genome_fasta=$(echo "$i" | cut -f9)
+    
+    # path to the fastq.gz file input
+    tmp_fastq=$(echo "$i" | cut -f8)
+    # echo "tmp_fastq is $tmp_fastq"
+    
+    # path to the database to use with MEME-CHIP for motif analysis
+    tmp_memedb=$(echo "$i" | cut -f10)
+    # tmp_memedb="NA" #I messed this one up
+    # echo "tmp_memedb is $tmp_memedb"
+    
+    # another MEME database file path
+    tmp_memedb2=$(echo "$i" | cut -f11)
+    # echo "tmp_memedb2 is $tmp_memedb2"
+    
+    # submit the job with qsub
+    qsub -wd $tmp_outdir -o :${tmp_logdir}/ -e :${tmp_logdir}/ -pe threaded 6-16 "$tmp_script" "$tmp_outdir" "$tmp_fastq" "$tmp_genome" "$tmp_sample" "$genome_fasta" "$tmp_memedb" "$tmp_memedb2"
+
+  fi
+done
+
+```
