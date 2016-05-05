@@ -78,4 +78,37 @@ done
 # check the alignment stats
 find "$testOutdir" -type f -name "*.novoalign" -exec echo {} \; -exec tail {} \; -exec echo -e "\n\n" \; > "${testOutdir}/align_stats.txt"
 
+
+# copy files to the lab's results dir
+resultsDir="/ifs/data/sequence/results/smithlab/2016-12-31/HITS-CLIP"
+exclude_file="${ProjDir}/rsync_exclude.txt"
+
+resultsDir_trim16="${resultsDir}/novoalign_trim16"
+mkdir -p "$resultsDir_trim16"
+
+rsync -avhn --include="*nt.fa" --exclude-from="$exclude_file" "${testOutdir}/" "$resultsDir_trim16"
+
+# exclude file contents:
+# logs*
+# .*
+# *.Rnw
+# *.tex
+# *.toc
+# *.nav
+# *.snm
+# *.log
+# *.fastq
+# *.fastq.gz
+# *.fq
+# *.fasta
+# *.fa
+# *.sam
+# *mapq-scores_all.txt
+# report*/figure*
+# scriptlog*
+# cache*
+# motifs*
+# tag2cluster.pl*
+#   
+
 ```
