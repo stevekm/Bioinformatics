@@ -3,7 +3,7 @@
 set -x
 ##
 ## USAGE: PARCLIP-wavClusteR-pipeline_singleRead.sh /path/to/outdir /path/to/input_file.fastq.gz <sampleID> <ref_genome> /path/to/ref_genome  
-## This script will run PAR-CLIP analysis pipeline with bowtie paired end alignment and wavClusteR analysis pipeline
+## This script will run PAR-CLIP analysis pipeline with bowtie single end alignment and wavClusteR analysis pipeline
 ## 
 
 # ~~~~~~ permissions ~~~~~~ #
