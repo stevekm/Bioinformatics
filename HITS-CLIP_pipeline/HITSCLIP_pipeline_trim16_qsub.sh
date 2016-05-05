@@ -264,12 +264,13 @@ tmp_JOLMAdb="$HOME/data/motifs/motif_databases/EUKARYOTE/jolma2013.meme"
 tmpPWD="$PWD"
 for i in del sub ins; do
   for q in 41 101; do
-    for k in 1 2 3; do
+    # for k in 1 2 3; do # dont need to repeat this several times, MEME gives consistent output!
       # repeat 3 times because with low # input seq's you get some random variance
       # reset the PWD
       cd "$tmpPWD"
       
-      tmp_motifdir="motifsMEME-CHIP-2/${i}_${q}nt_rep${k}"
+      # tmp_motifdir="motifsMEME-CHIP-2/${i}_${q}nt_rep${k}"
+      tmp_motifdir="motifsMEME-CHIP-2/${i}_${q}nt"
       # if [ ! -d $tmp_motifdir ]; then 
         echo -e "Motif outdir is\n ${tmp_motifdir}"
         mkdir -p "$tmp_motifdir"
@@ -281,7 +282,7 @@ for i in del sub ins; do
         meme-chip -oc "$tmp_motifdir" -index-name meme-chip.html -time 300 -order 1 -norand -db "$tmp_JOLMAdb" -db "$tmp_JasparDB" -db "$tmpMEME_DB2" -db "$tmpMEME_DB" -meme-mod zoops -meme-minw 6 -meme-maxw 30 -meme-nmotifs 5 -dreme-e 0.05 -centrimo-score 5.0 -centrimo-ethresh 10.0 "$tmp_fasta"
         # meme-chip -oc "$tmp_motifdir" -index-name meme-chip.html -time 300 -meme-p 4 -meme-nmotifs 5  -db "$tmp_JasparDB" "$tmp_fasta"
       # fi
-    done
+    # done
   done
 done
 
