@@ -72,4 +72,10 @@ tail -n +2 $samplesheet | while read i; do
   fi
 done
 
+
+
+
+# check the alignment stats
+find "$testOutdir" -type f -name "*.novoalign" -exec echo {} \; -exec tail {} \; -exec echo -e "\n\n" \; > "${testOutdir}/align_stats.txt"
+
 ```
