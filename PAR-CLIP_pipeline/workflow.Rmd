@@ -1,0 +1,87 @@
+Set up the pipeline directory structure and submit script jobs to `qsub`
+
+```{r,engine='bash'}
+
+# dir for the project
+ProjDir="$HOME/projects/SmithLab_PAR-CLIP_2016-12-31"
+# dir for the pipeline output
+testOutdir="$ProjDir/test_waveClusteR_pipeline_singleRead"
+# sample sheet for the project
+samplesheet="$HOME/projects/SmithLab_PAR-CLIP_2016-12-31/samplesheet3.tsv"
+# script containing the pipeline
+tmp_script="$ProjDir/code/PARCLIP-wavClusteR-pipeline_singleRead.sh"
+chmod +x "$tmp_script"
+mkdir -p "$testOutdir"
+cd "$ProjDir"
+
+# sample sheet is set up like this:
+# SampleID  Control genome  R1  R2            
+# Sample1 Sample2 hg19  /ifs/data/sequence/results/smithlab/2016-12-31/fastq/Sample1_ATTCAGAA_L005_R1_001.fastq.gz  /ifs/data/sequence/results/smithlab/2016-12-31/fastq/Sample1_ATTCAGAA_L005_R2_001.fastq.gz            
+
+# read in lines from the samplesheet to set up the qsub job
+tail -n +2 $samplesheet | while read i; do
+  # echo "$i"
+
+  # make sure the line is not empty!
+  if [[ ! -z "$i" ]]; then
+    
+    # get the sample ID; append R1 because we are going to process each read individually
+    tmp_sample=$(echo "$i" | cut -f1)
+    tmp_sample="${tmp_sample}_R1"
+    echo "tmp_sample is $tmp_sample"
+    
+    # make a subdir per sample, with the sample ID
+    tmp_outdir="${testOutdir}/${tmp_sample}"
+    mkdir -p "$tmp_outdir"
+    echo "tmp_outdir is $tmp_outdir"
+    
+    # set the subdir for logs for the sample
+    tmp_logdir="${tmp_outdir}/logs"
+    mkdir -p "$tmp_logdir"
+    
+    # get the reference genome
+    tmp_genome=$(echo "$i" | cut -f3)
+    echo "tmp_genome is $tmp_genome"
+    
+    # get the full path to the ref genome
+    # genome_path=$(echo "$i" | cut -f6)
+    tmp_genome_path="/local/data/iGenomes/Mus_musculus/UCSC/${tmp_genome}/Sequence/BowtieIndex/genome"
+    echo "$tmp_genome_path"
+    
+    # get the first fastq.gz file; processing each read individually this time
+    tmp_fastq1=$(echo "$i" | cut -f4)
+    echo "tmp_fastq1 is $tmp_fastq1"
+    
+    # submit the job to qsub for running on the HPC
+    qsub -wd $tmp_outdir -o :${tmp_logdir}/ -e :${tmp_logdir}/ -pe threaded 6-16  -l mem_free=10G -l mem_token=10G "$tmp_script" "$tmp_outdir" "$tmp_fastq1" "$tmp_sample" "$tmp_genome" "$tmp_genome_path"
+    
+    # process second read
+    tmp_sample=$(echo "$i" | cut -f1)
+    tmp_sample="${tmp_sample}_R2"
+    
+    # set the output subdir
+    tmp_outdir="${testOutdir}/${tmp_sample}"
+    mkdir -p "$tmp_outdir"
+    echo "tmp_outdir is $tmp_outdir"
+    
+    # set the output log dir
+    tmp_logdir="${tmp_outdir}/logs"
+    mkdir -p "$tmp_logdir"
+    
+    # get the second read
+    tmp_fastq2=$(echo "$i" | cut -f5)
+    echo "tmp_fastq2 is $tmp_fastq2"
+    
+    # submit the job
+    qsub -wd $tmp_outdir -o :${tmp_logdir}/ -e :${tmp_logdir}/ -pe threaded 6-16  -l mem_free=10G -l mem_token=10G "$tmp_script" "$tmp_outdir" "$tmp_fastq2" "$tmp_sample" "$tmp_genome" "$tmp_genome_path"
+    
+    echo -e "\n\n"
+
+  fi
+done
+
+# get the align stats 
+# have to wait until all the jobs are done before running this !!
+find "$testOutdir" -name "*.sam.align_stats.txt" -exec basename {} \; -exec cat {} \; -exec echo -e "\n\n" \; > "${testOutdir}/all.align_stats.txt"
+
+```
