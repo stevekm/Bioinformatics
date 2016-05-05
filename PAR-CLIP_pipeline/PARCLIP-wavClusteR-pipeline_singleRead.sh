@@ -107,6 +107,7 @@ EOFA
 fi
 
 # run the wavClusteR pipeline, in R
+# https://www.bioconductor.org/packages/release/bioc/manuals/wavClusteR/man/wavClusteR.pdf
 (
 Rscript --slave --no-save --no-restore - "${SAMPLEID}" "${SAMPLEID}.bam" <<EOFB
   ## R code
