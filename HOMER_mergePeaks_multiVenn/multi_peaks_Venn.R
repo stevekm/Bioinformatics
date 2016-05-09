@@ -41,6 +41,7 @@ venn_summary<-venn_table_df[!colnames(venn_table_df) %in% venn_categories]
 if (num_categories == 2) {
   # PAIRWISE VENN
   # area1
+  # # create a regular expression that will find all categories that include the given areas, and then sum their totals
   area_n1<-sum(venn_summary[grep(pattern = paste0("(?=.*",venn_categories[1],")"),
                                  x = venn_summary$Name,perl = TRUE),][["Total"]])
   
