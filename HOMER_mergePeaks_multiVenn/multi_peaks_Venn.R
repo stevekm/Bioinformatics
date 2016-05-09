@@ -56,7 +56,7 @@ if (num_categories == 2) {
                           area2=area_n2,
                           cross.area=area_n12,
                           category=gsub(pattern = ".bed",replacement = "",x = venn_categories),
-                          fill=c('red','blue','green'),
+                          fill=c('red','blue'),
                           alpha=0.3,
                           ind = FALSE)
   
