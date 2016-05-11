@@ -154,8 +154,26 @@ for i in $(find "${merged_overlap_dir}/" -mindepth 1 -type d ); do
   
 done
 
-# print all the summary venn files that we made into a big file for easier viewing
+# Miscellaneous post-processing steps:
+
+# # print all the summary venn files that we made into a big file for easier viewing
 find "$merged_overlap_dir" -name "venn_summary.tsv" -printf "%P\n" -exec cat {} \; -exec echo "" \; > ${merged_overlap_dir}/all_venn_summary.txt
 
+# # or, if you are just working with the overlap_dir (not merged) 
+
+find "$overlap_dir" -name "venn_summary.tsv" -printf "%P\n" -exec cat {} \; -exec echo "" \; > ${overlap_dir}/all_venn_summary-default.txt
+
+
+
+# # aggregate all the individual PDF's in a subdir in the report dir (created with AutoReportLite from my other repository)
+# # # make a subdir to copy the PDF's to
+tmp_reportPDFdir="${overlap_dir}_report/all_pdf"
+mkdir -p "$tmp_reportPDFdir"
+
+# iterate over the PDF's found, copy with new name reflecting the types of peaks overlapped
+for file in $(find "$overlap_dir" -name "*.pdf"); do
+  tmp_name=$(basename $file)
+  cp "$file" "${tmp_reportPDFdir}/${tmp_name%%.pdf}_default.pdf"
+done
 
 ```
