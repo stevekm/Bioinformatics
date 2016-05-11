@@ -134,6 +134,7 @@ for i in $(find "${merged_overlap_dir}/" -mindepth 1 -type d ); do
 
   # use a glob to find just the source bed files for merging
   # # if you don't do this then subsequent runs of the loop will try to merge the output of the last merge too
+  # # sometimes you have to run this twice to get the right glob settings to work
   shopt -s extglob
   # ls !(merge*).bed
   # merge only the .bed files that don't start with the prefix 'merge' which is part of the output prefix
