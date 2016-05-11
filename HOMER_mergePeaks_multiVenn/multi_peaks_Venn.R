@@ -2,7 +2,7 @@
 
 ## USAGE: multi_peaks_Venn.R <sampleID> /path/to/venn.txt
 ## This script will process venn output from HOMER mergePeaks and plot a venn diagram
-## 
+## this is currently only for R version 3.2.0; module load r/3.2.0
 
 # ~~~~~ LOAD PACKAGES ~~~~~~~ #
 library('VennDiagram')
@@ -21,17 +21,24 @@ plot_filepath<-paste0(plot_outdir,"/",SampleID,"_venn.pdf")
 
 # ~~~~~ PARSE THE VENN TABLE ~~~~~~~ #
 # read in the venn text
-venn_table_df<-read.table(venn_table_file,header = TRUE,sep = "\t",stringsAsFactors = FALSE)
+venn_table_df<-read.table(venn_table_file,header = TRUE,sep = "\t",stringsAsFactors = FALSE,check.names = FALSE)
 # venn_table_df
 
 # get the venn categories
 venn_categories<-colnames(venn_table_df)[!colnames(venn_table_df) %in% c("Total","Name")] 
+cat("Venn categories are:\n"); venn_categories
+
 # venn_categories
 num_categories<-length(venn_categories)
+cat("Num categories are:\n"); num_categories
 
 # make a summary table
 venn_summary<-venn_table_df[!colnames(venn_table_df) %in% venn_categories]
+cat("Venn summary table is categories are:\n"); venn_summary
 # venn_summary
+
+# write summary table
+write.table(venn_summary,file = "venn_summary.tsv",quote = FALSE,row.names = FALSE)
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
 
 
@@ -40,8 +47,8 @@ venn_summary<-venn_table_df[!colnames(venn_table_df) %in% venn_categories]
 
 if (num_categories == 2) {
   # PAIRWISE VENN
+  cat("CREATING PAIR-WISE VENN DIAGRAM\n")
   # area1
-  # # create a regular expression that will find all categories that include the given areas, and then sum their totals
   area_n1<-sum(venn_summary[grep(pattern = paste0("(?=.*",venn_categories[1],")"),
                                  x = venn_summary$Name,perl = TRUE),][["Total"]])
   
@@ -59,15 +66,22 @@ if (num_categories == 2) {
                           category=gsub(pattern = ".bed",replacement = "",x = venn_categories),
                           fill=c('red','blue'),
                           alpha=0.3,
+                          # cat.dist = 0.1,
+                          cex=2,
+                          cat.cex = 2,
+                          margin = 0.1,
                           ind = FALSE)
   
-  pdf(plot_filepath,width = 9,height = 9)
-  grid.arrange(gTree(children=venn), top=paste0(SampleID," Peak Overlap")) #, bottom="subtitle")
+  pdf(plot_filepath,width = 8,height = 8)
+  # grid.arrange(gTree(children=venn), top=paste0(SampleID," Peak Overlap")) #, bottom="subtitle")
+  grid.arrange(gTree(children=venn), top=textGrob(paste0(SampleID," Peak Overlap"), gp=gpar(cex=2), vjust=3))
+  # top=textGrob("Total Data and Image", gp=gpar(cex=3), just="top") #  vjust=0.7
   dev.off()
   
   
 } else if ( num_categories == 3 ) {
   # 3-WAY VENN
+  cat("CREATING THREE-WAY VENN DIAGRAM\n")
   
   # area1
   area_n1<-sum(venn_summary[grep(pattern = paste0("(?=.*",venn_categories[1],")"),
@@ -109,6 +123,7 @@ if (num_categories == 2) {
                           category=gsub(pattern = ".bed",replacement = "",x = venn_categories),
                           fill=c('red','blue','green'),
                           alpha=0.3,
+                          cex=2,
                           ind = FALSE)
   
   pdf(plot_filepath,width = 9,height = 9)
@@ -117,6 +132,7 @@ if (num_categories == 2) {
   
 } else if ( num_categories == 4 ) {
   # 4-WAY VENN
+  cat("CREATING FOUR-WAY VENN DIAGRAM\n")
   # area1
   area_n1<-sum(venn_summary[grep(pattern = paste0("(?=.*",venn_categories[1],")"),
                                  x = venn_summary$Name,perl = TRUE),][["Total"]])
@@ -205,6 +221,7 @@ if (num_categories == 2) {
     fill = c("orange", "red", "green", "blue"),
     cat.dist = 0.25,
     cat.cex = 1.2,
+    alpha=0.3,
     margin = 0.1,
     ind = FALSE)
 
@@ -214,6 +231,7 @@ if (num_categories == 2) {
   
 } else if ( num_categories == 5 ) {
   # 5-WAY VENN
+  cat("CREATING FIVE-WAY VENN DIAGRAM\n")
   
   # area1
   area_n1<-sum(venn_summary[grep(pattern = paste0("(?=.*",venn_categories[1],")"),
@@ -401,3 +419,4 @@ if (num_categories == 2) {
   dev.off()
   
 }
+cat("\n\n\n")
