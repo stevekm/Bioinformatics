@@ -18,8 +18,6 @@ library("UpSetR"); library("ggplot2"); library("grid"); library("plyr")
 args <- commandArgs(TRUE); cat("Script args are:\n"); args
 SampleID<-args[1]
 venn_table_file<-args[2]
-# SampleID<-"AGK"
-# venn_table_file<-"/ifs/home/kellys04/projects/CarrollLab_Teena_ChIpSeq_2016-03-10/project_notes/peak_overlap/peaks_per_patient_per_mark-default-cutoff/AGK/venn.txt"
 
 plot_outdir<-dirname(venn_table_file)
 plot_filepath<-paste0(plot_outdir,"/",SampleID,"_UpSetR_plot.pdf") 
