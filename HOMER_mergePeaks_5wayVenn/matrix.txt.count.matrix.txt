@@ -1,6 +1,0 @@
-peak overlap totals, cmd = mergePeaks H3K27AC.bed H3K27ME3.bed H3K4ME3.bed H3K9AC.bed gencode.bed -prefix mergepeaks -venn venn.txt -matrix matrix.txt	H3K27AC.bed	H3K27ME3.bed	H3K4ME3.bed	H3K9AC.bed	gencode.bed
-H3K27AC.bed	106535	18764	47478	36183	65699
-H3K27ME3.bed	16784	82061	16999	8097	37714
-H3K4ME3.bed	57293	20397	83635	37564	47906
-H3K9AC.bed	43903	9059	36530	44247	31235
-gencode.bed	75023	40193	68009	54220	105785
