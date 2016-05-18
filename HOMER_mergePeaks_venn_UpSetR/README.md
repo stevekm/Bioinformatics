@@ -4,7 +4,7 @@ In this example, the `venn.txt` file would have been created by using a HOMER co
 
 ```
 
-module load homer/v4.6
+# module load homer/v4.6 # if you need to load HOMER
 mergePeaks H3K27AC.bed H3K27ME3.bed H3K4ME3.bed H3K9AC.bed gencode.bed -prefix mergepeaks -venn venn.txt -matrix matrix.txt
 
 
@@ -17,3 +17,5 @@ Pass the `venn.txt` file to the `multi_peaks_UpSet_plot.R` script like this:
 Rscript --vanilla multi_peaks_UpSet_plot.R "SampleID" venn.txt
 
 ```
+
+The plot is saved to the same directory as the `venn.txt` file.
