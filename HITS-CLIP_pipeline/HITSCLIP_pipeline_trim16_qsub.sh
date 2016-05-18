@@ -250,6 +250,8 @@ for i in del sub ins; do
 
 done
 
+# everything after this is optional and should be customized as needed!
+
 # Annotate all peaks files with HOMER; use all BED files, annotate into new dir for each
 tmpPWD="$PWD"
 tmpGENOME=$(basename $GENOME)
@@ -277,7 +279,7 @@ done
 
 
 
-exit
+# exit
 
 # MEME-ChIP motif analysis
 module unload gcc
