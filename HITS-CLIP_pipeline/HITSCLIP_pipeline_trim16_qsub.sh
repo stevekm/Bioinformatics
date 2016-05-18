@@ -56,8 +56,8 @@ echo "tmp_file_base is $tmp_file_base"
 
 
 # software locations dirs
-CIMSdir="$HOME/software/CIMS"
-NOVOdir="$HOME/software/novocraft"
+CIMSdir="/ifs/home/kellys04/software/CIMS"
+NOVOdir="/ifs/home/kellys04/software/novocraft"
 
 # load HOMER
 module load homer/v4.6
@@ -72,7 +72,8 @@ zz=$(basename $0)
 # get the script dir
 za=$(dirname $0)
 # use either qsub job name or scriptname in log filename
-LOG_FILE=scriptlog.${JOB_NAME:=$(basename $0)}.$(date -u +%Y%m%dt%H%M%S).${HOSTNAME:-$(hostname)}.$$.${RANDOM}
+mkdir -p logs/scripts
+LOG_FILE=logs/scripts/scriptlog.${JOB_NAME:=$(basename $0)}.$(date -u +%Y%m%dt%H%M%S).${HOSTNAME:-$(hostname)}.$$.${RANDOM}
 echo "This is the log file for the script." > $LOG_FILE
 echo -e "\n pwd is:\n$PWD\n" >> $LOG_FILE
 # echo -e "\nScript file is:\n$0\n" >> $LOG_FILE # for regular script usage (no qsub)
@@ -116,10 +117,10 @@ if [ ! -f ${SAMPLEID}.c.fa ]; then
   perl $CIMSdir/fasta2collapse.pl -v "${SAMPLEID}.fa" "${SAMPLEID}.c.fa"
 fi
 
-# # trim back the first 16 nt because they are bad
+# # trim back the first 20 nt because they are bad
 if [ ! -f ${SAMPLEID}.c.t16.fa ]; then
   echo -e "Trimming reads"
-  $HOME/software/bin/fastx_trimmer -f 16 -i "${SAMPLEID}.c.fa" -o "${SAMPLEID}.c.t16.fa"
+  /ifs/home/kellys04/software/bin/fastx_trimmer -f 16 -i "${SAMPLEID}.c.fa" -o "${SAMPLEID}.c.t16.fa"
 fi
  
 
@@ -190,9 +191,9 @@ if [ ! -f ${SAMPLEID}.novoalign.tag.uniq.mutation.txt ]; then
 fi
 
 echo "Separating different types of mutations:"
-awk '{if($9=="-") {print $0}}' ${SAMPLEID}.novoalign.tag.uniq.mutation.txt | cut -f1-6 > ${SAMPLEID}.novoalign.tag.uniq.del.bed
-awk '{if($9==">") {print $0}}' ${SAMPLEID}.novoalign.tag.uniq.mutation.txt | cut -f1-6 > ${SAMPLEID}.novoalign.tag.uniq.sub.bed
-awk '{if($9=="+") {print $0}}' ${SAMPLEID}.novoalign.tag.uniq.mutation.txt | cut -f1-6 > ${SAMPLEID}.novoalign.tag.uniq.ins.bed
+if [ ! -f ${SAMPLEID}.novoalign.tag.uniq.del.bed ]; then awk '{if($9=="-") {print $0}}' ${SAMPLEID}.novoalign.tag.uniq.mutation.txt | cut -f1-6 > ${SAMPLEID}.novoalign.tag.uniq.del.bed; fi
+if [ ! -f ${SAMPLEID}.novoalign.tag.uniq.sub.bed ]; then awk '{if($9==">") {print $0}}' ${SAMPLEID}.novoalign.tag.uniq.mutation.txt | cut -f1-6 > ${SAMPLEID}.novoalign.tag.uniq.sub.bed; fi
+if [ ! -f ${SAMPLEID}.novoalign.tag.uniq.ins.bed ]; then awk '{if($9=="+") {print $0}}' ${SAMPLEID}.novoalign.tag.uniq.mutation.txt | cut -f1-6 > ${SAMPLEID}.novoalign.tag.uniq.ins.bed; fi
 
 # delte the cache if previously run
 rm -rf cache*
@@ -249,6 +250,35 @@ for i in del sub ins; do
 
 done
 
+# Annotate all peaks files with HOMER; use all BED files, annotate into new dir for each
+tmpPWD="$PWD"
+tmpGENOME=$(basename $GENOME)
+for i in *.bed; do
+  # set the outdir
+  tmp_anno_dir="${i}_annotation"
+  # delete it if it already exists
+  rm -rf "$tmp_anno_dir"
+  # only annotate certain peak files
+  if [[ ! $i == *"101nt"* ]] && [[ ! $i == *"cluster.PH"* ]] && [[ ! $i == *"tag.bed"* ]] && [[ ! $i == *".collapsed.bed"* ]]
+  then
+    # cd "$tmpPWD"
+    echo -e "Annotating file:\n${i}"
+    # make the outdir
+    mkdir -p "$tmp_anno_dir"
+    # annotate
+    annotatePeaks.pl "$i" "$tmpGENOME" -annStats ${tmp_anno_dir}/annotation_stats.txt > ${tmp_anno_dir}/annotated_peaks.txt
+    # get the number of types of peaks
+    Peak_Type_Stats=${tmp_anno_dir}/peak_type_stats.txt
+    tail -n +2 ${tmp_anno_dir}/annotated_peaks.txt | cut -f8 | cut -d '(' -f1 | sort | uniq -c | sed -e 's/ *//' -e 's/ /\t/' -e "s/'//" -e 's/NA/Other/' -e 's/ //' > $Peak_Type_Stats
+  fi
+done
+
+
+
+
+
+exit
+
 # MEME-ChIP motif analysis
 module unload gcc
 module unload perl
@@ -257,8 +287,8 @@ module load perl/5.22.1
 
 module unload meme/4.9.1
 module load meme/4.11.1
-tmp_JasparDB="$HOME/data/motifs/motif_databases/JASPAR/JASPAR_CORE_2016_vertebrates.meme"
-tmp_JOLMAdb="$HOME/data/motifs/motif_databases/EUKARYOTE/jolma2013.meme"
+tmp_JasparDB="/ifs/home/kellys04/data/motifs/motif_databases/JASPAR/JASPAR_CORE_2016_vertebrates.meme"
+tmp_JOLMAdb="/ifs/home/kellys04/data/motifs/motif_databases/EUKARYOTE/jolma2013.meme"
 # tmpMEME_DB2, tmpMEME_DB
 # remember the present working directory..
 tmpPWD="$PWD"
@@ -271,7 +301,7 @@ for i in del sub ins; do
       
       # tmp_motifdir="motifsMEME-CHIP-2/${i}_${q}nt_rep${k}"
       tmp_motifdir="motifsMEME-CHIP-2/${i}_${q}nt"
-      # if [ ! -d $tmp_motifdir ]; then 
+      if [ ! -d $tmp_motifdir ]; then 
         echo -e "Motif outdir is\n ${tmp_motifdir}"
         mkdir -p "$tmp_motifdir"
         tmpGENOME=$(basename $GENOME)
@@ -281,20 +311,14 @@ for i in del sub ins; do
         # -db "$$tmpMEME_DB"
         meme-chip -oc "$tmp_motifdir" -index-name meme-chip.html -time 300 -order 1 -norand -db "$tmp_JOLMAdb" -db "$tmp_JasparDB" -db "$tmpMEME_DB2" -db "$tmpMEME_DB" -meme-mod zoops -meme-minw 6 -meme-maxw 30 -meme-nmotifs 5 -dreme-e 0.05 -centrimo-score 5.0 -centrimo-ethresh 10.0 "$tmp_fasta"
         # meme-chip -oc "$tmp_motifdir" -index-name meme-chip.html -time 300 -meme-p 4 -meme-nmotifs 5  -db "$tmp_JasparDB" "$tmp_fasta"
-      # fi
+      fi
     # done
   done
 done
 
 
-# skip HOMER motif analysis
-# exit
-
 # HOMER motif analysis
 # remember the present working directory..
-# # ISSUES: CIMS bed has overlapping regions, need to collapse for HOMER
-# # # collapsing removes CIMS significance information
-# # # HOMER motif output can be different between repeated runs, still troubleshooting
 tmpPWD="$PWD"
 
 for i in del sub ins; do
@@ -334,10 +358,10 @@ for i in del sub ins; do
         # start_time1=`date +%s`
 
 
-        start_time1=`date +%s`
+        # start_time1=`date +%s`
         # annotatePeaks.pl "${SAMPLEID}.novoalign.tag.uniq.${i}.CIMS.s30.${q}nt.bed" "$tmpGENOME" -annStats $tmp_motifdir/annotation_stats.txt > $tmp_motifdir/annotated_peaks.txt
         annotatePeaks.pl "$collapse_bed" "$tmpGENOME" -annStats $tmp_motifdir/annotation_stats.txt > $tmp_motifdir/annotated_peaks.txt
-        echo -e "Execution time:\t$(expr $(date +%s) - $start_time1)s"
+        # echo -e "Execution time:\t$(expr $(date +%s) - $start_time1)s"
         #-genomeOntology $ANNOT_OUT_DIR/genomeOntology
         # -d $ANNOT_OUT_DIR/tag_directory
 
@@ -350,20 +374,3 @@ for i in del sub ins; do
   done
   done
 done
-
-
-# protocol taken from :
-# http://www.ncbi.nlm.nih.gov/pubmed/24407355
-# Nat Protoc. 2014 Feb;9(2):263-93. doi: 10.1038/nprot.2014.012. Epub 2014 Jan 9.
-# Mapping Argonaute and conventional RNA-binding protein interactions with RNA at single-nucleotide resolution using HITS-CLIP and CIMS analysis.
-# Moore MJ1, Zhang C2, Gantman EC3, Mele A3, Darnell JC3, Darnell RB1.
-# PMID:
-#     24407355
-#     [PubMed - indexed for MEDLINE] 
-# PMCID:
-#     PMC4156013
-# 
-# Free PMC Article
-
-# http://www.nature.com/nprot/journal/v9/n2/full/nprot.2014.012.html
-# software: http://zhanglab.c2b2.columbia.edu/index.php/CIMS
