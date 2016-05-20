@@ -418,5 +418,10 @@ if (num_categories == 2) {
   grid.arrange(gTree(children=venn), top=paste0(SampleID," Peak Overlap")) #, bottom="subtitle")
   dev.off()
   
+# for embedded fonts try this
+#   cairo_pdf(paste0(plot_filepath,"_cairo.pdf"),width = 9,height = 9)
+#   grid.arrange(gTree(children=venn), top=paste0(SampleID," Peak Overlap"))
+#   dev.off()
+
 }
 cat("\n\n\n")
