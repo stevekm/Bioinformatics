@@ -1,11 +1,12 @@
-*.pdf
+# *.pdf
 .Rproj.user
 *.Rhistory
 *.Rproj
-.Rproj.user/*
+.Rproj.user*
 benchmarking.Rproj
-output/*
-data/*
+# output/*
+# data/*
 Benchmarking.Rproj
 .Rhistory
+# *.pdf
 
