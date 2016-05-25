@@ -1,0 +1,101 @@
+---
+title: "Benchmarking"
+author: "Stephen Kelly"
+date: "3/3/2016"
+---
+PWD: $HOME/projects/Benchmarking
+```{r,engine='bash'}
+# write a script to track time for completion of HOMER with different thread numbers
+
+Input_BED="$HOME/projects/Benchmarking/data/Nkx2.bed"
+OutDir="$HOME/projects/Benchmarking/output/timeTest_HOMERmotif"
+mkdir -p "$OutDir"
+Timer_Script="$HOME/projects/Benchmarking/code/time_track_HOMER.sh"
+chmod +x "$Timer_Script"
+
+qsub -q all.q -wd $OutDir -o :${OutDir}/ -e :${OutDir}/ -pe threaded 32 "$Timer_Script" "${OutDir}" "${Input_BED}" 
+
+```
+
+this script doesn't really work well, its using 32 slots the whole time. Need to split things up
+
+- qsub single slot wrapper script that runs 32..1 forloop, submits qsub job to run the motif analsis
+- motif analysis script that runs motif analysis 
+- dedicated dir for each analysis job
+- 
+
+
+
+```{r,engine='bash'}
+# write a script to track time for completion of HOMER with different thread numbers
+
+Input_BED="$HOME/projects/Benchmarking/data/Nkx2.bed"
+tmp_SAMPLE=$(basename $Input_BED)
+tmp_SAMPLE=${tmp_SAMPLE%.*}
+
+OutDir="$HOME/projects/Benchmarking/output/timeTest_HOMERmotif"
+mkdir -p "$OutDir"
+
+Timer_Track_Wrapper="$HOME/projects/Benchmarking/code/time_track_wrapper.sh"
+chmod +x "$Timer_Track_Wrapper"
+Timer_Script="$HOME/projects/Benchmarking/code/time_track_HOMER2.sh"
+chmod +x "$Timer_Script"
+
+# make the tmp dirs
+for i in {32..1}; do
+  if [ -d "$OutDir/${i}" ]; then
+    rm -rf "$OutDir/${i}" # delete the dir if it exists
+  fi
+ mkdir -p "$OutDir/${i}"
+done
+
+# submit to wrapper 
+# tmp_LOG_FILE="${OutDir}/TIMER_LOG_$(date -u +%Y%m%dt%H%M%S).txt"
+tmp_LOG_FILE="${OutDir}/TIMER_LOG.txt"
+qsub -q all.q -wd $OutDir -o :${OutDir}/ -e :${OutDir}/ -pe threaded 1 "$Timer_Track_Wrapper" "${OutDir}" "${Input_BED}" "$Timer_Script" "$tmp_LOG_FILE"
+
+```
+
+disk IO is probably a bottleneck, producing inconsistent results
+
+
+http://homer.salk.edu/homer/ngs/peakMotifs.html
+```{r,engine='bash'}
+# write a script to track time for completion of HOMER with different thread numbers
+# don't use a wrapper script for this
+
+Input_BED="$HOME/projects/Benchmarking/data/Nkx2_ChIPSeq_mm9.bed"
+tmp_SAMPLE=$(basename $Input_BED)
+tmp_SAMPLE=${tmp_SAMPLE%.*}
+
+OutDir="$HOME/projects/Benchmarking/output/HOMERmotif"
+mkdir -p "$OutDir"
+
+
+tmp_Script="$HOME/projects/Benchmarking/code/time_track_HOMER3.sh"
+chmod +x "$tmp_Script"
+tmp_Script_filename=$(basename "$tmp_Script")
+
+# make the tmp dirs
+for i in {32..1}; do
+  if [ -d "$OutDir/${i}" ]; then
+    rm -rf "$OutDir/${i}" # delete the dir if it exists
+  fi
+ mkdir -p "$OutDir/${i}"
+done
+
+# submit to wrapper 
+# tmp_LOG_FILE="${OutDir}/TIMER_LOG_$(date -u +%Y%m%dt%H%M%S).txt"
+tmp_LOG_FILE="${OutDir}/logs/TIMER_LOG_CPU-threads_${tmp_Script_filename}.txt"
+qsub -q all.q -wd $OutDir -o :${OutDir}/ -e :${OutDir}/ -pe threaded 32 "$tmp_Script" "${OutDir}" "${Input_BED}" "$tmp_LOG_FILE"
+
+```
+
+
+
+
+
+
+
+
+

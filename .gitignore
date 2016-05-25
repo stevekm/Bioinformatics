@@ -2,4 +2,10 @@
 .Rproj.user
 *.Rhistory
 *.Rproj
+.Rproj.user/*
+benchmarking.Rproj
+output/*
+data/*
+Benchmarking.Rproj
+.Rhistory
 
