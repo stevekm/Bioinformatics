@@ -1,0 +1,42 @@
+Run these commands in the (bash) terminal to submit qsub jobs for FastQC.
+
+```{,engine='bash'}
+# directory for the analysis project
+ProjDir="/ifs/home/kellys04/projects/SmithLab_HITS-CLIP_2016-03-14"
+# cd "$ProjDir"
+
+# directory containing the fastq files
+FastqDir="$ProjDir/run_data"
+
+# directory to put the output
+FastQC_outdir="$ProjDir/fastqc"
+
+# the FastQC script to be submitted to qsub
+FastQCscript="./fastqc_qsub.sh"
+
+# make sure the script is executable
+chmod +x "$FastQCscript"
+
+# submit each fastq.gz file to the FastQC script with qsub
+for file in $FastqDir/*.fastq.gz; do
+  echo "Submitting FastQC job for $file"
+  
+  # make a subdir for each file
+  tmp_outdir="$FastQC_outdir/$(basename $file)"
+  mkdir -p "$tmp_outdir"
+  echo "Outdir is $tmp_outdir"
+  
+  # submit the job
+  qsub -q all.q -wd $tmp_outdir -o :${tmp_outdir}/ -e :${tmp_outdir}/ -pe threaded 4 "$FastQCscript" "${tmp_outdir}" "${file}"
+  # -q <node name prefix>; -wd working dir for the script; -o/e where to put the logs; -pe threaded <n> how many threads to reserve
+done
+
+
+# make a dir with symlinks to all of the html files produced so they are easier to browse
+mkdir -p "$ProjDir/fastqc_link"
+
+find "$FastQC_outdir" -name "*.html" -exec ln -s {} "$ProjDir/fastqc_link" \;
+@
+```
+
+(Its easier to have these commands available for easy editing & viewing than saving them as their own script).

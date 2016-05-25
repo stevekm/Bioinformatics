@@ -1,0 +1,79 @@
+Generate .bam and .bai alignment and index files for .fastq.gz raw input reads. Script set up to be submitted as a job on the HPC cluster
+
+For single end reads
+```{r,engine='bash'}
+# directory of project
+ProjDir="$HOME/projects/alignment_2016-04-05"
+
+# local bam outputs
+mkdir -p $ProjDir/tmp_bam
+
+# place to output logs and files
+bam_dir="$ProjDir/tmp_bam"
+
+# client's results dir, symlinked
+bam_final_outputs="$ProjDir/results_bam"
+
+# dir with the fastq files to be processed, symlinked
+fastq_dir="$ProjDir/fastq"
+
+# use the hg19 genome
+tmp_genome="hg19"
+tmp_outdir="$bam_dir"
+tmp_script="$HOME/projects/alignment_2016-04-05/code/bowtie2_qsub.sh"
+# make sure the script is executable
+chmod +x "$tmp_script"
+
+cd "$ProjDir"
+
+# iterate over every fastq file
+for i in $fastq_dir/*.fastq.gz; do
+  tmp_fastq="$i"
+  # echo "$i"
+  qsub -wd $tmp_outdir -o :${tmp_outdir}/ -e :${tmp_outdir}/ -pe threaded 4-12 "$tmp_script" "$tmp_outdir" "$tmp_fastq" "$tmp_genome"
+done
+
+# copy the files to the client's directory
+find $ProjDir -type f \( -name "*.bam" -or -name "*.bai" \) -exec cp {} results_bam/ \;
+
+
+```
+
+For paired end reads, from a samplesheet
+```{r,engine='bash'}
+ProjDir="$HOME/projects/alignment_2016-04-05"
+testOutdir="$ProjDir/bowtie2_align"
+samplesheet="$ProjDir/samplesheet.tsv"
+tmp_script="$ProjDir/code/bowtie2_qsub_paired.sh"
+# make sure the script is executable
+chmod +x "$tmp_script"
+
+cd "$ProjDir"
+
+tail -n +2 $samplesheet | while read i; do
+  # echo "$i"
+  if [[ ! -z "$i" ]]; then
+    tmp_sample=$(echo "$i" | cut -f1)
+    # echo "tmp_sample is $tmp_sample"
+    
+    tmp_outdir="${testOutdir}/${tmp_sample}"
+    mkdir -p "$tmp_outdir"
+    # echo "tmp_outdir is $tmp_outdir"
+    
+    tmp_genome=$(echo "$i" | cut -f3)
+    # echo "tmp_genome is $tmp_genome"
+    
+    tmp_fastq1=$(echo "$i" | cut -f4)
+    # echo "tmp_fastq1 is $tmp_fastq1"
+    
+    tmp_fastq2=$(echo "$i" | cut -f5)
+    # echo "tmp_fastq2 is $tmp_fastq2"
+    
+    # echo "$tmp_script $tmp_outdir $tmp_fastq1 $tmp_fastq2 $tmp_genome"
+    
+    qsub -wd $tmp_outdir -o :${tmp_outdir}/ -e :${tmp_outdir}/ -pe threaded 4-12 "$tmp_script" "$tmp_outdir" "$tmp_fastq1" "$tmp_fastq2" "$tmp_genome"
+
+  fi
+done
+
+```

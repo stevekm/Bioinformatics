@@ -1,0 +1,184 @@
+---
+title: "TopHat Alignment Summary Stats"
+author: "stevekm"
+date: "11/2/2015"
+output:
+  html_document:
+    keep_md: yes
+  pdf_document:
+    keep_tex: yes
+---
+
+```{r global_options, include=FALSE}
+# this sets all code chunks to eval=FALSE unless set explicitly otherwise
+# prevents code from being compiled on document compilation
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      eval=FALSE, warning=FALSE, message=FALSE)
+```
+View some of the TopHat summary stats that need to be parsed:
+```{r,engine='bash',eval=FALSE}
+cat ~/project/RNAseq/output/sample_bam_dir/align_summary.txt
+# Left reads:
+#                Input:  61253018
+#               Mapped:  57282885 (93.5% of input)
+#             of these:  23943837 (41.8%) have multiple alignments (190619 have >20)
+# Right reads:
+#                Input:  61253018
+#               Mapped:  57235717 (93.4% of input)
+#             of these:  24148352 (42.2%) have multiple alignments (187585 have >20)
+# 93.5% overall read alignment rate.
+# 
+# Aligned pairs:  56523998
+#      of these:  20554098 (36.4%) have multiple alignments
+#           and:   3682623 ( 6.5%) are discordant alignments
+# 86.3% concordant pair alignment rate.
+```
+Write a script to parse the TopHat summaries for each sample and copy the desired values into a table. 
+```{r,engine='bash',eval=FALSE,echo=TRUE,include=TRUE}
+# in bash
+# generate alignment summary
+
+# project dir
+BASE_DIR=~/project/RNAseq/output
+
+# the output dir for the summaries
+TopHatSummaryDir=$BASE_DIR/TopHat_Summary
+
+# make sure the output dir exists
+mkdir -p $BASE_DIR/TopHat_Summary
+
+# the directories that have out tophat output
+# all the names start with 23 in this case
+TOPHAT_OUT_DIRS=$(find $BASE_DIR -maxdepth 1 -type d -name "23*")
+
+# the location of the output table
+SUMMARY_CSV=${TopHatSummaryDir}/summary.TopHat.csv
+
+# header for table, save to a temp object
+printf "Sample,Percent Aligned Reads,Total Reads,Percent Left Reads Mapped,Percent Left Reads Multiple Alignment,Percent Right Reads Mapped,Percent Right Reads Multiple Alignment,Aligned Read Pairs,Percent Pairs Multiple Alignment\n" > ${SUMMARY_CSV}.tmp
+
+for i in $TOPHAT_OUT_DIRS; do
+  # Sample name
+  SAMPLE_ID=$(basename $i)
+  
+  # extract alignment rate line and remove the part after %
+  # Percent Aligned Reads
+  ALIGN_PCNT=$(grep "overall read alignment rate" $BASE_DIR/$(basename $i)/align_summary.txt)
+  ALIGN_PCNT=$(echo ${ALIGN_PCNT%\%*})
+  # echo $ALIGN_PCNT
+  
+  # extract the total number of reads
+  # Total Reads
+  TOTAL_READS=$(grep -m 1 "Input" $BASE_DIR/$(basename $i)/align_summary.txt)
+  TOTAL_READS=${TOTAL_READS#*:}
+  TOTAL_READS=$(echo $TOTAL_READS | tr -d '[[:space:]]')
+  # echo $TOTAL_READS
+  
+  
+  
+  
+  # LEFT READS
+  LFT_Reads_Map=$(grep -m 1 "Mapped" $BASE_DIR/$(basename $i)/align_summary.txt)
+  LFT_Reads_Map=${LFT_Reads_Map#*:}
+  LFT_Reads_Map=$(echo $LFT_Reads_Map | tr -d '[[:space:]]' | cut -d '(' -f 1 )
+  
+  # Left Percent Mapped
+  LFT_Pcnt_Map=$(grep -m 1 "Mapped" $BASE_DIR/$(basename $i)/align_summary.txt)
+  LFT_Pcnt_Map=$(echo ${LFT_Pcnt_Map%\%*} | tr -d '[[:space:]]' | cut -d '(' -f2 )
+  
+  # Percent Left Reads Multiple Alignment
+  LFT_Pcnt_Mult_Algn=$(grep -m 1 "have multiple alignments" $BASE_DIR/$(basename $i)/align_summary.txt)
+  LFT_Pcnt_Mult_Algn=$(echo ${LFT_Pcnt_Mult_Algn%\%*} | tr -d '[[:space:]]' | cut -d '(' -f2 )
+  
+  
+  # RIGHT READS
+  RGHT_Reads_Map=$(grep -m 2 "Mapped" $BASE_DIR/$(basename $i)/align_summary.txt)
+  RGHT_Reads_Map=${RGHT_Reads_Map#*:}
+  RGHT_Reads_Map=$(echo $RGHT_Reads_Map | tr -d '[[:space:]]' | cut -d '(' -f 1 )
+    
+  # RIGHT reads percent mapped
+  RGHT_Pcnt_Map=$(grep -m 2 "Mapped" $BASE_DIR/$(basename $i)/align_summary.txt | tail -n1)
+  RGHT_Pcnt_Map=$(echo ${RGHT_Pcnt_Map%\%*} | tr -d '[[:space:]]' | cut -d '(' -f2 )
+
+    
+  # Percent Right Reads Multiple Alignment
+  RGHT_Pcnt_Mult_Algn=$(grep -m 2 "have multiple alignments" $BASE_DIR/$(basename $i)/align_summary.txt | tail -n1)
+  RGHT_Pcnt_Mult_Algn=$(echo ${RGHT_Pcnt_Mult_Algn%\%*} | tr -d '[[:space:]]' | cut -d '(' -f2 )
+
+  
+      
+  # extract the aligned pairs
+  # Aligned Pairs
+  ALGN_PAIRS=$(grep "Aligned pairs" $BASE_DIR/$(basename $i)/align_summary.txt)
+  ALGN_PAIRS=${ALGN_PAIRS#*:}
+  ALGN_PAIRS=$(echo $ALGN_PAIRS | tr -d '[[:space:]]')
+  
+  PAIR_MULT_ALGN=$(grep -m 3 "have multiple alignments" $BASE_DIR/$(basename $i)/align_summary.txt | tail -n1)
+  PAIR_MULT_ALGN=$(echo ${PAIR_MULT_ALGN%\%*} | tr -d '[[:space:]]' | cut -d '(' -f2 )
+  
+  printf "${SAMPLE_ID},${ALIGN_PCNT},${TOTAL_READS},${LFT_Pcnt_Map},${LFT_Pcnt_Mult_Algn},${RGHT_Pcnt_Map},${RGHT_Pcnt_Mult_Algn},${ALGN_PAIRS},${PAIR_MULT_ALGN}\n" >> ${SUMMARY_CSV}.tmp
+
+  done
+cat ${SUMMARY_CSV}.tmp
+
+# sort combined file ignoring header and remove extra header lines
+(head -n 1 ${SUMMARY_CSV}.tmp) > $SUMMARY_CSV
+(tail -n +2 ${SUMMARY_CSV}.tmp | sort --unique ) >> $SUMMARY_CSV
+
+# view the file
+cat ${SUMMARY_CSV}
+
+# remove the temp object
+rm -f ${SUMMARY_CSV}.tmp
+
+```
+Copy all the individual TopHat alignment summaries into a common directory. Rename each to its corresponding sample name. 
+```{r,engine='bash',include=TRUE,echo=TRUE,eval=FALSE}
+# copy the 
+
+# project dir
+BASE_DIR=~/project/RNAseq/output/
+TopHatSummaryDir=$BASE_DIR/TopHat_Summary
+
+# the directories that have out tophat output
+# they all start with 23 in the name, in this case
+TOPHAT_OUT_DIRS=$(find $BASE_DIR -maxdepth 1 -type d -name "23*")
+
+for i in $TOPHAT_OUT_DIRS; do
+  # echo $(basename $i)
+  cp $i/align_summary.txt $TopHatSummaryDir/$(basename $i)_align_summary.txt
+done
+
+ls $TopHatSummaryDir
+```
+
+Load the summary table in R, and print it into the Markdown to display here. 
+```{r,eval=FALSE,results='asis',echo=TRUE,include=TRUE}
+# In R
+
+require(knitr)
+Project_Dir<-"~/project/RNAseq"
+bam_dir<-"~/project/RNAseq/output/bam"
+TopHatSummaryDir<-"~/project/RNAseq/output/TopHat_Summary"
+
+TopHat_Stats_Table<-read.csv(paste0(TopHatSummaryDir,"/summary.TopHat.csv"))
+# print(xtable(x = TopHat_Stats_Table))
+kable(x = TopHat_Stats_Table,format = 'markdown')
+
+
+# this is a style sheet that can also be used, paste it into the markdown
+# this will set the width of the table if desired
+
+# 
+# <style type="text/css">
+# .table {
+# 
+#     width: 40%;
+# 
+# }
+# </style>
+#   
+# suppressMessages(require(xtable))
+# options(xtable.comment = FALSE) # make sure to include this if using .Rmd
+
+```

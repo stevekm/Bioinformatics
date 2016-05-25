@@ -1,0 +1,32 @@
+H3K27AC.bed	H3K27ME3.bed	H3K4ME3.bed	H3K9AC.bed	gencode.bed	Total	Name
+X	X				1690	H3K27AC.bed|H3K27ME3.bed
+X	X			X	758	H3K27AC.bed|H3K27ME3.bed|gencode.bed
+X	X		X		147	H3K27AC.bed|H3K27ME3.bed|H3K9AC.bed
+X	X		X	X	87	H3K27AC.bed|H3K27ME3.bed|H3K9AC.bed|gencode.bed
+X	X	X			1420	H3K27AC.bed|H3K27ME3.bed|H3K4ME3.bed
+X	X	X		X	1797	H3K27AC.bed|H3K27ME3.bed|H3K4ME3.bed|gencode.bed
+X	X	X	X		1187	H3K27AC.bed|H3K27ME3.bed|H3K4ME3.bed|H3K9AC.bed
+X	X	X	X	X	6735	H3K27AC.bed|H3K27ME3.bed|H3K4ME3.bed|H3K9AC.bed|gencode.bed
+X					20289	H3K27AC.bed
+X				X	1624	H3K27AC.bed|gencode.bed
+X			X		1693	H3K27AC.bed|H3K9AC.bed
+X			X	X	315	H3K27AC.bed|H3K9AC.bed|gencode.bed
+X		X			6218	H3K27AC.bed|H3K4ME3.bed
+X		X		X	1732	H3K27AC.bed|H3K4ME3.bed|gencode.bed
+X		X	X		6156	H3K27AC.bed|H3K4ME3.bed|H3K9AC.bed
+X		X	X	X	6217	H3K27AC.bed|H3K4ME3.bed|H3K9AC.bed|gencode.bed
+	X				36474	H3K27ME3.bed
+	X			X	3078	H3K27ME3.bed|gencode.bed
+	X		X		12	H3K27ME3.bed|H3K9AC.bed
+	X		X	X	1	H3K27ME3.bed|H3K9AC.bed|gencode.bed
+	X	X			2156	H3K27ME3.bed|H3K4ME3.bed
+	X	X		X	1747	H3K27ME3.bed|H3K4ME3.bed|gencode.bed
+	X	X	X		14	H3K27ME3.bed|H3K4ME3.bed|H3K9AC.bed
+	X	X	X	X	27	H3K27ME3.bed|H3K4ME3.bed|H3K9AC.bed|gencode.bed
+				X	7057	gencode.bed
+			X		96	H3K9AC.bed
+			X	X	9	H3K9AC.bed|gencode.bed
+		X			11364	H3K4ME3.bed
+		X		X	843	H3K4ME3.bed|gencode.bed
+		X	X		43	H3K4ME3.bed|H3K9AC.bed
+		X	X	X	10	H3K4ME3.bed|H3K9AC.bed|gencode.bed

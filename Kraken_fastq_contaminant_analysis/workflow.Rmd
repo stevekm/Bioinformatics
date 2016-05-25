@@ -1,0 +1,48 @@
+Run the Kraken program on the raw fastq files to check for potential contamination.
+
+```{r,engine='bash'}
+# in the terminal (bash)
+
+# project directory
+ProjDir="$HOME/projects/SmithLab_HITS-CLIP_2016-03-14"
+
+# outdir for the results
+testOutdir="${ProjDir}/test_pipeline/kraken_contaminant_analysis2"
+
+# dir containing the raw sequencing reads (fastq.gz format)
+FastqDir="${ProjDir}/run_data"
+
+# qsub script for Kraken
+tmp_script="${ProjDir}/code/kraken_qsub.sh"
+
+# make sure the script is executable
+chmod +x "$tmp_script"
+cd "$testOutdir"
+
+# iterate over all fastq files in the dir
+for i in ${FastqDir}/*.fastq.gz; do
+  # get the file path
+  tmp_fastq="$i"
+  # echo "tmp_fastq is $tmp_fastq"
+
+  # get the file name
+  tmp_sample=$(basename "$tmp_fastq")
+  # echo "tmp_sample is $tmp_sample"
+
+  # make a subdir for each one
+  tmp_outdir="${testOutdir}/${tmp_sample}"
+  mkdir -p "$tmp_outdir"
+  # echo "tmp_outdir is $tmp_outdir"
+  
+  # submit the qsub job; use tmp_outdir as job's pwd, direct all logs there
+  # echo -e "qsub -wd $tmp_outdir -o :${tmp_outdir}/ -e :${tmp_outdir}/ -pe threaded 6-18 $tmp_script $tmp_outdir $tmp_fastq $tmp_sample\n\n"
+  qsub -wd $tmp_outdir -o :${tmp_outdir}/ -e :${tmp_outdir}/ -pe threaded 6-18 "$tmp_script" "$tmp_outdir" "$tmp_fastq" "$tmp_sample"
+done
+  
+```
+http://ccb.jhu.edu/software/kraken/MANUAL.html
+http://www.ncbi.nlm.nih.gov/pmc/articles/PMC4053813/
+http://ccb.jhu.edu/software/kraken/
+
+also check out this:
+http://www.bioinformatics.babraham.ac.uk/projects/fastq_screen/

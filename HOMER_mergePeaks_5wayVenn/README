@@ -1,0 +1,1 @@
+Merge 5 sets of peaks with HOMER mergePeaks and plot a five-way Venn Diagram in R. See `workflow.Rmd` for the overview.

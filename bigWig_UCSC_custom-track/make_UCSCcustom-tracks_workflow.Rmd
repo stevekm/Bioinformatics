@@ -1,0 +1,193 @@
+Need to make custom UCSC tracks for a large number of bigWig files, ~500 files, from a ChIP-Seq data set.
+
+Use some scripts to parse all of the files and create tracks, ordered by Histone and SampleID
+
+First, need to make a samplesheet in .csv format to parse in R. 
+
+```{r,engine='bash'}
+# in bash:
+ProjDir="$HOME/projects/ChIP-Seq_2016-03-21"
+cd $ProjDir
+bigWig_indir="$HOME/projects/ChIP-Seq_2016-03-21/pipeline/align/results"
+bigWig_outdir="/ifs/data/sequence/results/SmithLab/alignment/bigwigs"
+
+URLbase="https://myserver.edu/results/SmithLab/alignment/bigwigs"
+
+# header for the table
+# SampleID,Patient,Type,Histone,Patient-Histone,Patient-Type,Type-Histone,File,URL
+
+# set the header for the new tmp BigWig sheet
+bigWig_sheet="bigWig_sheet-test1.csv"
+echo -e "SampleID,Patient,Type,Histone,Patient-Histone,Patient-Type,Type-Histone,File,URL" > $bigWig_sheet
+
+# find all of the bigWig files, .bw
+FILES=$(find $bigWig_indir -name "*.bw")
+
+# iterate over all of the files
+for i in $FILES; do 
+  # echo "$i"
+  # # $HOME/projects/ChIP-Seq_2016-03-21/pipeline/align/results/align.by_sample.bowtie2/ABC-S-H3K9ME3/track.bw
+
+  # get the sample ID from the bigWig file parent directory name
+  # e.g. ABC-S-H3K9ME3
+  SampleID="$(basename $(dirname $i))"
+  echo $SampleID
+  # # ABC-S-H3K9ME3
+  
+  Patient=$(echo $SampleID | cut -d '-' -f1)
+  # echo $Patient
+  # # ABC
+  
+  Type=$(echo $SampleID | cut -d '-' -f2)
+  # echo $Type
+  # # S
+  
+  Histone=$(echo $SampleID | cut -d '-' -f3)
+  # echo $Histone
+  # # H3K9ME3
+  
+  Patient_Histone=$(echo "${Patient}-${Histone}")
+  # echo $Patient_Histone
+  # # ABC-H3K9ME3
+  
+  Patient_Type=$(echo "${Patient}-${Type}")
+  # echo $Patient_Type
+  # # ABC-S
+  
+  Type_Histone=$(echo "${Type}-${Histone}")
+  # echo $Type_Histone
+  # # S-H3K9ME3
+  
+  File=${SampleID}.bw
+  # echo $File
+  # # ABC-S-H3K9ME3.bw
+
+  tmpURL=$(echo "${URLbase}/${File}")
+  echo $tmpURL
+  # # https://myserver.edu/results/SmithLab/alignment/bigwigs/ABC-S-H3K9ME3.bw
+  
+  
+  # save the items to a sample sheet
+  echo "${SampleID},${Patient},${Type},${Histone},${Patient_Histone},${Patient_Type},${Type_Histone},${File},${tmpURL}" >> $bigWig_sheet
+
+  # copy the bigWig file to the output directory, accessible by UCSC
+  cp "$i" "${bigWig_outdir}/${File}"
+done
+
+# preview the output
+# head bigWig_sheet.csv
+# SampleID,Patient,Type,Histone,Patient-Histone,Patient-Type,Type-Histone,File,URL
+# FFF-S-H3K9ME3,FFF,S,H3K9ME3,FFF-H3K9ME3,FFF-S,S-H3K9ME3,FFF-S-H3K9ME3.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/FFF-S-H3K9ME3.bw
+# FFF-S-INPUT,FFF,S,INPUT,FFF-INPUT,FFF-S,S-INPUT,FFF-S-INPUT.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/FFF-S-INPUT.bw
+# BBB-W-H3K4ME3,BBB,W,H3K4ME3,BBB-H3K4ME3,BBB-W,W-H3K4ME3,BBB-W-H3K4ME3.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/BBB-W-H3K4ME3.bw
+# SSS-W-INPUT,SSS,W,INPUT,SSS-INPUT,SSS-W,W-INPUT,SSS-W-INPUT.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/SSS-W-INPUT.bw
+# SSS-S-H3K27AC,SSS,S,H3K27AC,SSS-H3K27AC,SSS-S,S-H3K27AC,SSS-S-H3K27AC.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/SSS-S-H3K27AC.bw
+# SAA-S-H3K9AC,SAA,S,H3K9AC,SAA-H3K9AC,SAA-S,S-H3K9AC,SAA-S-H3K9AC.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/SAA-S-H3K9AC.bw
+# BBB-W-INPUT,BBB,W,INPUT,BBB-INPUT,BBB-W,W-INPUT,BBB-W-INPUT.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/BBB-W-INPUT.bw
+# PPP-S-INPUT,PPP,S,INPUT,PPP-INPUT,PPP-S,S-INPUT,PPP-S-INPUT.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/PPP-S-INPUT.bw
+# FFF-S-H3K9AC,FFF,S,H3K9AC,FFF-H3K9AC,FFF-S,S-H3K9AC,FFF-S-H3K9AC.bw,https://myserver.edu/results/SmithLab/alignment/bigwigs/FFF-S-H3K9AC.bw
+
+```
+
+```{r}
+# in R
+
+# load the CSV sheet containing the ID values to enter in the custom track
+files_sheet_path="$HOME/projects/ChIP-Seq_2016-03-21/bigWig_sheet.csv"
+file_sheet<-read.csv(files_sheet_path,header = T)
+
+# head(file_sheet)
+# sort the dataframe by Patient.Histone
+head(file_sheet[with(file_sheet, order(Histone,Patient,Type)), ])
+#          SampleID Patient Type Histone Patient.Histone Patient.Type Type.Histone             File
+# 122 ABC-S-H3K27AC     ABC    S H3K27AC     ABC-H3K27AC        ABC-S    S-H3K27AC ABC-S-H3K27AC.bw
+# 40  ABC-W-H3K27AC     ABC    W H3K27AC     ABC-H3K27AC        ABC-R    R-H3K27AC ABC-W-H3K27AC.bw
+# 134 BPH-S-H3K27AC     BPH    S H3K27AC     BPH-H3K27AC        BPH-S    S-H3K27AC BPH-S-H3K27AC.bw
+# 65  BPH-W-H3K27AC     BPH    W H3K27AC     BPH-H3K27AC        BPH-R    R-H3K27AC BPH-W-H3K27AC.bw
+# 87  CDK-S-H3K27AC     CDK    S H3K27AC     CDK-H3K27AC        CDK-S    S-H3K27AC CDK-S-H3K27AC.bw
+# 38  CDK-W-H3K27AC     CDK    W H3K27AC     CDK-H3K27AC        CDK-R    R-H3K27AC CDK-W-H3K27AC.bw
+#                                                                                                               URL
+# 122 https://myserver.edu/results/SmithLab/alignment/bigwigs/ABC-S-H3K27AC.bw
+# 40  https://myserver.edu/results/SmithLab/alignment/bigwigs/ABC-W-H3K27AC.bw
+# 134 https://myserver.edu/results/SmithLab/alignment/bigwigs/BPH-S-H3K27AC.bw
+# 65  https://myserver.edu/results/SmithLab/alignment/bigwigs/BPH-W-H3K27AC.bw
+# 87  https://myserver.edu/results/SmithLab/alignment/bigwigs/CDK-S-H3K27AC.bw
+# 38  https://myserver.edu/results/SmithLab/alignment/bigwigs/CDK-W-H3K27AC.bw
+
+file_sheet_sort<-file_sheet[with(file_sheet, order(Histone,Patient,Type)), ]
+
+# get a subset of the sheet for testing..
+sheet_sample1<-file_sheet_sort[1:3,]
+
+# some extra visualization parameters that I like to use
+tmp_params<-"visibility=full autoScale=off alwaysZero=on maxHeightPixels=100 graphType=bar viewLimits=0:0.3"
+
+# separate the tracks per Histone mark
+# iterate over the unique histone markes in the sheet
+for(k in seq_along(unique(file_sheet_sort[['Histone']]))){
+  # get the i'th mark
+  tmp_mark<-unique(file_sheet_sort[['Histone']])[k]
+  # print(tmp_mark)
+  
+  # subset the sheet for the entries with this mark
+  file_sheet_subset<-file_sheet_sort[file_sheet_sort$Histone==tmp_mark,]
+  
+  # make a custom track for each entry, save it to a separte file
+  # make a new empty file for each mark
+  tmp_trackfile<-paste0("UCSC_",tmp_mark,"_customTrack.txt")
+  sink(tmp_trackfile)
+  cat("")
+  sink()
+  
+  # iterate over the entries in the subset
+  for(i in seq(1:nrow(file_sheet_subset))){
+    # get the i'th row
+    tmp_row<-file_sheet_subset[i,]
+    
+    # get items from the entry
+    track_name<-as.character(tmp_row[['SampleID']])
+    tmpURL<-as.character(tmp_row[["URL"]])
+    track_type<-"bigWig"
+    
+    custom_track<-paste0("track"," type=",track_type," name=",track_name," bigDataUrl=",tmpURL," ",tmp_params) 
+    
+    # write the custom track to a text file per histone mark
+    sink(tmp_trackfile,append = TRUE)
+    cat(custom_track,"\n")
+    sink()
+    
+  }
+  
+}
+
+# sample output: 
+# track type=bigWig name=ABC-S-H3K27AC bigDataUrl=https://myserver.edu/results/SmithLab/alignment/bigwigs/ABC-S-H3K27AC.bw visibility=full autoScale=off alwaysZero=on maxHeightPixels=100 graphType=bar viewLimits=0:0.3 
+
+```
+
+
+some resources:
+
+https://genome.ucsc.edu/goldenpath/help/customTrack.html#MANAGE_CT
+
+https://genome.ucsc.edu/goldenpath/help/bigWig.html
+
+https://genome.ucsc.edu/FAQ/FAQformat.html
+
+https://genome.ucsc.edu/goldenpath/help/customTrack.html
+
+https://www.biostars.org/p/42844/
+
+http://genome.ucsc.edu/cgi-bin/hgSession
+
+https://www.researchgate.net/post/How_do_I_properly_visualize_custom_ChIP-seq_peaks_in_UCSC_genome_browser
+
+https://genome.ucsc.edu/goldenpath/help/hgTracksHelp.html
+
+https://genome.ucsc.edu/cgi-bin/hgSession?hgS_doMainPage=1
+
+https://genome.ucsc.edu/cgi-bin/hgCustom
+
+https://genome.ucsc.edu/goldenpath/help/hgTracksHelp.html#TRACK
+
+https://www.biostars.org/p/64094/

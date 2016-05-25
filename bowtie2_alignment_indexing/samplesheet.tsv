@@ -1,0 +1,6 @@
+SampleID	Control	genome	R1	R2
+14QS	140Q-UV	hg19	/data/sequence/PAR-CLIP/2016-04-01/fastq/14QS_ATTCAGAA_L005_R1_001.fastq.gz	/data/sequence/PAR-CLIP/2016-04-01/fastq/14QS_ATTCAGAA_L005_R2_001.fastq.gz
+140Q-UV	NA	hg19	/data/sequence/PAR-CLIP/2016-04-01/fastq/140Q-UV_GAGATTCC_L005_R1_001.fastq.gz	/data/sequence/PAR-CLIP/2016-04-01/fastq/140Q-UV_GAGATTCC_L005_R2_001.fastq.gz
+7QS	7Q-UV	hg19	/data/sequence/PAR-CLIP/2016-04-01/fastq/7QS_CGCTCATT_L005_R1_001.fastq.gz	/data/sequence/PAR-CLIP/2016-04-01/fastq/7QS_CGCTCATT_L005_R2_001.fastq.gz
+7Q-UV	NA	hg19	/data/sequence/PAR-CLIP/2016-04-01/fastq/7Q-UV_TCCGGAGA_L005_R1_001.fastq.gz	/data/sequence/PAR-CLIP/2016-04-01/fastq/7Q-UV_TCCGGAGA_L005_R2_001.fastq.gz
+R1S	NA	hg19	/data/sequence/PAR-CLIP/2016-04-01/fastq/R1S_ATTACTCG_L005_R1_001.fastq.gz	/data/sequence/PAR-CLIP/2016-04-01/fastq/R1S_ATTACTCG_L005_R2_001.fastq.gz
