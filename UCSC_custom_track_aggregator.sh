@@ -12,7 +12,9 @@ mkdir -p "$ProjDir"
 cd "$ProjDir"
 
 tmp_track_dir="${ProjDir}/tmp_tracks"
-rm -f ${tmp_track_dir}/*; mkdir -p "$tmp_track_dir"
+# remove any files present
+find ${tmp_track_dir} -type f -exec rm -f {} \;
+mkdir -p "$tmp_track_dir"
 
 # our Gencode TSS regions bed filea; TSS regions +/-10kbp
 gen_bed="/ifs/home/kellys04/projects/SmithLab_ChIP-Seq_2016-03-31/project_data2/gencode.v19.annotation_TSSd500_10kbp.bed"
