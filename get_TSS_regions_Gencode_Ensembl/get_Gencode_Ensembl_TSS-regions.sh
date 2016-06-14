@@ -17,7 +17,7 @@ PATH=$PATH:~/software/bin
 # use gtools to get the TSS regions
 # I think this is it? https://github.com/tsirigos/ibm-cbc-genomic-tools/blob/master/gtools/genomic_regions.cpp
 # VERSION: genomic-tools 3.0.0
-
+# this is already in my PATH
 
 # ~~~~~ COMMON ITEMS ~~~~~~~# 
 # dir for outputs and such
