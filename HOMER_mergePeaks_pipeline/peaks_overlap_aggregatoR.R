@@ -130,12 +130,22 @@ cat("Peak overlap percentage data frame is:\n"); overlap_pcnt
 # ZNK-H3K9AC   0.0308019872 4.878164e-01 0.481381595
 # ZNK-H3K4ME3  0.0298260149 7.095150e-01 0.260658976
  
+# make a copy of the df with the ID in it
+overlap_df_IDs<-overlap_df
+overlap_df_IDs[["ID"]]<-plot_filename
+
+overlap_pcnt_IDs<-as.data.frame(overlap_pcnt)
+overlap_pcnt_IDs[["ID"]]<-plot_filename
 
 # save the tables to the current dir
-write.table(x = overlap_df,file = paste0(plot_filename,"_all_peak_overlap.tsv"),quote = FALSE,sep = "\t",row.names = rownames(overlap_df))
-write.table(x = overlap_pcnt,file = paste0(plot_filename,"_all_peak_overlap_pcnt.tsv"),quote = FALSE,sep = "\t",row.names = rownames(overlap_pcnt))
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
+write.table(x = overlap_df,file = paste0(plot_filename,"_all_peak_overlap.tsv"),quote = FALSE,sep = "\t",row.names = rownames(overlap_df),col.names=NA)
+write.table(x = overlap_pcnt,file = paste0(plot_filename,"_all_peak_overlap_pcnt.tsv"),quote = FALSE,sep = "\t",row.names = rownames(overlap_pcnt),col.names=NA)
 
+write.table(x = overlap_df_IDs,file = paste0(plot_filename,"_branch_all_peak_overlap.tsv"),quote = FALSE,sep = "\t",row.names = rownames(overlap_df_IDs),col.names=NA)
+write.table(x = overlap_pcnt_IDs,file = paste0(plot_filename,"_branch_all_peak_overlap_pcnt.tsv"),quote = FALSE,sep = "\t",row.names = rownames(overlap_pcnt_IDs),col.names=NA)
+
+save.image(file = paste0(plot_filename,".Rdata"),compress = TRUE)
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
 
 
 
