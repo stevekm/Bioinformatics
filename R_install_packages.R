@@ -23,3 +23,11 @@ for (p in package_list)
     library(p,character.only=TRUE,verbose=FALSE)
   }
 
+# if you need to mess with your library paths for R you can use this:
+# add a path to the libpaths
+# .libPaths(c("/ifs/home/user/R/x86_64-pc-linux-gnu-library/3.2",.libPaths()))
+# cat("\nLibpaths are: \n")
+# print(.libPaths())
+
+
+ 
