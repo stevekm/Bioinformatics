@@ -1,5 +1,6 @@
 #!/usr/bin/env Rscript
 
+# this script will run all the sample workflow commands from the vignette, for testing:
 # https://www.bioconductor.org/packages/devel/bioc/vignettes/ChIPseeker/inst/doc/ChIPseeker.html
 
 # Check for required packages
