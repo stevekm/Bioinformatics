@@ -58,9 +58,15 @@ embedPDFfonts<-function(x){
 <<run_pipeline,engine='bash',echo=FALSE,include=FALSE>>=
 # run the analysis pipeline script; dont embed because it might require things outside the scope of this doc
 # hardlink to the pipeline script:
-tmp_script="/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report/code/peaks-per-sample.sh"
+tmp_script="/ifs/home/kellys04/projects/SmithLab-ChIPSeq-2016-06-14/project_notes/peaks-per-sample_report/code/peaks-per-sample.sh"
+
+pipeline_peaks_dir="/ifs/home/kellys04/projects/SmithLab-ChIPSeq-2016-06-14/pipeline/peaks/results" # dir with the peak calling results
+pipeline_annontate_peaks_dir="/ifs/home/kellys04/projects/SmithLab-ChIPSeq-2016-06-14/pipeline/homer_annotatepeaks/results" # dir with the peak HOMER annotation results
+main_outdir="/ifs/home/kellys04/projects/SmithLab-ChIPSeq-2016-06-14/project_notes/peaks-per-sample_report/analysis_pipeline" # outdir for the results
+
+# make it executable
 chmod +x $tmp_script
-$tmp_script
+"$tmp_script" "$pipeline_peaks_dir" "$pipeline_annontate_peaks_dir" "$main_outdir"
 
 @
 
