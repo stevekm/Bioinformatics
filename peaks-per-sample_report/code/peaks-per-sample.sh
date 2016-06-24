@@ -4,16 +4,14 @@ set -x # verbose debugging output to stderr; turn this off when compiling report
 ## USAGE: peaks-per-sample.sh
 # this script will tabulate the number of peaks per sample in each pipeline branch
 
+# get the arguments
+pipeline_peaks_dir="$1" # dir with the peak calling results
+pipeline_annontate_peaks_dir="$2" # dir with the peak HOMER annotation results
+main_outdir="$3" # outdir for the results
+
 # load R version
 module switch r/3.3.0
-# dir with the peak calling results
-pipeline_peaks_dir="/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/pipeline/peaks"
-pipeline_annontate_peaks_dir="/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/pipeline/homer_annotatepeaks/results"
 
-# outdir for all overlap sets
-# /ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report/analysis_pipeline
-# main_outdir="/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample"
-main_outdir="/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report/analysis_pipeline"
 mkdir -p "$main_outdir"
 cd "$main_outdir"
 
@@ -137,10 +135,3 @@ done
 
 # THE END !!
 exit
-exit
-exit
-
-# notes:
-tmp_script="/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report/code/peaks-per-sample.sh"
-chmod +x $tmp_script
-$tmp_script
