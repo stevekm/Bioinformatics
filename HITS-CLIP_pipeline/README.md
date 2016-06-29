@@ -1,6 +1,6 @@
-####HITS-CLIP pipeline
+##HITS-CLIP pipeline
 
-Files:
+####Files:
 
 - `workflow.Rmd` : A simple text file where I hard-code in the locations of the directories and scripts needed, and then set up needed code to loop over all samples and create create output directories and submit `qsub` jobs to the cluster. 
 
@@ -10,7 +10,7 @@ Files:
 
 
 
-Usage:
+####Usage:
 
 - Set up and modify `samplesheet` and `workflow` as needed to group the samples and create the directory structure.
 
@@ -18,7 +18,7 @@ Usage:
 
 
 
-Pipeline Overview:
+####Pipeline Overview:
 
 (modify these steps as necessary)
 
