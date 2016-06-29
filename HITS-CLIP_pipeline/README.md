@@ -28,6 +28,8 @@ Pipeline Overview:
 
 - run Kraken metagenomics analysis on the fastq files to analyze for potential contaminants
 
-- 
+- (more stuff, I'll fill this in later.. standard HITS-CLIP pipeline from publication)
+
+- Run MEME-ChIP & HOMER motif analysis
 
 
