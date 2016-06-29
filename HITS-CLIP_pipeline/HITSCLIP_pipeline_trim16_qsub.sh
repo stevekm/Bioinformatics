@@ -1,9 +1,11 @@
 #!/bin/bash
 set -x
 ##
-## USAGE: HITSCLIP_pipeline_test_qsub.sh /path/to/fastqc_outdir /path/to/input_file /path/to/novoindex/genome <sampleID> /path/to/ref_genome.fa /path/to/meme_db /path/to/meme_db2
-## This script will run the fasta collapse script; this script needs to be submitted with qsub!
-## 
+## USAGE: HITSCLIP_pipeline_trim16_qsub.sh /path/to/fastqc_outdir /path/to/input_file /path/to/novoindex/genome <sampleID> /path/to/ref_genome.fa /path/to/meme_db /path/to/meme_db2
+## This script will run the comlete HITS-CLIP pipeline on a single sample
+## This script should be submitted with qsub to the SGE cluster, see the accompanying file
+## 'workflow' for setup scripts to parse out the correct arguments per sample and pass them to this script, and setup
+## the needed directory structure
 
 # ~~~~~~ permissions ~~~~~~ #
 # To make stuff group-writeable (this is what I add to all my shared scripts):
