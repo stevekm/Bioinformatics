@@ -16,7 +16,7 @@ for (package in c("ChIPseeker","TxDb.Hsapiens.UCSC.hg19.knownGene","clusterProfi
 package_list <-c("UpSetR","ggplot2","grid","plyr","knitr","VennDiagram","gridExtra","datasets","digest","Hmisc","xtable",
                  "reshape2","data.table","scales","corrplot","RColorBrewer","lattice","gplots","MASS","stringr",
                  "flsa","genlasso","ggplot2","optparse","pastecs","plotrix","reshape2","zoo","optparse","gplots","ggplot2","reshape",
-                 'optparse','MASS') # 'preprocessCore'
+                 'optparse','MASS',"knitr") # 'preprocessCore'
 for (p in package_list) 
   if (!require(p,character.only=TRUE,quietly=TRUE,warn.conflicts=FALSE)) {
     install.packages(p,repos="http://cran.rstudio.com/") 
