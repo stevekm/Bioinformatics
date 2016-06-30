@@ -1,12 +1,13 @@
 #!/bin/bash
-set -x
+set -x # verbose debugging output to stderr
+
 ##
 ## USAGE: kraken_qsub.sh /path/to/fastqc_outdir /path/to/input_file <sampleID>
-## This script will run the Kraken fastq contaminant analysis to see what the reads might have come from
+## This script will run the Kraken fastq analysis to see which organisms the reads might have come from; potential contaminants!
 ## 
 
 # ~~~~~~ permissions ~~~~~~ #
-# To make stuff group-writeable (this is what I add to all my shared scripts):
+# To make stuff group-writeable:
 umask 007
 
 
@@ -21,6 +22,7 @@ fi
 OUTDIR="$1" # outdir
 INPUTFILE="$2" # input file
 SAMPLEID="$3"
+# use 6 threads if NSLOTS is undefined e.g. not submitted with qsub
 THREADS=${NSLOTS:=6}
 echo "Working dir is $PWD"
 echo "OUTDIR is $OUTDIR"
@@ -53,6 +55,10 @@ cat "$0" >> $LOG_FILE
 
 # ~~~~~~ run command ~~~~~~ #
 # Thanks to igordot for this; https://github.com/igordot
+
+# unzip the fastq.gz, and run Kraken on the first 1000000 reads
+# # also do some formatting of the output
+# # # NOTE: $HOME/software/bin/kraken is the path to the Kraken binary; adjust this if needed
 zcat $INPUTFILE | head -4000000 | \
 $HOME/software/bin/kraken --fastq-input /dev/fd/0 | \
 $HOME/software/bin/kraken-report --show-zeros | awk -F $'\t' '$1>0.1' > kraken_contaminant_analysis.${SAMPLEID}.txt
@@ -60,5 +66,5 @@ $HOME/software/bin/kraken-report --show-zeros | awk -F $'\t' '$1>0.1' > kraken_c
 # filter for top hits
 cat kraken_contaminant_analysis.${SAMPLEID}.txt | awk -F $'\t' '$1>1.0 && $4!="-"' | cut -f 1,2,4,5,6 > tophit.txt
 
-# version
+# get the software version
 $HOME/software/bin/kraken --version
