@@ -37,3 +37,22 @@ qsub -b y -wd "$tmp_outdir" -o :${tmp_logdir}/ -e :${tmp_logdir}/ -pe threaded 1
 #!/usr/bin/env Rscript
 
 
+# things I haven't tested yet but will probably need eventually:
+
+# nested heredocs:
+# http://stackoverflow.com/questions/13254077/is-nesting-of-here-document-possible-in-a-unix-bash-script
+ssh s1 << \eof1
+  ssh s2 << \eof2
+    hostname
+eof2
+eof1
+
+# and disable parameter expansion within the heredoc by quoting the initial ... thing
+# this will probably be useful for R code where the '$' is used, since that breaks in heredocs
+# http://tldp.org/LDP/abs/html/here-docs.html
+cat <<'Endofmessage'
+
+Hello, there, $NAME.
+Greetings to you, $NAME, from $RESPONDENT.
+
+Endofmessage
