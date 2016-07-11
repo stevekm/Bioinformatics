@@ -56,3 +56,5 @@ Hello, there, $NAME.
 Greetings to you, $NAME, from $RESPONDENT.
 
 Endofmessage
+
+# TO-DO: try to qsub an R script heredoc directly.. 
