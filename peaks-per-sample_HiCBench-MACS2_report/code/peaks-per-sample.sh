@@ -7,13 +7,13 @@ set -x # verbose debugging output to stderr; turn this off when compiling report
 # load R version
 module switch r/3.3.0
 # dir with the peak calling results
-pipeline_peaks_dir="/ifs/data/panoslab/SmithLab-ChIPSeq_2016-06-06/pipeline/peaks"
-pipeline_annontate_peaks_dir="/ifs/data/panoslab/SmithLab-ChIPSeq_2016-06-06/pipeline/homer_annotatepeaks/results"
+pipeline_peaks_dir="/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/pipeline/peaks"
+pipeline_annontate_peaks_dir="/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/pipeline/homer_annotatepeaks/results"
 
 # outdir for all overlap sets
-# /ifs/data/panoslab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report/analysis_pipeline
-# main_outdir="/ifs/data/panoslab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample"
-main_outdir="/ifs/data/panoslab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report/analysis_pipeline"
+# /ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report/analysis_pipeline
+# main_outdir="/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample"
+main_outdir="/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report/analysis_pipeline"
 mkdir -p "$main_outdir"
 cd "$main_outdir"
 
@@ -141,6 +141,6 @@ exit
 exit
 
 # notes:
-tmp_script="/ifs/data/panoslab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report/code/peaks-per-sample.sh"
+tmp_script="/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report/code/peaks-per-sample.sh"
 chmod +x $tmp_script
 $tmp_script
