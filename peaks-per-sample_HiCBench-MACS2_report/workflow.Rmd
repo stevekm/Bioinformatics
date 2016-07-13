@@ -1,0 +1,86 @@
+---
+title: "Workflow"
+author: "Stephen Kelly"
+date: "4/29/2016"
+output: html_document
+---
+
+```{r,engine='bash'}
+# I usually just copy/paste these commands into the terminal (bash shell)
+# alternatively you could use something like Rstudio to compile this Rmd document
+# or just save these steps as a bash script; pick which ever is easiest for you!
+ProjDir="$HOME/AutoReportLite"
+testOutdir="$ProjDir/analysis_pipeline"
+samplesheet="$ProjDir/sample-sheet.tsv"
+tmp_script="$ProjDir/code/analysis_pipeline.sh"
+chmod +x "$tmp_script"
+mkdir -p "$testOutdir"
+cd "$ProjDir"
+
+# read in from sample sheet
+tail -n +2 $samplesheet | while read i; do
+  # echo "$i"
+  # make sure there is an entry on that line !
+  if [[ ! -z "$i" ]]; then
+    
+    # get sample ID
+    tmp_sample=$(echo "$i" | cut -f1)
+    tmp_sample="${tmp_sample}"
+    # tmp_sample="${tmp_sample}_R1"
+    echo "tmp_sample is $tmp_sample"
+    
+    # make a subdir for the sample
+    tmp_outdir="${testOutdir}/${tmp_sample}"
+    mkdir -p "$tmp_outdir"
+    echo "tmp_outdir is $tmp_outdir"
+    
+    # make a subdir for that sample's logs
+    tmp_logdir="${tmp_outdir}/logs"
+    mkdir -p "$tmp_logdir"
+    
+    # get the refernce genome 
+    tmp_genome=$(echo "$i" | cut -f3)
+    echo "tmp_genome is $tmp_genome"
+    
+    # get the full path to the reference genome; set this as needed based on alignment program to be used
+    # genome_path=$(echo "$i" | cut -f6)
+    tmp_genome_path="/local/data/iGenomes/Mus_musculus/UCSC/${tmp_genome}/Sequence/BowtieIndex/genome"
+    echo "$tmp_genome_path"
+    
+    # get the first read
+    tmp_fastq1=$(echo "$i" | cut -f4)
+    echo "tmp_fastq1 is $tmp_fastq1"
+    
+    # get the second read
+    tmp_fastq2=$(echo "$i" | cut -f5)
+    echo "tmp_fastq2 is $tmp_fastq2"
+    
+    ## USAGE: analysis_pipeline.sh /path/to/outdir /path/to/input_file_R1.fastq.gz /path/to/input_file_R2.fastq.gz <sampleID> <ref_genome> /path/to/ref_genome  
+    # submit job to qsub
+    qsub -wd $tmp_outdir -o :${tmp_logdir}/ -e :${tmp_logdir}/ -pe threaded 6-16  -l mem_free=10G -l mem_token=10G "$tmp_script" "$tmp_outdir" "$tmp_fastq1" "$tmp_fastq2" "$tmp_sample" "$tmp_genome" "$tmp_genome_path"
+    
+# ~~~~ IF PROCESSING EACH READ SINGLY USE THIS TOO ~~~~~~ #
+    #     # process second read
+#     tmp_sample=$(echo "$i" | cut -f1)
+#     tmp_sample="${tmp_sample}_R2"
+#     
+#     tmp_outdir="${testOutdir}/${tmp_sample}"
+#     mkdir -p "$tmp_outdir"
+#     echo "tmp_outdir is $tmp_outdir"
+#     
+#     
+#     tmp_logdir="${tmp_outdir}/logs"
+#     mkdir -p "$tmp_logdir"
+#     
+#     tmp_fastq2=$(echo "$i" | cut -f5)
+#     echo "tmp_fastq2 is $tmp_fastq2"
+#     
+#     qsub -wd $tmp_outdir -o :${tmp_logdir}/ -e :${tmp_logdir}/ -pe threaded 6-16  -l mem_free=10G -l mem_token=10G "$tmp_script" "$tmp_outdir" "$tmp_fastq2" "$tmp_sample" "$tmp_genome" "$tmp_genome_path"
+    
+    echo -e "\n\n"
+
+  fi
+done
+
+```
+

@@ -1,0 +1,218 @@
+% ~~~~~~~~~~~~~~~~~~~~~~~
+% 
+% AutoReportLite analysis pipeline & reporting template
+% by Stephen Kelly
+% April 29, 2016
+% https://github.com/stevekm/AutoReportLite
+% 
+% ~~~~~~~~~~~~~~~~~~~~~~~~
+\documentclass[8pt]{beamer} % start LaTeX document
+% set up parameters in R for use in the document
+<<setup, include=FALSE>>=
+# % always need this code chunk for RNW files compiled with knitr, never mess with it unless you are a wizard
+# this sets knitr options for the document
+opts_chunk$set(fig.path='figure/beamer-',fig.align='center',fig.show='hold',size='footnotesize')
+@
+%
+<<report_setup,echo=FALSE,engine='R',eval=TRUE>>=
+#
+# SET THESE FILE PATHS & ENTRIES MANUALLY !! 
+#
+
+suppressPackageStartupMessages(library("Hmisc")) # need for latexTranslate()
+suppressPackageStartupMessages(library(xtable)) # needed to print the sample sheet
+
+Project_ID_short<-latexTranslate("Peaks per Sample") # for the sidebar
+Project_ID<-latexTranslate("Peaks per Sample per Peak Calling setting") # for the title slide
+Report_author<-latexTranslate("Stephen Kelly")
+PI_name<-latexTranslate("Dr. Smith")
+Report_author_email<-latexTranslate("stephen.kelly@nyumc.org")
+
+ProjDir<-"/ifs/data/smithlab/smithlab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report"
+pipelineDir<-paste0(ProjDir,"/analysis_pipeline")
+# get the sample subdirs
+sampleDirs<-list.dirs(path = pipelineDir,full.names = TRUE,recursive = FALSE)
+# # use this to exclude entries with the "report" in the name
+# sampleDirs<-grep(x = list.dirs(path = pipelineDir,full.names = TRUE,recursive = FALSE),pattern = "report",value = TRUE,invert = TRUE)
+
+# dir(pipelineDir,pattern = "[^report]")[file.info(dir(pipelineDir,pattern = "[^report]"))$isdir]
+SampleSheet_file<-"/ifs/data/smithlab/smithlab-ChIPSeq_2016-06-06/inputs/sample-sheet.tsv"
+
+# for future work development: here is a function to embed fonts in PDF's, 
+# get this working so that it can be run on all of the PDF's that are imported
+# embed the fonts # https://github.com/stevekm/LaTeX_docs/blob/master/code/embed_fonts_PDF.R
+embedPDFfonts<-function(x){
+  # get the input file
+  pdf_in<-x; print(paste0("Input file is: ", pdf_in))
+  # set an output filename
+  pdf_out<-paste0(pdf_in,"_embedfonts.pdf"); print(paste0("Output file is: ",pdf_out))
+  # run ghostscript to embed the fonts
+  system(command = paste0("gs -dCompatibilityLevel=1.4 -dPDFSETTINGS=/screen -dCompressFonts=true -dSubsetFonts=true -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile=",pdf_out,' -c ".setpdfwrite <</NeverEmbed [ ]>> setdistillerparams" -f ',pdf_in))
+}
+
+# embedPDFfonts(pdf_input_file)
+# # would need to copy input PDF's to a new outdir for this to work
+
+@
+
+<<run_pipeline,engine='bash',echo=FALSE,include=FALSE>>=
+# run the analysis pipeline script; dont embed because it might require things outside the scope of this doc
+tmp_script="/ifs/data/smithlab/smithlab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report/code/peaks-per-sample.sh"
+chmod +x $tmp_script
+$tmp_script
+
+@
+
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% LaTeX settings start here:
+\listfiles % get versions of files used for document compliaton, written at the end of the .log file for the report compilation!
+\geometry{paperwidth=150mm,paperheight=105mm} % larger page size than normal for larger plots and more flexibility with font sizes
+\usepackage{longtable}
+%\documentclass[8pt,xcolor={dvipsnames}]{beamer}
+\setcounter{secnumdepth}{3} % how many levels deep before section headers stop getting numbers
+\setcounter{tocdepth}{3} % table of contents depth
+\usepackage{breakurl}
+\usepackage{cite} % for citations, BibTeX I think
+\usepackage{etoolbox} % this was not installed on HPCF, its in my home dir right now!! % has extra tools for LaTeX forloops, etc.; might not actually need this, use R loops to cat() LaTeX markup instead, much easier!
+% \usepackage{forloop} % for LaTeX for loops; easier to use R loops to 'cat' TeX into the document instead!!
+% \usepackage{tikz} % for custom graphics
+%\usepackage{subcaption} %for subfigures%
+% \usepackage{amsmath} % for math characters
+\usepackage{graphicx} % good for advanced graphics options
+\usepackage{tabularx} % for fancy table settings..
+\usepackage{url} % for typesetting URLs, also file paths? 
+\usepackage[multidot]{grffile} % support for image files with multiple '.' in the name
+% \usepackage{adjustbox} % for auto-size box to put sample sheet into, also needs collectbox.sty
+% \usepackage[usenames,dvipsnames]{color}
+%%%%%%%%%%%%%experimental for xtable italics http://stackoverflow.com/questions/7996968/formatting-sweave-tables-two-challenges
+% \usepackage{longtable} % allows for tables that break across pages
+% \SweaveOpts{keep.source=TRUE}  % Keeps formatting of the R code.
+%%%%%%%%%%%%%%%%%%%
+%
+% ~~~~~~ BEAMER SPECIFIC SETTINGS ~~~~~~~~ %
+\makeatletter % turn on the '@' command character; needs to come before beamer settings
+% \usetheme{Hannover} %  \usetheme{PaloAlto} % Bergen
+% \usetheme[left]{Marburg} %  width= % hideothersubsections
+\usetheme[left,hideothersubsections,width=3cm]{Marburg} %  width= % hideothersubsections
+% location installed themes and such: /usr/share/texmf/tex/latex/beamer
+\addtobeamertemplate{navigation symbols}{}{ % % this adds the page numbers at the bottom of the slide
+    \usebeamerfont{footline}%
+    \usebeamercolor[fg]{footline}%
+    \hspace{1em}%
+    \insertframenumber/\inserttotalframenumber
+}
+\makeatother % turn off the '@' command character; needs to come after beamer settings
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
+% \graphicspath{/home/varitint/Dropbox/Lab/Teaching/Genomics_Class/Genomics_Lesson3_R!/With_embedded_R_code/figure/} % default path to find figures
+%
+%%%%%%%%%%
+\begin{document}
+% Create the Title page
+\title[\Sexpr{Project_ID_short}]{\Sexpr{Project_ID}}
+\author{\Sexpr{Report_author}}
+\institute{\normalsize Dr. Aristotelis Tsirigos \\ PI: \Sexpr{PI_name} \\ Genome Technology Center, \\ NYU Langone Medical Center, New York, NY 10016}
+\date{\texttt{\Sexpr{Report_author_email}} \\ \today}
+\titlegraphic{\includegraphics[width=0.25\textwidth]{figure/NYULMC_white}} % image to show on the title slide
+\maketitle
+
+% REPORT STARTS HERE!
+%
+<<print_samplesheet,results='asis',echo=FALSE,eval=TRUE>>=
+#
+# PRINT THE SAMPLE SHEET
+#
+
+# read in the sample sheet
+PipelineSampleSheet<-read.table(file =SampleSheet_file,header = T,sep = "\t" )
+
+# split the dataframe into smaller 50 row dataframes to fit on the page better
+tmpdf<-split(PipelineSampleSheet,(seq_len(nrow(PipelineSampleSheet))-1) %/%50)
+
+# print the section heading
+cat("\\section{", "Sample Sheet", "}\n", sep="") 
+
+# print each sub-df
+for(i in seq_along(tmpdf)){
+  # print(nrow(tmpdf[[i]]))
+  cat("\\begin{frame}{"," Analysis Sample Sheet}\n", sep="") 
+  # don't include the fields with long file paths; adjust the scalebox as needed
+  print(xtable(x = tmpdf[[i]][,grep("^R|^ref",colnames(tmpdf[[i]]),invert = T)]),size="\\footnotesize",scalebox = 0.8)
+
+  cat("\\end{frame}\n\n") 
+}
+
+@
+
+<<print_samples,results='asis',echo=FALSE,eval=TRUE>>=
+for(i in seq_along(sampleDirs)){
+  
+  # get the sample subdirecotry
+  tmpSampleDir<-sampleDirs[i]
+  # print(tmpSampleDir)
+  
+  # get the PDFs in subdirecotry
+  tmpSamplePDF_files<-dir(tmpSampleDir,pattern = "*.pdf")
+  # print(tmpSamplePDF_files)
+  
+  # make a new section label per sample
+  tmpSampleID<-basename(tmpSampleDir)
+  cat("\\section{", latexTranslate(tmpSampleID), "}\n", sep="") 
+  
+  
+  # PRINT THE STATS
+  # # get the stats file
+  tmpAlignStatsFile<-dir(tmpSampleDir,pattern = "*.tsv",full.names = TRUE)
+  # read in the file
+  # tmpAlignStats<-scan(file =tmpAlignStatsFile,character(0), sep = "\n")
+  tmpAlignStats<-read.table(tmpAlignStatsFile,header = TRUE,sep = "\t",stringsAsFactors = FALSE,check.names = FALSE)
+  # print it in a new frame
+  cat("\\subsubsection{", latexTranslate("Stats"), "}\n", sep="")
+  cat("\\begin{frame}[allowframebreaks]{", latexTranslate("Stats"), " }\n", sep="")
+  cat("\\small{",sep = "\n")
+  # cat(latexTranslate(tmpAlignStats),sep = "\n\n")   
+  print(xtable(x = tmpAlignStats),size="scriptsize",tabular.environment="longtable",floating=FALSE) 
+  #print(xtable(x = tmpAlignStats[ order(tmpAlignStats[,"Samples"]),]),size="scriptsize",tabular.environment="longtable",floating=FALSE)
+  # with(dd, order(-z, b))
+  # dd[ order(-dd[,4], dd[,1]), ]
+  # dd[with(dd, order(-z, b)), ]
+  cat("}\n",sep = "\n")
+  cat("\\end{frame}\n\n")
+  
+  # PRINT THE FIGURES
+  # make a new subsection per figure
+  for(q in seq_along(tmpSamplePDF_files)){
+    tmpPDF<-tmpSamplePDF_files[q]
+    # print the subsetion
+    # shorten the label by removing the sample ID from it
+    tmpFigureID<-gsub(pattern = paste0(tmpSampleID,"."),replacement = "",x = tmpPDF,fixed = TRUE)
+    cat("\\subsubsection{", latexTranslate(tmpFigureID), "}\n", sep="")
+    
+    # begin a new beamer frame
+    cat("\\begin{frame}{",latexTranslate(tmpSampleID),latexTranslate(" - "), latexTranslate(tmpFigureID), " }\n", sep="")
+    
+    # write the full file path
+    cat("\\scriptsize{", latexTranslate(paste0(tmpSampleDir,"/",tmpPDF)), "}\n", sep="") 
+    
+    # print the figure
+    cat("\\includegraphics[width=0.9\\linewidth,height=0.9\\textheight,keepaspectratio]{", paste0(tmpSampleDir,"/",tmpPDF), "}\n", sep="")
+    
+    # end the beamer frame
+    cat("\\end{frame}\n\n")
+  }
+}
+
+@
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Session Information}
+% \begin{frame}{System and Session Information}
+% \begin{frame}[fragile]{System and Session Information}
+% \small{This report was prepared using the AutoReportLite template, available at \url{https://github.com/stevekm/AutoReportLite}}
+<<Session>>=
+system('uname -srv',intern=T)
+sessionInfo()
+save.image(compress = TRUE)
+@
+\scriptsize{\LaTeX{} version: \LaTeXe~ \fmtversion}
+% \end{frame}
+\end{document}
