@@ -36,7 +36,7 @@ align_sample_sheet="${analysis_dir}/alignment_sample-sheet2.tsv"
 # read in the sample sheet, iterate over each line
 cat $align_sample_sheet | while read i; do
 # make sure there is an entry on that line !
-  if [[ ! -z "$i" ]]; then
+if [[ ! -z "$i" ]]; then
 		tmp_sample=$(echo "$i" | cut -f1)
 		tmp_sample_bam=$(echo "$i" | cut -f2)
 		tmp_input_bam=$(echo "$i" | cut -f3)
