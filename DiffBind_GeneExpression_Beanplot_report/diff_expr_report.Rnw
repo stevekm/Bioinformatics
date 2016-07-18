@@ -1,0 +1,223 @@
+% ~~~~~~~~~~~~~~~~~~~~~~~
+% 
+% AutoReportLite analysis pipeline & reporting template
+% by Stephen Kelly
+% April 29, 2016
+%
+% ~~~~~~~~~~~~~~~~~~~~~~~~
+\documentclass[8pt]{beamer} % start LaTeX document
+% set up parameters in R for use in the document
+<<setup, include=FALSE>>=
+# % always need this code chunk for RNW files compiled with knitr, never mess with it unless you are a wizard
+# this sets knitr options for the document
+opts_chunk$set(fig.path='figure/beamer-',fig.align='center',fig.show='hold',size='footnotesize')
+@
+% the diffbind gene expression compare script
+%
+% items to set up the document
+<<report_setup,echo=FALSE,engine='R',eval=TRUE>>=
+#
+# SET THESE FILE PATHS & ENTRIES MANUALLY !! 
+#
+
+suppressPackageStartupMessages(library("Hmisc")) # need for latexTranslate()
+suppressPackageStartupMessages(library(xtable)) # needed to print the sample sheet
+
+Project_ID_short<-latexTranslate("DiffBind vs GeneExpression") # for the sidebar
+Project_ID<-latexTranslate("SmithLab_ChIpSeq_2016-12-31 Differential Binding vs Gene Expression per sample") # for the title slide
+Report_author<-latexTranslate("Stephen Kelly")
+PI_name<-latexTranslate("Dr. Smith")
+Report_author_email<-latexTranslate("stephen.kelly@nyumc.org")
+
+pipelineDir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/diffferential_gene_expression/diff_expr_report/analysis_output_beanplots_all_samples2"
+
+# get the sample subdirs
+# # don't include dirs with the name "report"
+sampleDirs<-grep(x = list.dirs(path = pipelineDir,full.names = TRUE,recursive = FALSE),pattern = "report",value = TRUE,invert = FALSE)
+
+@
+
+
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% LaTeX settings start here:
+\listfiles % get versions of files used for document compliaton, written at the end of the .log file for the report compilation!
+% \geometry{paperwidth=150mm,paperheight=105mm} % larger page size than normal for larger plots and more flexibility with font sizes
+\geometry{paperwidth=160mm,paperheight=105mm}
+%\documentclass[8pt,xcolor={dvipsnames}]{beamer}
+\setcounter{secnumdepth}{3} % how many levels deep before section headers stop getting numbers
+\setcounter{tocdepth}{3} % table of contents depth
+\usepackage{breakurl}
+\usepackage{cite} % for citations, BibTeX I think
+\usepackage{etoolbox} % this was not installed on HPCF, its in my home dir right now!! % has extra tools for LaTeX forloops, etc.; might not actually need this, use R loops to cat() LaTeX markup instead, much easier!
+% \usepackage{forloop} % for LaTeX for loops; easier to use R loops to 'cat' TeX into the document instead!!
+% \usepackage{tikz} % for custom graphics
+%\usepackage{subcaption} %for subfigures%
+% \usepackage{amsmath} % for math characters
+\usepackage{graphicx} % good for advanced graphics options
+\usepackage{tabularx} % for fancy table settings..
+\usepackage{url} % for typesetting URLs, also file paths? 
+\usepackage[multidot]{grffile} % support for image files with multiple '.' in the name
+% \usepackage{adjustbox} % for auto-size box to put sample sheet into, also needs collectbox.sty
+% \usepackage[usenames,dvipsnames]{color}
+%%%%%%%%%%%%%experimental for xtable italics http://stackoverflow.com/questions/7996968/formatting-sweave-tables-two-challenges
+% \usepackage{longtable} % allows for tables that break across pages
+% \SweaveOpts{keep.source=TRUE}  % Keeps formatting of the R code.
+%%%%%%%%%%%%%%%%%%%
+%
+% ~~~~~~ BEAMER SPECIFIC SETTINGS ~~~~~~~~ %
+\makeatletter % turn on the '@' command character; needs to come before beamer settings
+% \usetheme{Hannover} %  \usetheme{PaloAlto} % Bergen
+% \usetheme[left]{Marburg} %  width= % hideothersubsections
+\usetheme[left,hideothersubsections,width=3cm]{Marburg}
+% \usetheme[left,hideothersubsections,width=3cm]{Marburg} %  width= % hideothersubsections
+% location installed themes and such: /usr/share/texmf/tex/latex/beamer
+\addtobeamertemplate{navigation symbols}{}{ % % this adds the page numbers at the bottom of the slide
+    \usebeamerfont{footline}%
+    \usebeamercolor[fg]{footline}%
+    \hspace{1em}%
+    \insertframenumber/\inserttotalframenumber
+}
+\makeatother % turn off the '@' command character; needs to come after beamer settings
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
+% \graphicspath{/home/varitint/Dropbox/Lab/Teaching/Genomics_Class/Genomics_Lesson3_R!/With_embedded_R_code/figure/} % default path to find figures
+%
+%%%%%%%%%%
+\begin{document}
+% Create the Title page
+\title[\Sexpr{Project_ID_short}]{\Sexpr{Project_ID} \\ Quality Metrics \\ \tiny{\Sexpr{latexTranslate(pipelineDir)}} \\ - \\ 1.5x up / dn fold change, min 50 genes}
+\author{\Sexpr{Report_author}}
+\institute{\normalsize PI: \Sexpr{PI_name} \\ Genome Technology Center, \\ NYU Langone Medical Center, New York, NY 10016}
+\date{\texttt{\Sexpr{Report_author_email}} \\ \today}
+\titlegraphic{\includegraphics[width=0.25\textwidth]{figure/NYULMC_white}} % image to show on the title slide
+\maketitle
+
+% REPORT STARTS HERE!
+%
+<<print_samplesheet,results='asis',echo=FALSE,eval=FALSE>>=
+#
+# PRINT THE SAMPLE SHEET
+# SKIP THE SAMPLE SHEET!
+
+# read in the sample sheet
+PipelineSampleSheet<-read.table(file =SampleSheet_file,header = T,sep = "\t" )
+
+# split the dataframe into smaller 50 row dataframes to fit on the page better
+tmpdf<-split(PipelineSampleSheet,(seq_len(nrow(PipelineSampleSheet))-1) %/%50)
+
+# print the section heading
+cat("\\section{", "Sample Sheet", "}\n", sep="") 
+
+# print each sub-df
+for(i in seq_along(tmpdf)){
+  # print(nrow(tmpdf[[i]]))
+  cat("\\begin{frame}{"," Analysis Sample Sheet}\n", sep="") 
+  # don't include the fields with long file paths; adjust the scalebox as needed
+  print(xtable(x = tmpdf[[i]][,grep("^R|^ref",colnames(tmpdf[[i]]),invert = T)]),size="\\footnotesize",scalebox = 1.3)
+
+  cat("\\end{frame}\n\n")
+}
+
+@
+%' 
+%' <<print_dir>>=
+%' cat(latexTranslate(getwd()))
+%' cat(normalizePath("../analysis_output", mustWork = TRUE))
+%' @
+
+<<print_samples,results='asis',echo=FALSE,eval=TRUE>>=
+# latexTranslate(dir())
+for(i in seq_along(sampleDirs)){
+  # make a new section label per sample
+  # tmpSampleID<-basename(tmpSampleDir)
+  tmpSampleID<-basename(sampleDirs[i])
+  cat("\\section{", latexTranslate(tmpSampleID), "}\n", sep="") 
+  # latexTranslate(getwd())
+  
+  
+  
+  #     # print(tmpSampleDir)
+  #   
+  #   # get the PDFs in subdirecotry
+  #   tmpSamplePDF_files<-dir(tmpSampleDir,pattern = "*.pdf")
+  #   # print(tmpSamplePDF_files)
+  #     
+  #   # get the sample subdirecotry
+  #   # tmpSampleDir<-sampleDirs[i]
+  
+  
+  tmpSampleSubDirs<-dir(sampleDirs[i],full.names = TRUE)
+  
+  
+  
+  for(k in seq_along(tmpSampleSubDirs)){
+    # get the PDFs
+    tmpSampleSubDirPDF_files<-dir(tmpSampleSubDirs[k],recursive = TRUE,full.names = TRUE,include.dirs = TRUE,pattern = "*.pdf")
+    cat("\\subsection{",latexTranslate(basename(tmpSampleSubDirs[k])),"}\n", sep="")
+    # print(tmpSampleSubDirPDF_files)
+    
+    for(q in seq_along(tmpSampleSubDirPDF_files)){
+      tmpPDF<-tmpSampleSubDirPDF_files[q]
+      # print the subsetion
+      # shorten the label by removing the sample ID from it
+      tmpFigureID<-basename(tmpSampleSubDirs[k])
+      
+      
+      # begin a new beamer frame
+      cat("\\begin{frame}{", latexTranslate(tmpFigureID), " }\n", sep="")
+      
+      # write the full file path
+      tmp_fig_path<-gsub(pattern = pipelineDir,replacement = "",x = normalizePath(tmpPDF))
+      # cat("\\scriptsize{", latexTranslate(paste0(tmpSampleDir,"/",tmpPDF)), "}\n", sep="") 
+      cat("\\scriptsize{", latexTranslate(tmp_fig_path), "}\n", sep="") 
+      
+      # need to check if the figure has at least ONE page..
+      # tmp_pdf_command <- paste0("pdfinfo ",normalizePath(tmpPDF)," | grep 'Pages' | sed 's|^.*\\([[:digit:]]\\)|\\1|'")
+      tmp_pdf_command <- paste0("pdfinfo ",normalizePath(tmpPDF)," | grep 'Pages' ") # tmpPDF <- "/Users/kellys04/projects/tmp_Teena/diffferential_gene_expression/diff_expr_report/analysis_output/AGK/H3K27AC/peaks.by_sample.macs_broad/AGK_H3K27AC.pdf"
+      tmp_pdf_pagecheck <- system(command = tmp_pdf_command,intern = TRUE)
+      tmp_num_PDF_pages <- as.numeric(gsub(pattern = '^.*([[:digit:]])$',replacement = "\\1",perl = TRUE,x = tmp_pdf_pagecheck))
+      if(as.numeric(tmp_num_PDF_pages)==1){
+        # print the figure
+        cat("\\includegraphics[width=0.9\\linewidth,height=0.9\\textheight,keepaspectratio]{", normalizePath(tmpPDF), "}\n", sep="")  
+      }
+      # end the beamer frame
+      cat("\\end{frame}\n\n")
+    }
+  }
+}
+
+  
+#   # PRINT THE STATS
+#   # # get the stats file
+#   tmpAlignStatsFile<-dir(tmpSampleDir,pattern = "venn_summary.tsv",full.names = TRUE)
+#   # read in the file
+#   tmpAlignStats<-scan(file =tmpAlignStatsFile,character(0), sep = "\n")
+#   # print it in a new frame
+#   cat("\\subsubsection{", latexTranslate("Stats"), "}\n", sep="")
+#   cat("\\begin{frame}{", latexTranslate("Stats"), " }\n", sep="")
+#   cat("\\small{",sep = "\n")
+#   cat(latexTranslate(tmpAlignStats),sep = "\n\n")    
+#   cat("}\n",sep = "\n")
+#   cat("\\end{frame}\n\n")
+  
+  # PRINT THE FIGURES
+  # make a new subsection per figure
+
+# }
+
+@
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Session Information}
+% \begin{frame}{System and Session Information}
+% \begin{frame}[fragile]{System and Session Information}
+% \small{This report was prepared using the AutoReportLite template, available at \url{https://github.com/stevekm/AutoReportLite}}
+<<Session>>=
+system('uname -srv',intern=T)
+sessionInfo()
+save.image(compress = TRUE)
+@
+\scriptsize{\LaTeX{} version: \LaTeXe~ \fmtversion}
+% \end{frame}
+\end{document}
