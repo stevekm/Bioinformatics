@@ -12,7 +12,7 @@
 # DiffBind differential peak binding data
 # for each sample, the script will find the set of genes that are up or down regulated in the microarray data
 # and create subsets of genes with differentially bound peaks from the DiffBind data
-# and plot the DiffBind values for both subsets (up and down regulated genes) in a paired boxplot
+# and plot the DiffBind values for both subsets (up and down regulated genes) in a paired beanplot
 # the subset diffbind values will be output as TSV, and the plot
 
 
