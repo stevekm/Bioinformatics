@@ -1,0 +1,1 @@
+This pipeline generates beanplots showing the value and distribution of DiffBind differentially bound peaks corresponding to genes that were found to be up or down regulated in microarray analysis on the corresponding samples.
