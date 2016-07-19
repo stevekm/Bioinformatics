@@ -102,7 +102,7 @@ tail -n +2 $sample_sheet | while read i; do
 			# alignment step
 			if [ ! -f ${tmp_out_bam_path} ]; then
 				echo "creating alignment file"
-				bowtie2 -x ${GenomeRefDir} --threads 8 --local -U ${tmp_fastq} | samtools view -Sb - > ${tmp_out_bam_path}
+				bowtie2 -x ${GenomeRefDir} --threads \${THREADS} --local -U ${tmp_fastq} | samtools view -Sb - > ${tmp_out_bam_path}
 			fi
 			
 			
