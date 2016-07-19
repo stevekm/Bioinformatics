@@ -1,0 +1,1 @@
+This workflow will run HOMER mergePeaks on a large number of BED files to find overlapping genomic regions, visualize the results for each in Venn Diagrams and UpSet plots, then aggregate all of the results in a LaTeX beamer style report.
