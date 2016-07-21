@@ -20,7 +20,7 @@ main_outdir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_not
 gene_expr_file="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/diffferential_gene_expression/gene_expression.tsv"
 
 # path to the script that compares the gene expr to diffbind
-diff_expr_script="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/diffferential_gene_expression/diff_expr_report/code/diffbind_geneExpression_analysis_2.R"
+diff_expr_script="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/diffferential_gene_expression/diff_expr_report/code/diffbind_geneExpression_analysis_3.R"
 ## USAGE: diffbind_geneExpression_analysis.R /path/to/outdir /path/to/microarray_gene_expression.tsv /path/to/diffbind.csv <HistMark> <analysis_params_branch>
 ## OUTPUT: <outdir>/<SampleID>/<HistMark>/<analysis_params_branch>/[paired_boxplot.pdf genes_up.tsv genes_down.tsv]
 ## e.g. <outdir>/ZNK/INPUT/peaks.by_sample.macs_broad-cutoff0025
