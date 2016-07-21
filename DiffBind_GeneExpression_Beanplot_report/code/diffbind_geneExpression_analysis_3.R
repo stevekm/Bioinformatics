@@ -292,10 +292,12 @@ if(nrow(diff_gene_expr_merged[which(diff_gene_expr_merged[["gene_expression_stat
   #            vertical=TRUE,add=TRUE,cex=0.1,method="jitter",jitter=0.05)
   dev.off()
   
+  # ggplot2 violin plot
   pdf(file = paste0(main_outdir,"/ggbeanplot_plain.pdf"),height = 8,width = 12)
   print(p)
   dev.off()
   
+  # ggplot2 split density plot
   pdf(file = paste0(main_outdir,"/ggbeanplot_split.pdf"),height = 8,width = 12)
   print(tt)
   dev.off()
