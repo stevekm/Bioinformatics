@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 
 # !! third attempt at this pipeline to try and make things clearer from the start !!
+# this time make some nice ggplot2 split density plots and violin plots along with beanplots
 
 ## USAGE: diffbind_geneExpression_analysis.R /path/to/outdir /path/to/microarray_gene_expression.tsv /path/to/diffbind.csv <HistMark> <analysis_params_branch>
 
