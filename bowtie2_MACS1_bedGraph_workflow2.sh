@@ -178,3 +178,12 @@ E0F2
 	fi
 done
 
+exit
+
+# notes for submission of this script
+this_script="/ifs/home/kellys04/projects/SmithLab_ChIPSeq_RNASeq_2016_06_01/project_notes/Combined_ChIP_RNA_Seq/code/bowtie_MACS1_BigWig_workflow2.sh"
+script_name="$(basename $this_script)"
+ProjDir="/ifs/home/kellys04/projects/SmithLab_ChIPSeq_RNASeq_2016_06_01/project_notes/Combined_ChIP_RNA_Seq"
+log_dir="${ProjDir}/logs"; mkdir -p "$log_dir"
+cd "$ProjDir"
+qsub -wd $ProjDir -o :${log_dir}/ -e :${log_dir}/ -N "$script_name" "$this_script"
