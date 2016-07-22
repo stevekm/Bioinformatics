@@ -31,6 +31,24 @@ GenomeRefDir="/local/data/iGenomes/Homo_sapiens/UCSC/${GENOME}/Sequence/Bowtie2I
 
 
 
+cd $ProjDir
+# ~~~~~~ Script Logging ~~~~~~~ #
+# get the script file 
+zz=$(basename $0)
+# get the script dir
+za=$(dirname $0)
+# use either qsub job name or scriptname in log filename
+mkdir -p logs/scripts
+LOG_FILE=logs/scripts/scriptlog.${JOB_NAME:=$(basename $0)}.$(date -u +%Y%m%dt%H%M%S).${HOSTNAME:-$(hostname)}.$$.${RANDOM}
+echo "This is the log file for the script." > $LOG_FILE
+echo -e "\n pwd is:\n$PWD\n" >> $LOG_FILE
+# echo -e "\nScript file is:\n$0\n" >> $LOG_FILE # for regular script usage (no qsub)
+echo -e "\nScript file is:\n${JOB_NAME:=$(readlink -m $0)}\n" >> $LOG_FILE 
+echo -e "\nScript file contents:\n\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%" >> $LOG_FILE
+cat "$0" >> $LOG_FILE
+# ~~~~~~~~~~~~ #
+
+
 
 # # make a quick sample sheet to match sample names, fastq, and inputs
 # setup sample sheet
@@ -122,7 +140,12 @@ E0F1
 			# make sure it exists
 			[[ ! -z $tmp_input_bam ]] && [ -f $tmp_input_bam ] && echo "tmp_input_bam is $tmp_input_bam"
 			
+			# ID for no control MACS run
+			tmp_ID_noCtrl="${tmp_ID}_noControl"
+			tmp_ID_withCtrl="${tmp_ID}_withControl"
+			
 			# MACS job submission
+			# http://liulab.dfci.harvard.edu/MACS/00README.html
 			qsub -wd $peaks_dir -o :${peaks_log_dir}/ -e :${peaks_log_dir}/ -N "$tmp_ID" <<E0F2
 				#!/bin/bash
 				set -x
@@ -134,7 +157,19 @@ E0F1
 				echo "tmp_sample is $tmp_sample"
 				echo "tmp_sample_bam is $tmp_sample_bam"
 				echo "tmp_input_bam is $tmp_input_bam"
+				
+				# run nolambda w/ control bam, nolambda w/o control bam
+				# compare bed files of both in IGV
+				
+				# macs with control no lambda
+				macs14  --format=BAM --gsize=hs --nolambda --diag --name=$tmp_ID_withCtrl -t $tmp_out_bam_path -c $tmp_input_bam
+				
+				# macs without control no lambda
+				macs14  --format=BAM --gsize=hs --nolambda --diag --name=$tmp_ID_noCtrl -t $tmp_out_bam_path 
+				
+				# macs regular with control
 				macs14  --format=BAM --gsize=hs --bdg --single-profile --diag --name=$tmp_ID -t $tmp_out_bam_path -c $tmp_input_bam
+
 			
 E0F2
 			
