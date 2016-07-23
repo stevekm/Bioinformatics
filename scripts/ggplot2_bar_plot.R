@@ -1,7 +1,6 @@
 library("ggplot2")
 
-users_df <- data.frame( Type = c("Active","Semi-Active","Inactive","Missing"),
-												Number = c(1011,133,1978,1556))
+users_df <- data.frame( Type = c("Active","Semi-Active","Inactive","Missing"),Number = c(1011,133,1978,1556))
 
 # regular bar plot
 png(filename = "/Users/steve/plot1.png",width = 600,height = 600)
