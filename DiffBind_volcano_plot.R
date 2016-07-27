@@ -38,7 +38,7 @@ DiffBind_volcano_plot <- function(diffbind_file, signif_p_value=0.05, fold_chang
 	# call blank plot to fill the first panel
 	plot(1,type='n',axes=FALSE,xlab="",ylab="",main = paste0("Volcano plot: ", sampleID_1, " vs. ",sampleID_2),cex.main=1) 
 	# set up the Legend in the first panel
-	legend("bottom",legend=c("Insignificant",
+	legend("bottom",legend=c("Not Significant",
 													 paste0("p < ",signif_p_value),
 													 paste0("Fold Change > ",fold_change_value),
 													 paste0("p < ",signif_p_value," & Fold Change > ",fold_change_value)),
@@ -146,7 +146,7 @@ DiffBind_volcano_plot_top_promoters <- function(diffbind_file, signif_p_value=0.
 	plot(1,type='n',axes=FALSE,xlab="",ylab="")
 	# set up the Legend in the first panel; 1st legend only title, 2nd legend only legend
 	legend("center",legend = "",title=paste0("Volcano plot: ", sampleID_1, " vs. ",sampleID_2,"\n"),cex=1.3, bty='n') 
-	legend("bottom",legend=c("Insignificant",
+	legend("bottom",legend=c("Not Significant",
 													 paste0("p < ",signif_p_value),
 													 paste0("log2 Fold Change > ",fold_change_value),
 													 paste0("p < ",signif_p_value," & Fold Change > ",fold_change_value),
