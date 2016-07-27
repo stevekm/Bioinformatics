@@ -40,13 +40,13 @@ DiffBind_volcano_plot <- function(diffbind_file, signif_p_value=0.05, fold_chang
 	# set up the Legend in the first panel
 	legend("bottom",legend=c("Not Significant",
 													 paste0("p < ",signif_p_value),
-													 paste0("Fold Change > ",fold_change_value),
-													 paste0("p < ",signif_p_value," & Fold Change > ",fold_change_value)),
+													 paste0("log2(Fold Change) > ",fold_change_value),
+													 paste0("p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value)),
 				 fill=plot_colors,bty = "n",ncol=length(plot_colors),cex=0.9)
 	# adjust second panel margins
 	par(mar=c(6,4,0,3)+ 0.1)
 	# start second panel plots
-	with(diff_df, plot(Fold, -log10(p.value), pch=20, xlim=c(min(Fold)-1,max(Fold)+1),col=plot_colors[1],xlab = "Fold Change"))
+	with(diff_df, plot(Fold, -log10(p.value), pch=20, xlim=c(min(Fold)-1,max(Fold)+1),col=plot_colors[1],xlab = "log2(Fold Change)"))
 	# Add colored points: red if padj<0.05, orange of log2FC>1, green if both)
 	with(subset(diff_df, p.value<signif_p_value ), points(Fold, -log10(p.value), pch=20, col=plot_colors[2]))
 	with(subset(diff_df, abs(Fold)>fold_change_value), points(Fold, -log10(p.value), pch=20, col=plot_colors[3]))
@@ -148,9 +148,9 @@ DiffBind_volcano_plot_top_promoters <- function(diffbind_file, signif_p_value=0.
 	legend("center",legend = "",title=paste0("Volcano plot: ", sampleID_1, " vs. ",sampleID_2,"\n"),cex=1.3, bty='n') 
 	legend("bottom",legend=c("Not Significant",
 													 paste0("p < ",signif_p_value),
-													 paste0("log2 Fold Change > ",fold_change_value),
-													 paste0("p < ",signif_p_value," & Fold Change > ",fold_change_value),
-													 paste0("Top log2 Fold Change genes")),
+													 paste0("log2(Fold Change) > ",fold_change_value),
+													 paste0("p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value),
+													 paste0("Top log2(Fold Change) genes")),
 				 fill=plot_colors,bty = "n",ncol=2,cex=0.9)
 	
 	# SECOND PLOT PANEL
@@ -158,7 +158,7 @@ DiffBind_volcano_plot_top_promoters <- function(diffbind_file, signif_p_value=0.
 	par(mar=c(6,4,0,3)+ 0.1)
 	
 	# add base volcano plot
-	with(diff_df_min, plot(Fold, -log10(p.value), pch=20, xlim=c(min(Fold)-1,max(Fold)+1),col=plot_colors[1],xlab = "Fold Change"))
+	with(diff_df_min, plot(Fold, -log10(p.value), pch=20, xlim=c(min(Fold)-1,max(Fold)+1),col=plot_colors[1],xlab = "log2(Fold Change)"))
 	
 	# Add colored points: red if padj<0.05, orange of log2FC>1, green if both)
 	with(subset(diff_df_min, p.value<signif_p_value ), points(Fold, -log10(p.value), pch=20, col=plot_colors[2]))
