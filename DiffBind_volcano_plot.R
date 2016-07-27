@@ -80,10 +80,11 @@ dev.off()
 # ~~~~~~~~~~~~ # ~~~~~~~~~~~~~~ # 
 
 
-DiffBind_volcano_plot_top_promoters <- function(diffbind_file, signif_p_value=0.05, fold_change_value=1, plot_colors=c("grey","red","orange","blue", "green"), top_gene_number=10){
+DiffBind_volcano_plot_top_protein_coding_promoters <- function(diffbind_file, signif_p_value=0.05, fold_change_value=1, plot_colors=c("grey","red","orange","blue", "green"), top_gene_number=10){
 	# this function creates a volcano plot directly from a DiffBind .csv file
-	# only plots promoter genes from DiffBind output
+	# only plots protein coding promoter genes from DiffBind output
 	# highlights top x fold changed genes
+	
 	
 	# ~~~~~~ PROCESS DIFFBIND FILE ~~~~~~~~ # 
 	# read in file
@@ -100,7 +101,6 @@ DiffBind_volcano_plot_top_promoters <- function(diffbind_file, signif_p_value=0.
 	
 	# make it a data.table type
 	setDT(diff_df)
-	# To get the promoter genes, use only the DiffBind peaks with the shortest distance per gene;
 	# get min value per factor, also remove duplicates
 	diff_df_min <- as.data.frame(diff_df[, .SD[which.min(shortestDistance)], by=external_gene_name])
 	# fix the colname order
@@ -114,11 +114,15 @@ DiffBind_volcano_plot_top_promoters <- function(diffbind_file, signif_p_value=0.
 	# subset for significant genes
 	diff_df_min_signiff <- as.data.frame(subset(diff_df_min, p.value<signif_p_value & abs(Fold)>fold_change_value))
 	
+	levels(diff_df_min_signiff[["gene_biotype"]])
+	# "protein_coding"
+	# subset for protein coding genes
+	diff_df_min_signiff_protein <- as.data.frame(subset(diff_df_min_signiff, gene_biotype=="protein_coding"))
 	
-	# subset top up/down genes
-	diff_df_min_signiff_UpFold <- diff_df_min_signiff[with(diff_df_min_signiff, order(Fold, p.value)), c("Fold","p.value","external_gene_name")][1:top_gene_number,]
+	# subset top up/down protein coding genes
+	diff_df_min_signiff_UpFold <- diff_df_min_signiff_protein[with(diff_df_min_signiff_protein, order(Fold, p.value)), c("Fold","p.value","external_gene_name")][1:top_gene_number,]
 	
-	diff_df_min_signiff_DnFold <- diff_df_min_signiff[with(diff_df_min_signiff, order(-Fold, p.value)), c("Fold","p.value","external_gene_name")][1:top_gene_number,]
+	diff_df_min_signiff_DnFold <- diff_df_min_signiff_protein[with(diff_df_min_signiff_protein, order(-Fold, p.value)), c("Fold","p.value","external_gene_name")][1:top_gene_number,]
 	# ~~~~~~~~~~~~~~ # 
 	
 	
@@ -174,7 +178,7 @@ DiffBind_volcano_plot_top_promoters <- function(diffbind_file, signif_p_value=0.
 	with(na.omit(diff_df_min_signiff_DnFold), textxy(Fold, -log10(p.value), labs=external_gene_name, cex=.8))
 	
 }
-	
+		
 
 
 
