@@ -23,20 +23,20 @@ suppressPackageStartupMessages(library("Hmisc")) # need for latexTranslate()
 suppressPackageStartupMessages(library(xtable)) # needed to print the sample sheet
 
 Project_ID_short<-latexTranslate("Peaks per Sample") # for the sidebar
-Project_ID<-latexTranslate("SmithLab-ChIPSeq_2016-06-06 Peaks per Sample per Peak Calling setting") # for the title slide
+Project_ID<-latexTranslate("SmithLab-ChIPSeq_2016-12-31 Peaks per Sample per Peak Calling setting") # for the title slide
 Report_author<-latexTranslate("Stephen Kelly")
-PI_name<-latexTranslate("Dr. Smith")
-Report_author_email<-latexTranslate("email@internet.org")
+PI_name<-latexTranslate("Dr. X")
+Report_author_email<-latexTranslate("stephen.kelly@nyumc.org")
 
-ProjDir<-"/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report"
-pipelineDir<-paste0(ProjDir,"/analysis_pipeline")
+ProjDir<-"/ifs/home/kellys04/projects/SmithLab-ChIPSeq_2016-12-31/analysis_dir/project_notes/peaks-per-sample_report_3"
+pipelineDir<-paste0(ProjDir,"/output")
 # get the sample subdirs
 sampleDirs<-list.dirs(path = pipelineDir,full.names = TRUE,recursive = FALSE)
 # # use this to exclude entries with the "report" in the name
 # sampleDirs<-grep(x = list.dirs(path = pipelineDir,full.names = TRUE,recursive = FALSE),pattern = "report",value = TRUE,invert = TRUE)
 
 # dir(pipelineDir,pattern = "[^report]")[file.info(dir(pipelineDir,pattern = "[^report]"))$isdir]
-SampleSheet_file<-"/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/inputs/sample-sheet.tsv"
+SampleSheet_file<-"/ifs/data/smithlab/SmithLab-ChIPSeq_2016-12-31/inputs/sample-sheet.tsv"
 
 # for future work development: here is a function to embed fonts in PDF's, 
 # get this working so that it can be run on all of the PDF's that are imported
@@ -57,16 +57,9 @@ embedPDFfonts<-function(x){
 
 <<run_pipeline,engine='bash',echo=FALSE,include=FALSE>>=
 # run the analysis pipeline script; dont embed because it might require things outside the scope of this doc
-# hardlink to the pipeline script:
-tmp_script="/ifs/home/kellys04/projects/SmithLab-ChIPSeq-2016-06-14/project_notes/peaks-per-sample_report/code/peaks-per-sample.sh"
-
-pipeline_peaks_dir="/ifs/home/kellys04/projects/SmithLab-ChIPSeq-2016-06-14/pipeline/peaks/results" # dir with the peak calling results
-pipeline_annontate_peaks_dir="/ifs/home/kellys04/projects/SmithLab-ChIPSeq-2016-06-14/pipeline/homer_annotatepeaks/results" # dir with the peak HOMER annotation results
-main_outdir="/ifs/home/kellys04/projects/SmithLab-ChIPSeq-2016-06-14/project_notes/peaks-per-sample_report/analysis_pipeline" # outdir for the results
-
-# make it executable
+tmp_script="/ifs/data/smithlab/smithlab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report/code/peaks-per-sample.sh"
 chmod +x $tmp_script
-"$tmp_script" "$pipeline_peaks_dir" "$pipeline_annontate_peaks_dir" "$main_outdir"
+$tmp_script
 
 @
 
@@ -74,6 +67,7 @@ chmod +x $tmp_script
 % LaTeX settings start here:
 \listfiles % get versions of files used for document compliaton, written at the end of the .log file for the report compilation!
 \geometry{paperwidth=150mm,paperheight=105mm} % larger page size than normal for larger plots and more flexibility with font sizes
+\usepackage{longtable}
 %\documentclass[8pt,xcolor={dvipsnames}]{beamer}
 \setcounter{secnumdepth}{3} % how many levels deep before section headers stop getting numbers
 \setcounter{tocdepth}{3} % table of contents depth
@@ -116,7 +110,7 @@ chmod +x $tmp_script
 % Create the Title page
 \title[\Sexpr{Project_ID_short}]{\Sexpr{Project_ID}}
 \author{\Sexpr{Report_author}}
-\institute{ PI: \Sexpr{PI_name} \\ Genome Technology Center, \\ NYU Langone Medical Center, New York, NY 10016} % I might have broke this watch out :(
+\institute{\normalsize Dr. Aristotelis Tsirigos \\ PI: \Sexpr{PI_name} \\ Genome Technology Center, \\ NYU Langone Medical Center, New York, NY 10016}
 \date{\texttt{\Sexpr{Report_author_email}} \\ \today}
 \titlegraphic{\includegraphics[width=0.25\textwidth]{figure/NYULMC_white}} % image to show on the title slide
 \maketitle
@@ -137,15 +131,27 @@ tmpdf<-split(PipelineSampleSheet,(seq_len(nrow(PipelineSampleSheet))-1) %/%50)
 # print the section heading
 cat("\\section{", "Sample Sheet", "}\n", sep="") 
 
-# print each sub-df
-for(i in seq_along(tmpdf)){
-  # print(nrow(tmpdf[[i]]))
-  cat("\\begin{frame}{"," Analysis Sample Sheet}\n", sep="") 
-  # don't include the fields with long file paths; adjust the scalebox as needed
-  print(xtable(x = tmpdf[[i]][,grep("^R|^ref",colnames(tmpdf[[i]]),invert = T)]),size="\\footnotesize",scalebox = 0.8)
+# # print each sub-df
+# for(i in seq_along(tmpdf)){
+#   # print(nrow(tmpdf[[i]]))
+#   cat("\\begin{frame}{"," Analysis Sample Sheet}\n", sep="") 
+#   # don't include the fields with long file paths; adjust the scalebox as needed
+#   print(xtable(x = tmpdf[[i]][,grep("^R|^ref",colnames(tmpdf[[i]]),invert = T)]),size="\\footnotesize",scalebox = 0.8)
+# 
+#   cat("\\end{frame}\n\n") 
+# }
 
-  cat("\\end{frame}\n\n") 
-}
+cat("\\begin{frame}[allowframebreaks]{", latexTranslate(" Analysis Sample Sheet"), " }\n", sep="")
+  cat("\\small{",sep = "\n")
+  # cat(latexTranslate(tmpAlignStats),sep = "\n\n")   
+  print(xtable(x = PipelineSampleSheet[,grep("^R|^ref",colnames(PipelineSampleSheet),invert = T)]),size="scriptsize",tabular.environment="longtable",floating=FALSE) 
+  #print(xtable(x = tmpAlignStats[ order(tmpAlignStats[,"Samples"]),]),size="scriptsize",tabular.environment="longtable",floating=FALSE)
+  # with(dd, order(-z, b))
+  # dd[ order(-dd[,4], dd[,1]), ]
+  # dd[with(dd, order(-z, b)), ]
+  cat("}\n",sep = "\n")
+  cat("\\end{frame}\n\n")
+  
 
 @
 
@@ -157,7 +163,7 @@ for(i in seq_along(sampleDirs)){
   # print(tmpSampleDir)
   
   # get the PDFs in subdirecotry
-  tmpSamplePDF_files<-dir(tmpSampleDir,pattern = "*.pdf")
+  tmpSamplePDF_files<-dir(tmpSampleDir,pattern = "dual_ggbarplots.pdf") #dual_ggbarplots.pdf
   # print(tmpSamplePDF_files)
   
   # make a new section label per sample
@@ -167,16 +173,24 @@ for(i in seq_along(sampleDirs)){
   
   # PRINT THE STATS
   # # get the stats file
-  tmpAlignStatsFile<-dir(tmpSampleDir,pattern = "*.tsv",full.names = TRUE)
+  tmpAlignStatsFile<-dir(tmpSampleDir,pattern = "peak_align_stats.tsv",full.names = TRUE)
   # read in the file
   # tmpAlignStats<-scan(file =tmpAlignStatsFile,character(0), sep = "\n")
   tmpAlignStats<-read.table(tmpAlignStatsFile,header = TRUE,sep = "\t",stringsAsFactors = FALSE,check.names = FALSE)
+  
+  # re order the sheet based on the second column
+  tmpAlignStats <- tmpAlignStats[order(tmpAlignStats[2]),]
+  rownames(tmpAlignStats) <- seq(1:nrow(tmpAlignStats))
   # print it in a new frame
-  cat("\\subsubsection{", latexTranslate("Stats"), "}\n", sep="")
-  cat("\\begin{frame}{", latexTranslate("Stats"), " }\n", sep="")
+  cat("\\subsubsection{", latexTranslate("Peak"), "}\n", sep="")
+  cat("\\begin{frame}[allowframebreaks]{", latexTranslate("Stats"), " }\n", sep="")
   cat("\\small{",sep = "\n")
-  # cat(latexTranslate(tmpAlignStats),sep = "\n\n")    
-  print(xtable(x = tmpAlignStats),size="\\footnotesize",scalebox = 1)
+  # cat(latexTranslate(tmpAlignStats),sep = "\n\n")   
+  print(xtable(x = tmpAlignStats),size="scriptsize",tabular.environment="longtable",floating=FALSE) 
+  #print(xtable(x = tmpAlignStats[ order(tmpAlignStats[,"Samples"]),]),size="scriptsize",tabular.environment="longtable",floating=FALSE)
+  # with(dd, order(-z, b))
+  # dd[ order(-dd[,4], dd[,1]), ]
+  # dd[with(dd, order(-z, b)), ]
   cat("}\n",sep = "\n")
   cat("\\end{frame}\n\n")
   
