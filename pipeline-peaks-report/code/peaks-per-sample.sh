@@ -75,6 +75,9 @@ for key in ${!index_array[@]}; do
   
   # ~~~~~ GET SCRIPT ARGS ~~~~~~~ #
   args <- commandArgs(TRUE); cat("Script args are:\n"); args
+  # args <- c("/ifs/home/kellys04/projects/SmithLab-ChIPSeq_2016-12-31/analysis_dir/project_notes/peaks-per-sample_report_3/output/peaks.by_sample.macs_broad/peaks_stats.tsv", 
+  #           "peaks.by_sample.macs_broad", "/ifs/data/smithlab/SmithLab-ChIPSeq_2016-12-31/pipeline/align-stats/results/align-stats.standard/align.by_sample.bowtie2/all-samples/alignment_stats_extended.csv"
+  # )
   
   # path to the peaks table file
   peaks_table_file <- args[1]
@@ -191,9 +194,9 @@ for key in ${!index_array[@]}; do
   # ~~~~~ START PEAKS PLOT ~~~~~~~ #
   # plot layout setup
   plot_layout_matrix<-structure(c(1L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 1L, 2L, 2L, 2L, 2L, 
-                                2L, 2L, 2L, 1L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 1L, 2L, 2L, 2L, 2L, 
-                                2L, 2L, 2L), .Dim = c(8L, 4L), .Dimnames = list(NULL, c("V1", 
-                                                                                        "V2", "V3", "V4")))
+                                  2L, 2L, 2L, 1L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 1L, 2L, 2L, 2L, 2L, 
+                                  2L, 2L, 2L), .Dim = c(8L, 4L), .Dimnames = list(NULL, c("V1", 
+                                                                                          "V2", "V3", "V4")))
   pdf(file = paste0(dirname(peaks_table_file),"/peaks_barplots.pdf"),width = 8,height = 8)
   # setup the panel layout
   layout(plot_layout_matrix)
@@ -207,15 +210,15 @@ for key in ${!index_array[@]}; do
   # set some plot margin parameters to fit the names
   par(mar=c(5,16,0,2)+ 0.1) 
   barplot(t(peaks_table_df),
-        # main=peaks_branch,
-        cex.names = 0.7,
-        horiz = T,
-        # col=BARPLOT_COLORS,
-        border=NA,
-        las=1,
-        # cex.names=Names_scale,
-        xlab="Number of peaks",
-        space=0.6
+          # main=peaks_branch,
+          cex.names = 0.7,
+          horiz = T,
+          # col=BARPLOT_COLORS,
+          border=NA,
+          las=1,
+          # cex.names=Names_scale,
+          xlab="Number of peaks",
+          space=0.6
   ) 
   # p <- recordPlot()
   dev.off()
@@ -226,9 +229,9 @@ for key in ${!index_array[@]}; do
   # ~~~~~ START DUAL PLOT ~~~~~~~ #
   
   dual_plot_matrix <- structure(c(1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 
-  2, 1, 2, 2, 2, 2, 2, 3, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 3, 4, 
-  4, 4, 4, 4, 3, 4, 4, 4, 4, 4), .Dim = c(6L, 8L), .Dimnames = list(
-    NULL, c("V1", "V2", "V3", "V4", "", "", "", "")))
+                                  2, 1, 2, 2, 2, 2, 2, 3, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 3, 4, 
+                                  4, 4, 4, 4, 3, 4, 4, 4, 4, 4), .Dim = c(6L, 8L), .Dimnames = list(
+                                    NULL, c("V1", "V2", "V3", "V4", "", "", "", "")))
   dual_plot_matrix
   
   # start the dual plot
@@ -248,13 +251,13 @@ for key in ${!index_array[@]}; do
   par(mar=c(5,16,0,2)+ 0.1)
   # create alignemnt barplot 
   barplot(Dup_Raw_Reads_Matrix,horiz = T,
-        col=BARPLOT_COLORS,
-        border=NA,
-        las=1,
-        cex.names=Names_scale,
-        xlab="Number of reads (millions)"
-        #,space=Space_scale
-        ) 
+          col=BARPLOT_COLORS,
+          border=NA,
+          las=1,
+          cex.names=Names_scale,
+          xlab="Number of reads (millions)"
+          #,space=Space_scale
+  ) 
   
   
   # start peaks plot
@@ -265,15 +268,15 @@ for key in ${!index_array[@]}; do
   
   par(mar=c(5,16,0,2)+ 0.1) 
   barplot(t(peaks_table_df),
-        # main=peaks_branch,
-        cex.names = 0.7,
-        horiz = T,
-        # col=BARPLOT_COLORS,
-        border=NA,
-        las=1,
-        # cex.names=Names_scale,
-        xlab="Number of peaks"
-        #,space=0.6
+          # main=peaks_branch,
+          cex.names = 0.7,
+          horiz = T,
+          # col=BARPLOT_COLORS,
+          border=NA,
+          las=1,
+          # cex.names=Names_scale,
+          xlab="Number of peaks"
+          #,space=0.6
   )
   dev.off()
   
@@ -295,12 +298,15 @@ for key in ${!index_array[@]}; do
   peaks_align_merge_long_df <- reshape2::melt(peaks_align_merge_df,id.vars="SampleID",variable.name="variable",value.name="value")
   
   
+  write.table(x = peaks_align_merge_long_df,file = paste0(dirname(peaks_table_file),"/peak_align_stats_long.tsv"),quote = FALSE,sep = '\t',row.names = FALSE,col.names = TRUE)
+  save.image(file=paste0(dirname(peaks_table_file),"/pre_plot-peak-stats.Rdata"),compress = TRUE)
   
   # ~~~~~ MAKE MERGED PLOTS ~~~~~~~ #
   library("grid")
   library("ggplot2")
   library("plyr")
   library("gridExtra")
+  library("scales")
   
   theme_set(theme_bw())
   # set up the sample ID's along the center
@@ -331,7 +337,7 @@ for key in ${!index_array[@]}; do
   
   # make barplot for just the peaks
   g1 <- ggplot(data = peaks_align_merge_peaksonly, aes(x = SampleID, y = value)) +
-    geom_bar(stat = "identity") + ggtitle("Peaks") +
+    geom_bar(stat = "identity") + ggtitle(paste0(peaks_branch))+
     theme(axis.title.x = element_blank(), 
           axis.title.y = element_blank(), 
           axis.text.y = element_blank(), 
@@ -343,13 +349,17 @@ for key in ${!index_array[@]}; do
   # c("Deduplicated","Duplicated","Unaligned")
   peaks_align_merge_readsonly <- peaks_align_merge_long_df[peaks_align_merge_long_df[["variable"]] %in% c("De.duplicated.alignments","Duplicated","Unaligned.Reads"),]
   
+  # calculate max peaks for axis
+  max_peaks <- max(peaks_align_merge_long_df[with(peaks_align_merge_long_df, which(variable=="Total.reads")),][["value"]],na.rm = TRUE)
+  
+  
   # make barplot for just the align stats
-  g2 <- ggplot(data = peaks_align_merge_readsonly, aes(x = SampleID, y = value, fill=variable)) +xlab(NULL)+
-    geom_bar(stat = "identity") +  ggtitle("Total.reads") +
+  g2 <- ggplot(data = peaks_align_merge_readsonly, aes(x = SampleID, y = value/1000000, fill=variable)) +xlab(NULL)+
+    geom_bar(stat = "identity") +  ggtitle("Millions of Reads per Sample") +
     theme(axis.title.x = element_blank(), axis.title.y = element_blank(), 
           axis.text.y = element_blank(), axis.ticks.y = element_blank(),
           plot.margin = unit(c(1,0,1,-1), "mm")
-    ) + coord_flip() + scale_fill_manual(values=c("blue", "purple", "red"))
+    ) + coord_flip() + scale_fill_manual(values=c("blue", "purple", "red")) + labs(fill="Reads: ") + scale_y_continuous(labels = comma,breaks = seq(from=0,to = (max_peaks/1000000)+10,by = 10))
   # , legend.box = "horizontal", legend.position = "top") + labs(fill="Reads: ") + coord_flip()
   
   # put it all together
@@ -362,7 +372,7 @@ for key in ${!index_array[@]}; do
   pdf(file = paste0(dirname(peaks_table_file),"/dual_ggbarplots.pdf"),width = 10,height = 8.5)
   grid.arrange(gg1,gg.mid,gg2,ncol=3,widths=c(0.3,0.2,0.5)) # widths=c(0.4,0.2,0.4)
   dev.off()
-
+  
   
   # ~~~~~ SAVE PEAK ALIGN STATS ~~~~~~~ #
   # save the table to a TSV table, to print in the report
@@ -371,8 +381,6 @@ for key in ${!index_array[@]}; do
   
   # save R session
   save.image(file=paste0(dirname(peaks_table_file),"/peak-stats.Rdata"),compress = TRUE)
-  
-  
   
   
   
@@ -400,4 +408,3 @@ exit
 tmp_script="/ifs/data/smithlab/SmithLab-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report/code/peaks-per-sample.sh"
 chmod +x $tmp_script
 $tmp_script
-
