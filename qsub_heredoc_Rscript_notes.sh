@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# manual: http://gridscheduler.sourceforge.net/htmlman/htmlman1/qsub.html
+
 # here are some notes about using heredocs and qsub and Rscript
 
 # you can submit qsub jobs directly from a heredoc:
