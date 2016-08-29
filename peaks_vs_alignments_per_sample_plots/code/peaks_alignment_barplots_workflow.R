@@ -7,10 +7,6 @@
 # ~~~~~ GET SCRIPT ARGS ~~~~~~~ #
 args <- commandArgs(TRUE); cat("Script args are:\n"); args
 
-# args <- c("/ifs/data/panoslab/PanosLab-Carlos-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report_3/test_data/peaks_stats.tsv", 
-#           "peaks.by_sample.macs_broad", "/ifs/data/panoslab/PanosLab-Carlos-ChIPSeq_2016-06-06/project_notes/peaks-per-sample_report_3/test_data/alignment_stats_extended.csv"
-# )
-
 # path to the peaks table file
 peaks_table_file <- args[1]
 
