@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # python 2.7
 
+# find an exact match of a nucleotide sequence within a FASTA file
 # USAGE: find_seq.py <pattern> /path/to/file.fasta
 # example: find_seq.py TAACCACTCA /local/data/iGenomes/Homo_sapiens/UCSC/hg19/Sequence/WholeGenomeFasta/genome.fa > test_loc.txt
 
