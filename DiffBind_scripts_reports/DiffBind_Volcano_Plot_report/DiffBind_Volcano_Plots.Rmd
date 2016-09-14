@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # knitr::opts_chunk$set(dev = 'pdf')
 ```
 
-### DiffBind ChIP-Seq Differential Peaks
+## DiffBind ChIP-Seq Differential Peaks
 
 DiffBind is used to determine which peaks in a ChIP-Seq experiment are differential bound between sample data sets. For this report, we have subset the standard DiffBind data to plot only the single peak per gene which is closest to the gene's start site (e.g. lowest 'shortestDistance' value).
 
@@ -280,7 +280,7 @@ DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p
 ```
 
 ```{r, results='asis', echo=FALSE}
-mycat('### DiffBind Plots and Results\n\n')
+mycat('## DiffBind Plots and Results {.tabset}\n\n') # .tabset-fade .tabset-pills
 
 out_dir <- "/ifs/home/kellys04/projects/Bioinformatics/DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/input"
 
@@ -292,19 +292,19 @@ diff_cl4_cl5_file <- paste0(out_dir,"/diff_bind.Treatment4-ChIPSeq-vs-Treatment5
 diff_cl5_ctrl_file <- paste0(out_dir,"/diff_bind.Treatment5-ChIPSeq-vs-Control-ChIPSeq.p100.csv")
 
 # pdf(file = paste0(diff_cl4_ctrl_file,"_volcano_plot.pdf"),height = 8,width = 8)
-mycat(paste0("File:\n", basename(diff_cl4_ctrl_file)))
+mycat(paste0("### ", basename(diff_cl4_ctrl_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = diff_cl4_ctrl_file,header = TRUE,sep = ',')
 DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
 # dev.off()
 
 # pdf(file = paste0(diff_cl4_cl5_file,"_volcano_plot.pdf"),height = 8,width = 8)
-mycat(paste0("File:\n", basename(diff_cl4_cl5_file)))
+mycat(paste0("### ", basename(diff_cl4_cl5_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = diff_cl4_cl5_file,header = TRUE,sep = ',')
 DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
 # dev.off()
 
 # pdf(file = paste0(diff_cl5_ctrl_file,"_volcano_plot.pdf"),height = 8,width = 8)
-mycat(paste0("File:\n", basename(diff_cl5_ctrl_file)))
+mycat(paste0("### ", basename(diff_cl5_ctrl_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = diff_cl5_ctrl_file,header = TRUE,sep = ',')
 DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
 # dev.off()

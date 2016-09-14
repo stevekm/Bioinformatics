@@ -4,7 +4,7 @@ Stephen Kelly
 
 
 
-### DiffBind ChIP-Seq Differential Peaks
+## DiffBind ChIP-Seq Differential Peaks
 
 DiffBind is used to determine which peaks in a ChIP-Seq experiment are differential bound between sample data sets. For this report, we have subset the standard DiffBind data to plot only the single peak per gene which is closest to the gene's start site (e.g. lowest 'shortestDistance' value).
 
@@ -18,14 +18,14 @@ http://bioconductor.org/packages/release/bioc/html/DiffBind.html
 
 
 
-### DiffBind Plots and Results  
+## DiffBind Plots and Results {.tabset}  
   
 Project dir:  
 /ifs/home/kellys04/projects/Bioinformatics/DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/input  
   
 ******  
-File:  
-diff_bind.Treatment4-ChIPSeq-vs-Control-ChIPSeq.p100.csv![](DiffBind_Volcano_Plots_files/figure-html/unnamed-chunk-2-1.png)<!-- -->  
+### diff_bind.Treatment4-ChIPSeq-vs-Control-ChIPSeq.p100.csv {.tabset}  
+![](DiffBind_Volcano_Plots_files/figure-html/unnamed-chunk-2-1.png)<!-- -->  
   
   
 ******  
@@ -130,8 +130,8 @@ Total number of p < 0.05 & log2(Fold Change) > 1 genes (neg. FC):
 ******  
   
 ******  
-File:  
-diff_bind.Treatment4-ChIPSeq-vs-Treatment5-ChIPSeq.p100.csv![](DiffBind_Volcano_Plots_files/figure-html/unnamed-chunk-2-2.png)<!-- -->  
+### diff_bind.Treatment4-ChIPSeq-vs-Treatment5-ChIPSeq.p100.csv {.tabset}  
+![](DiffBind_Volcano_Plots_files/figure-html/unnamed-chunk-2-2.png)<!-- -->  
   
   
 ******  
@@ -236,8 +236,8 @@ Total number of p < 0.05 & log2(Fold Change) > 1 genes (neg. FC):
 ******  
   
 ******  
-File:  
-diff_bind.Treatment5-ChIPSeq-vs-Control-ChIPSeq.p100.csv![](DiffBind_Volcano_Plots_files/figure-html/unnamed-chunk-2-3.png)<!-- -->  
+### diff_bind.Treatment5-ChIPSeq-vs-Control-ChIPSeq.p100.csv {.tabset}  
+![](DiffBind_Volcano_Plots_files/figure-html/unnamed-chunk-2-3.png)<!-- -->  
   
   
 ******  
