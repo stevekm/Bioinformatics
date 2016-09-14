@@ -1,0 +1,1 @@
+This is a basic report that reads in DiffBind tables to produce volcano plots and calculate the number of genes bound under different categories and conditions. Source code in the .Rmd file, preview output in the .md file, full report is compiled to HTML. 
