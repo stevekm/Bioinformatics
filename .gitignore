@@ -10,3 +10,5 @@ Benchmarking.Rproj
 .Rhistory
 # *.pdf
 
+/ifs/home/kellys04/projects/Bioinformatics/DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/input*
+/ifs/home/kellys04/projects/Bioinformatics/DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/DiffBind_Volcano_Plots_files
