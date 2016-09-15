@@ -7,6 +7,10 @@ output:
     fig_height: 8
     fig_width: 8
     keep_md: yes
+    number_sections: true
+    code_folding: hide
+    toc: true
+    toc_float: true
 ---
 
 ```{r setup, include=FALSE}
@@ -14,7 +18,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # knitr::opts_chunk$set(dev = 'pdf')
 ```
 
-## DiffBind ChIP-Seq Differential Peaks
+# DiffBind ChIP-Seq Differential Peaks
 
 DiffBind is used to determine which peaks in a ChIP-Seq experiment are differential bound between sample data sets. For this report, we have subset the standard DiffBind data to plot only the single peak per gene which is closest to the gene's start site (e.g. lowest 'shortestDistance' value).
 
@@ -26,7 +30,7 @@ http://bioconductor.org/packages/release/bioc/html/DiffBind.html
 
 
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 # CODE FOR PRODUCING THE PLOTS
 
 # function for formatting text in the report
@@ -147,7 +151,7 @@ DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p
     mycat('\n\n')
     mycat('\n******\n')
     # FULL DATASET STATS
-    mycat('#### Overall DiffBind Stats\n')
+    mycat('### Overall DiffBind Stats\n')
     mycat(paste0('Total number of DiffBind peaks:\n', length(as.data.frame(diff_df)[["external_gene_name"]]), '\n\n'))
     mycat(paste0('Total number of DiffBind genes:\n', length(unique(diff_df_min[["external_gene_name"]])), '\n\n'))
     
@@ -203,7 +207,7 @@ DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p
     mycat('\n\n')
     mycat('\n******\n')
     # ONLY PROTEIN CODING GENES
-    mycat('#### Protein Coding Gene Stats\n') # gene_biotype=="protein_coding"
+    mycat('### Protein Coding Gene Stats\n') # gene_biotype=="protein_coding"
     mycat(paste0('Total number of DiffBind peaks:\n', 
                  length(subset(as.data.frame(diff_df), gene_biotype=="protein_coding")[["external_gene_name"]]), '\n\n'))
     mycat(paste0('Total number of DiffBind genes:\n', 
@@ -279,8 +283,8 @@ DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p
 
 ```
 
-```{r, results='asis', echo=FALSE}
-mycat('## DiffBind Plots and Results {.tabset}\n\n') # .tabset-fade .tabset-pills
+```{r, results='asis', echo=TRUE}
+mycat('# DiffBind Plots and Results {.tabset}\n\n') # .tabset-fade .tabset-pills
 
 out_dir <- "/ifs/home/kellys04/projects/Bioinformatics/DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/input"
 
@@ -292,19 +296,19 @@ diff_cl4_cl5_file <- paste0(out_dir,"/diff_bind.Treatment4-ChIPSeq-vs-Treatment5
 diff_cl5_ctrl_file <- paste0(out_dir,"/diff_bind.Treatment5-ChIPSeq-vs-Control-ChIPSeq.p100.csv")
 
 # pdf(file = paste0(diff_cl4_ctrl_file,"_volcano_plot.pdf"),height = 8,width = 8)
-mycat(paste0("### ", basename(diff_cl4_ctrl_file), ' {.tabset}\n'))
+mycat(paste0("## ", basename(diff_cl4_ctrl_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = diff_cl4_ctrl_file,header = TRUE,sep = ',')
 DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
 # dev.off()
 
 # pdf(file = paste0(diff_cl4_cl5_file,"_volcano_plot.pdf"),height = 8,width = 8)
-mycat(paste0("### ", basename(diff_cl4_cl5_file), ' {.tabset}\n'))
+mycat(paste0("## ", basename(diff_cl4_cl5_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = diff_cl4_cl5_file,header = TRUE,sep = ',')
 DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
 # dev.off()
 
 # pdf(file = paste0(diff_cl5_ctrl_file,"_volcano_plot.pdf"),height = 8,width = 8)
-mycat(paste0("### ", basename(diff_cl5_ctrl_file), ' {.tabset}\n'))
+mycat(paste0("## ", basename(diff_cl5_ctrl_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = diff_cl5_ctrl_file,header = TRUE,sep = ',')
 DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
 # dev.off()
@@ -312,7 +316,7 @@ DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
 ```
 
 
-### System Information
+## System Information
 
 ```{r}
 system('uname -srv',intern=T)
