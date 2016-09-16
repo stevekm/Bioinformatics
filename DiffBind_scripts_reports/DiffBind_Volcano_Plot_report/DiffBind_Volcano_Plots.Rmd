@@ -21,6 +21,21 @@ knitr::opts_chunk$set(echo = TRUE)
 # knitr::opts_chunk$set(dev = 'pdf')
 ```
 
+```{r, eval=FALSE}
+# mycat('# Plotly Test\n\n')
+# https://plot.ly/r/knitr/
+# install.packages("plotly")
+suppressPackageStartupMessages(library("plotly"))
+# p <- plot_ly(economics, x = date, y = unemploy / pop)
+# p
+p <- plot_ly(economics, x = date, y = uempmed, name = "unemployment")
+p <- p %>% add_trace(y = fitted(loess(uempmed ~ as.numeric(date))), x = date)
+
+p2 <- plot_ly(data = iris, x = Sepal.Length, y = Petal.Length, mode = "markers", color = Species)
+
+htmltools::tagList(list(as.widget(p), as.widget(p2)))
+
+```
 # DiffBind 
 
 DiffBind [@DiffBind] is used to determine which peaks in a ChIP-Seq experiment are differential bound between sample data sets. For this report, we have subset the standard DiffBind data to plot only the single peak per gene which is closest to the gene's start site (e.g. lowest 'shortestDistance' value).
@@ -408,7 +423,97 @@ DiffBind_volcano_plotly_top_protein_coding_promoters <- function(diff_df, signif
     suppressPackageStartupMessages(library("plotly"))
     my_plot <- plot_ly(data = diff_df_min, x = Fold, y = -log10(p.value), text = external_gene_name, mode = "markers", color = as.ordered(group), colors = plot_colors)
     
-    print(htmltools::tagList(list(as.widget(my_plot))))
+    # print(my_plot)
+    # print(htmltools::tagList(list(as.widget(my_plot))))
+    return(my_plot)
+    
+    
+}
+
+
+Diff_stats <- function(diff_df, signif_p_value=0.05, fold_change_value=1, plot_colors=c("red","gray","orange", "blue", "green"), top_gene_number=10){
+    # ~~~~~~ PROCESS DATA ~~~~~~~~ # 
+    # get the colname order for later
+    original_colnames <- colnames(diff_df)
+    
+    suppressPackageStartupMessages(library("data.table"))
+    # GET THE CLOSEST DIFFBIND PEAK PER GENE 
+    # in Diffbind subset, getthe peaks closest to each gene
+    # # for each gene name, find the peak with the lowest "shortestDistance" value
+    # make it a data.table type
+    setDT(diff_df)
+    # get min value per factor, also remove duplicates
+    diff_df_min <- as.data.frame(diff_df[, .SD[which.min(shortestDistance)], by=external_gene_name])
+    # fix the colname order
+    diff_df_min <- diff_df_min[,original_colnames]
+    
+    # get sample ID's from 7th, 8th colnames
+    sampleID_1 <- colnames(diff_df_min)[7]
+    sampleID_2 <- colnames(diff_df_min)[8]
+    
+    
+    # subset for significant genes
+    diff_df_min_signiff <- as.data.frame(subset(diff_df_min, p.value<signif_p_value & abs(Fold)>fold_change_value))
+    
+    # subset for protein coding genes
+    diff_df_min_signiff_protein <- as.data.frame(subset(diff_df_min_signiff, gene_biotype=="protein_coding"))
+    
+    # subset top up/down protein coding genes
+    diff_df_min_signiff_UpFold <- diff_df_min_signiff_protein[with(diff_df_min_signiff_protein, 
+                                                                   order(Fold, p.value)), 
+                                                              c("Fold","p.value","external_gene_name")][1:top_gene_number,]
+    diff_df_min_signiff_DnFold <- diff_df_min_signiff_protein[with(diff_df_min_signiff_protein, 
+                                                                   order(-Fold, p.value)), 
+                                                              c("Fold","p.value","external_gene_name")][1:top_gene_number,]
+    # ~~~~~~~~~~~~~~ # 
+    
+    
+    
+    
+    diff_df_min <-diff_df_min[c("external_gene_name", "gene_biotype", "Fold", "p.value")]
+    diff_df_min["group"] <- "not_signif"
+    diff_df_min[which(diff_df_min['p.value'] < signif_p_value & abs(diff_df_min['Fold']) < fold_change_value ),"group"] <- "signif"
+    diff_df_min[which(diff_df_min['p.value'] > signif_p_value & abs(diff_df_min['Fold']) > fold_change_value ),"group"] <- "fc"
+    diff_df_min[which(diff_df_min['p.value'] < signif_p_value & abs(diff_df_min['Fold']) > fold_change_value ),"group"] <- "signif_fc"
+        # browser() # use this for debugging
+
+    # to test:
+    # diff_df_min[which(diff_df_min['external_gene_name'] == "CROCC"),]
+#        external_gene_name   gene_biotype Fold  p.value     group
+# 12              CROCC protein_coding 5.46 3.44e-14 signif_fc
+
+    
+    suppressPackageStartupMessages(library(dplyr))
+    # mydf %>%
+    # group_by(yearmonth) %>%
+    # arrange(desc(count)) %>%
+    # slice(1:2)
+    
+    # head(diff_df_min)
+    # dim(diff_df_min)
+    
+    # diff_df_min %>%
+    #     filter(gene_biotype == "protein_coding") %>% # subset for protein coding genes
+    #     arrange(-Fold, p.value) %>% # Sort by Fold change, then by p value
+    #     slice(1:10) %>% # take the top 10 entries... 
+    #     mutate(group = "top_signif_fc") # ... and change the "group" column value to "top_signif_fc"
+    # 
+        
+    # diff_df_minNew <- diff_df_min %>%
+    #                   mutate(ind = gene_biotype  != "protein_coding") %>% 
+    #                   arrange(ind, -Fold, p.value) %>% 
+    #                   mutate(group = ifelse(row_number() < 11, "top_signif_fc", group)) %>%
+    #                   select(-ind)
+    
+    # p.value<signif_p_value & abs(Fold)>fold_change_value
+    
+    diff_df_min <- diff_df_min %>%
+        arrange(desc(gene_biotype == "protein_coding"), desc(Fold), p.value) %>% 
+        mutate(group = ifelse(row_number() < top_gene_number + 1 & abs(Fold) > fold_change_value, "top_signif_fc", group))
+    
+    diff_df_min <- diff_df_min %>%
+        arrange(desc(gene_biotype == "protein_coding"), Fold, p.value) %>% 
+        mutate(group = ifelse(row_number() < top_gene_number + 1 & abs(Fold) > fold_change_value, "top_signif_fc", group))
     
     # print some gene table stats into the report; this could use optimization
     mycat('\n\n')
@@ -541,9 +646,7 @@ DiffBind_volcano_plotly_top_protein_coding_promoters <- function(diff_df, signif
     mycat('\n******\n')
     mycat('\n******\n')
     
-    return(my_plot)
 }
-
 ```
 
 
@@ -568,6 +671,7 @@ mycat(paste0("## ", basename(diff_cl4_ctrl_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = diff_cl4_ctrl_file,header = TRUE,sep = ',')
 # DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
 DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
+Diff_stats(diff_df = diff_df)
 # my_plot <- DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
 # htmltools::tagList(list(as.widget(my_plot)))
 # dev.off()
@@ -577,6 +681,7 @@ mycat(paste0("## ", basename(diff_cl4_cl5_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = diff_cl4_cl5_file,header = TRUE,sep = ',')
 # DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
 DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
+Diff_stats(diff_df = diff_df)
 # my_plot <- DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
 # htmltools::tagList(list(as.widget(my_plot)))
 
@@ -587,6 +692,7 @@ mycat(paste0("## ", basename(diff_cl5_ctrl_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = diff_cl5_ctrl_file,header = TRUE,sep = ',')
 # DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
 DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
+Diff_stats(diff_df = diff_df)
 # my_plot <- DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
 # htmltools::tagList(list(as.widget(my_plot)))
 
