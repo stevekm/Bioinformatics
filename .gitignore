@@ -16,3 +16,4 @@ Benchmarking.Rproj
 DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/DiffBind_Volcano_Plots_files/*
 DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/input/*
 .DS_Store
+*.html
