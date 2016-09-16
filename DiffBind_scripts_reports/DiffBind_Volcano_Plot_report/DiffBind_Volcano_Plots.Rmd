@@ -1,5 +1,5 @@
 ---
-title: "DiffBind Volcano Plots"
+title: "ChIP-Seq Differential Peaks"
 author: "Stephen Kelly"
 date: "9/13/2016"
 output: 
@@ -11,6 +11,9 @@ output:
     code_folding: hide
     toc: true
     toc_float: true
+citation_package: natbib
+bibliography: references.bib
+biblio-style: apsr
 ---
 
 ```{r setup, include=FALSE}
@@ -18,16 +21,9 @@ knitr::opts_chunk$set(echo = TRUE)
 # knitr::opts_chunk$set(dev = 'pdf')
 ```
 
-# DiffBind ChIP-Seq Differential Peaks
+# DiffBind 
 
-DiffBind is used to determine which peaks in a ChIP-Seq experiment are differential bound between sample data sets. For this report, we have subset the standard DiffBind data to plot only the single peak per gene which is closest to the gene's start site (e.g. lowest 'shortestDistance' value).
-
-Information about the DiffBind program can be found here:
-
-http://bioconductor.org/packages/release/bioc/vignettes/DiffBind/inst/doc/DiffBind.pdf
-
-http://bioconductor.org/packages/release/bioc/html/DiffBind.html
-
+DiffBind [@DiffBind] is used to determine which peaks in a ChIP-Seq experiment are differential bound between sample data sets. For this report, we have subset the standard DiffBind data to plot only the single peak per gene which is closest to the gene's start site (e.g. lowest 'shortestDistance' value).
 
 
 ```{r, echo=TRUE}
@@ -85,8 +81,8 @@ DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p
                                                               c("Fold","p.value","external_gene_name")][1:top_gene_number,]
     # ~~~~~~~~~~~~~~ # 
     
-    suppressPackageStartupMessages(library("plotly"))
-    browser() # use this for debugging
+    # suppressPackageStartupMessages(library("plotly"))
+    # browser() # use this for debugging
     
     # ~~~~~~ MAKE PLOT ~~~~~~~~ # 
     # set the multi-pane plot layout matrix
@@ -138,7 +134,7 @@ DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p
     
     # add points and gene labels for top genes
     suppressPackageStartupMessages(library("calibrate"))
-    library("reshape2")
+    suppressPackageStartupMessages(library("reshape2"))
     # up genes
     with(na.omit(diff_df_min_signiff_UpFold), points(Fold, -log10(p.value), pch=20, col="green"))
     with(na.omit(diff_df_min_signiff_UpFold), textxy(Fold, -log10(p.value), labs=external_gene_name, cex=.8))
@@ -284,10 +280,13 @@ DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p
 
 ```
 
-```{r}
-DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p_value=0.05, 
+
+
+
+```{r, echo=TRUE}
+DiffBind_volcano_plotly_top_protein_coding_promoters <- function(diff_df, signif_p_value=0.05, 
                                                                fold_change_value=1, 
-                                                               plot_colors=c("grey","red","orange","blue", "green"), 
+                                                               plot_colors=c("red","gray","orange", "blue", "green"), 
                                                                top_gene_number=10){
     # browser() # use this for debugging
     
@@ -332,19 +331,84 @@ DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p
     # ~~~~~~~~~~~~~~ # 
     
     
-    browser() # use this for debugging
     
     
-    diff_df_min_sub <-diff_df_min[c("external_gene_name", "gene_biotype", "Fold", "p.value")]
-    diff_df_min_sub["group"] <- "NotSignif"
-    diff_df_min_sub[which(diff_df_min_sub['p.value'] < signif_p_value & abs(diff_df_min_sub['Fold']) < fold_change_value ),"group"] <- "signif"
-    diff_df_min_sub[which(diff_df_min_sub['p.value'] > signif_p_value & abs(diff_df_min_sub['Fold']) > fold_change_value ),"group"] <- "FC"
-    diff_df_min_sub[which(diff_df_min_sub['p.value'] < signif_p_value & abs(diff_df_min_sub['Fold']) > fold_change_value ),"group"] <- "signif_FC"
+    diff_df_min <-diff_df_min[c("external_gene_name", "gene_biotype", "Fold", "p.value")]
+    diff_df_min["group"] <- "not_signif"
+    diff_df_min[which(diff_df_min['p.value'] < signif_p_value & abs(diff_df_min['Fold']) < fold_change_value ),"group"] <- "signif"
+    diff_df_min[which(diff_df_min['p.value'] > signif_p_value & abs(diff_df_min['Fold']) > fold_change_value ),"group"] <- "fc"
+    diff_df_min[which(diff_df_min['p.value'] < signif_p_value & abs(diff_df_min['Fold']) > fold_change_value ),"group"] <- "signif_fc"
+        # browser() # use this for debugging
+
+    # to test:
+    # diff_df_min[which(diff_df_min['external_gene_name'] == "CROCC"),]
+#        external_gene_name   gene_biotype Fold  p.value     group
+# 12              CROCC protein_coding 5.46 3.44e-14 signif_fc
+
     
+    suppressPackageStartupMessages(library(dplyr))
+    # mydf %>%
+    # group_by(yearmonth) %>%
+    # arrange(desc(count)) %>%
+    # slice(1:2)
+    
+    # head(diff_df_min)
+    # dim(diff_df_min)
+    
+    # diff_df_min %>%
+    #     filter(gene_biotype == "protein_coding") %>% # subset for protein coding genes
+    #     arrange(-Fold, p.value) %>% # Sort by Fold change, then by p value
+    #     slice(1:10) %>% # take the top 10 entries... 
+    #     mutate(group = "top_signif_fc") # ... and change the "group" column value to "top_signif_fc"
+    # 
+        
+    # diff_df_minNew <- diff_df_min %>%
+    #                   mutate(ind = gene_biotype  != "protein_coding") %>% 
+    #                   arrange(ind, -Fold, p.value) %>% 
+    #                   mutate(group = ifelse(row_number() < 11, "top_signif_fc", group)) %>%
+    #                   select(-ind)
+    
+    # p.value<signif_p_value & abs(Fold)>fold_change_value
+    
+    diff_df_min <- diff_df_min %>%
+        arrange(desc(gene_biotype == "protein_coding"), desc(Fold), p.value) %>% 
+        mutate(group = ifelse(row_number() < top_gene_number + 1 & abs(Fold) > fold_change_value, "top_signif_fc", group))
+    
+    diff_df_min <- diff_df_min %>%
+        arrange(desc(gene_biotype == "protein_coding"), Fold, p.value) %>% 
+        mutate(group = ifelse(row_number() < top_gene_number + 1 & abs(Fold) > fold_change_value, "top_signif_fc", group))
+    
+    
+    # which(diff_df_min)
+    # diff_df_min[which(diff_df_min['gene_biotype'] == "protein_coding"),]
+    # 
+    # head(within(subset(diff_df_min, gene_biotype == "protein_coding"), order(-Fold, p.value))) 
+    # 
+    # diff_df_min[with(diff_df_min[which(diff_df_min[['gene_biotype']] == "protein_coding", arr.ind = TRUE),], order(-Fold, p.value) ),"gene_biotype"][1:top_gene_number]
+    # 
+    # diff_df_min[with(diff_df_min[which(diff_df_min['gene_biotype'] == "protein_coding"),], order(-Fold, p.value) ),"gene_biotype"][1:top_gene_number] <- "top_signif_fc"
+    # diff_df_min[with(diff_df_min[which(diff_df_min['gene_biotype'] == "protein_coding"),], order(-Fold, p.value) ),"group"][1:top_gene_number] <- "top_signif_fc"
+    # # diff_df_min[with(diff_df_min, order(Fold, p.value)),"group"][1:top_gene_number] <- "top_signif_fc" 
+    
+    
+    
+    # require(data.table)
+    # d <- data.table(mtcars, key="cyl")
+    # d[, head(.SD, 4), by=cyl]
+    # 
+    # setDT(diff_df_min,key = "external_gene_name")
+    # diff_df_min <- diff_df_min[gene_biotype == "protein_coding"][order(-Fold, p.value), head(.SD, 10)][,group := "top_signif_fc"]
+    # diff_df_min[gene_biotype == "protein_coding"][order(Fold, p.value), head(.SD, top_gene_number)][,group := "top_signif_fc"]
+    
+    # diff_df_min[gene_biotype == "protein_coding" & order(Fold, p.value), head(.SD, top_gene_number)][,group := "top_signif_fc"]
+    
+    # diff_df_min[gene_biotype == "protein_coding" & order(Fold, p.value)]
     # ~~~~~~ MAKE PLOT ~~~~~~~~ # 
+    mycat('### Volcano Plot\n')
     suppressPackageStartupMessages(library("plotly"))
-    plot_ly(data = diff_df_min_sub, x = Fold, y = -log10(p.value), mode = "markers", color = as.ordered(order(group,decreasing = TRUE)), colors = plot_colors)
+    my_plot <- plot_ly(data = diff_df_min, x = Fold, y = -log10(p.value), text = external_gene_name, mode = "markers", color = as.ordered(group), colors = plot_colors)
     
+    print(htmltools::tagList(list(as.widget(my_plot))))
     
     # print some gene table stats into the report; this could use optimization
     mycat('\n\n')
@@ -477,7 +541,7 @@ DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p
     mycat('\n******\n')
     mycat('\n******\n')
     
-    
+    return(my_plot)
 }
 
 ```
@@ -485,12 +549,15 @@ DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p
 
 
 ```{r, results='asis', echo=TRUE}
-mycat('# DiffBind Plots and Results {.tabset}\n\n') # .tabset-fade .tabset-pills
+suppressPackageStartupMessages(library("plotly"))
 
-out_dir <- "/ifs/home/kellys04/projects/Bioinformatics/DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/input"
+mycat('# Plots and Results {.tabset}\n\n') # .tabset-fade .tabset-pills
 
-mycat(paste0("Project dir:\n",out_dir,'\n'))
-mycat('\n******\n')
+# out_dir <- "/ifs/home/kellys04/projects/Bioinformatics/DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/input"
+out_dir <- "/Users/kellys04/Bioinformatics/DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/input"
+
+# mycat(paste0("Project dir:\n",out_dir,'\n'))
+# mycat('\n******\n')
 
 diff_cl4_ctrl_file <- paste0(out_dir,"/diff_bind.Treatment4-ChIPSeq-vs-Control-ChIPSeq.p100.csv")
 diff_cl4_cl5_file <- paste0(out_dir,"/diff_bind.Treatment4-ChIPSeq-vs-Treatment5-ChIPSeq.p100.csv")
@@ -499,26 +566,37 @@ diff_cl5_ctrl_file <- paste0(out_dir,"/diff_bind.Treatment5-ChIPSeq-vs-Control-C
 # pdf(file = paste0(diff_cl4_ctrl_file,"_volcano_plot.pdf"),height = 8,width = 8)
 mycat(paste0("## ", basename(diff_cl4_ctrl_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = diff_cl4_ctrl_file,header = TRUE,sep = ',')
-DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
+# DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
+DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
+# my_plot <- DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
+# htmltools::tagList(list(as.widget(my_plot)))
 # dev.off()
 
 # pdf(file = paste0(diff_cl4_cl5_file,"_volcano_plot.pdf"),height = 8,width = 8)
 mycat(paste0("## ", basename(diff_cl4_cl5_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = diff_cl4_cl5_file,header = TRUE,sep = ',')
-DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
+# DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
+DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
+# my_plot <- DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
+# htmltools::tagList(list(as.widget(my_plot)))
+
 # dev.off()
 
 # pdf(file = paste0(diff_cl5_ctrl_file,"_volcano_plot.pdf"),height = 8,width = 8)
 mycat(paste0("## ", basename(diff_cl5_ctrl_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = diff_cl5_ctrl_file,header = TRUE,sep = ',')
-DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
+# DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
+DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
+# my_plot <- DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
+# htmltools::tagList(list(as.widget(my_plot)))
+
 # dev.off()
 
 ```
 
-# Plotly Test
 
-```{r}
+```{r, eval=FALSE}
+mycat('# Plotly Test\n\n')
 # https://plot.ly/r/knitr/
 # install.packages("plotly")
 suppressPackageStartupMessages(library("plotly"))
@@ -530,9 +608,6 @@ p <- p %>% add_trace(y = fitted(loess(uempmed ~ as.numeric(date))), x = date)
 p2 <- plot_ly(data = iris, x = Sepal.Length, y = Petal.Length, mode = "markers", color = Species)
 
 htmltools::tagList(list(as.widget(p), as.widget(p2)))
-```
-
-```{r}
 
 # test the plotly..
 
@@ -547,17 +622,23 @@ htmltools::tagList(list(as.widget(p), as.widget(p2)))
 
 # # melt it into long format
 #     if (melt_df) diff_log_ratio <- reshape2::melt(diff_log_ratio,id.vars="gene",variable.name="sample",value.name="diff_peak_log_ratio")
-
-diff_df_min_sub <-diff_df_min[c("external_gene_name", "gene_biotype", "Fold", "p.value")]
-diff_df_min_sub["group"] <- "NotSignif"
-diff_df_min_sub[which(diff_df_min_sub['p.value'] < signif_p_value & abs(diff_df_min_sub['Fold']) < fold_change_value ),"group"] <- "signif"
-diff_df_min_sub[which(diff_df_min_sub['p.value'] > signif_p_value & abs(diff_df_min_sub['Fold']) > fold_change_value ),"group"] <- "FC"
-diff_df_min_sub[which(diff_df_min_sub['p.value'] < signif_p_value & abs(diff_df_min_sub['Fold']) > fold_change_value ),"group"] <- "signif_FC"
-
-head(diff_df_min_sub, 100)
-
-plot_ly(data = diff_df_min_sub, x = Fold, y = -log10(p.value), mode = "markers", color = group)
+# 
+# diff_df_min_sub <-diff_df_min[c("external_gene_name", "gene_biotype", "Fold", "p.value")]
+# diff_df_min_sub["group"] <- "NotSignif"
+# diff_df_min_sub[which(diff_df_min_sub['p.value'] < signif_p_value & abs(diff_df_min_sub['Fold']) < fold_change_value ),"group"] <- "signif"
+# diff_df_min_sub[which(diff_df_min_sub['p.value'] > signif_p_value & abs(diff_df_min_sub['Fold']) > fold_change_value ),"group"] <- "FC"
+# diff_df_min_sub[which(diff_df_min_sub['p.value'] < signif_p_value & abs(diff_df_min_sub['Fold']) > fold_change_value ),"group"] <- "signif_FC"
+# 
+# head(diff_df_min_sub, 100)
+# 
+# plot_ly(data = diff_df_min_sub, x = Fold, y = -log10(p.value), mode = "markers", color = group)
+# <!-- # References -->
+# citation_package: natbib
+# bibliography: references.bib
+# biblio-style: apsr
+# <!-- [@DiffBind] -->
 ```
+
 # System Information
 
 ```{r}
@@ -565,3 +646,5 @@ system('uname -srv',intern=T)
 sessionInfo()
 # save.image(compress = TRUE, )
 ```
+
+# References
