@@ -21,35 +21,256 @@ knitr::opts_chunk$set(echo = TRUE)
 # knitr::opts_chunk$set(dev = 'pdf')
 ```
 
-```{r, eval=FALSE}
-# mycat('# Plotly Test\n\n')
-# https://plot.ly/r/knitr/
-# install.packages("plotly")
-suppressPackageStartupMessages(library("plotly"))
-# p <- plot_ly(economics, x = date, y = unemploy / pop)
-# p
-p <- plot_ly(economics, x = date, y = uempmed, name = "unemployment")
-p <- p %>% add_trace(y = fitted(loess(uempmed ~ as.numeric(date))), x = date)
-
-p2 <- plot_ly(data = iris, x = Sepal.Length, y = Petal.Length, mode = "markers", color = Species)
-
-htmltools::tagList(list(as.widget(p), as.widget(p2)))
-
-```
 # DiffBind 
 
 DiffBind [@DiffBind] is used to determine which peaks in a ChIP-Seq experiment are differential bound between sample data sets. For this report, we have subset the standard DiffBind data to plot only the single peak per gene which is closest to the gene's start site (e.g. lowest 'shortestDistance' value).
 
 
 ```{r, echo=TRUE}
-# CODE FOR PRODUCING THE PLOTS
 
 # function for formatting text in the report
 mycat <- function(text){
     cat(gsub(pattern = "\n", replacement = "  \n", x = text))
 }
 
-# function for the new custom plots:
+# function to process the DiffBind data
+Diff_process_data <- function(diff_df, signif_p_value=0.05, 
+                                                               fold_change_value=1, 
+                                                               plot_colors=c("red","gray","orange", "blue", "green"), 
+                                                               top_gene_number=10){
+    # browser() # use this for debugging
+    suppressPackageStartupMessages(library("data.table"))
+    # this function makes the custom DiffBind volcano plots
+    # only plots protein coding promoter genes from DiffBind output
+    # highlights top x fold changed genes
+    
+    
+    # ~~~~~~ PROCESS DATA ~~~~~~~~ # 
+    # get the colname order for later
+    original_colnames <- colnames(diff_df)
+    
+    
+    # GET THE CLOSEST DIFFBIND PEAK PER GENE 
+    # in Diffbind subset, getthe peaks closest to each gene
+    # # for each gene name, find the peak with the lowest "shortestDistance" value
+    # make it a data.table type
+    setDT(diff_df)
+    # get min value per factor, also remove duplicates
+    diff_df_min <- as.data.frame(diff_df[, .SD[which.min(shortestDistance)], by=external_gene_name])
+    # fix the colname order
+    diff_df_min <- diff_df_min[,original_colnames]
+    
+    # get sample ID's from 7th, 8th colnames
+    sampleID_1 <- colnames(diff_df_min)[7]
+    sampleID_2 <- colnames(diff_df_min)[8]
+    
+    
+    # subset for significant genes
+    diff_df_min_signiff <- as.data.frame(subset(diff_df_min, p.value<signif_p_value & abs(Fold)>fold_change_value))
+    
+    # subset for protein coding genes
+    diff_df_min_signiff_protein <- as.data.frame(subset(diff_df_min_signiff, gene_biotype=="protein_coding"))
+    
+    # subset top up/down protein coding genes
+    diff_df_min_signiff_UpFold <- diff_df_min_signiff_protein[with(diff_df_min_signiff_protein, 
+                                                                   order(Fold, p.value)), 
+                                                              c("Fold","p.value","external_gene_name")][1:top_gene_number,]
+    diff_df_min_signiff_DnFold <- diff_df_min_signiff_protein[with(diff_df_min_signiff_protein, 
+                                                                   order(-Fold, p.value)), 
+                                                              c("Fold","p.value","external_gene_name")][1:top_gene_number,]
+    # ~~~~~~~~~~~~~~ # 
+    
+    
+    
+    
+    diff_df_min <-diff_df_min[c("external_gene_name", "gene_biotype", "Fold", "p.value")]
+    diff_df_min["group"] <- "not_signif"
+    diff_df_min[which(diff_df_min['p.value'] < signif_p_value & abs(diff_df_min['Fold']) < fold_change_value ),"group"] <- "signif"
+    diff_df_min[which(diff_df_min['p.value'] > signif_p_value & abs(diff_df_min['Fold']) > fold_change_value ),"group"] <- "fc"
+    diff_df_min[which(diff_df_min['p.value'] < signif_p_value & abs(diff_df_min['Fold']) > fold_change_value ),"group"] <- "signif_fc"
+        # browser() # use this for debugging
+
+
+    
+    suppressPackageStartupMessages(library(dplyr))
+
+    
+    diff_df_min <- diff_df_min %>%
+        arrange(desc(gene_biotype == "protein_coding"), desc(Fold), p.value) %>% 
+        mutate(group = ifelse(row_number() < top_gene_number + 1 & abs(Fold) > fold_change_value, "top_signif_fc", group))
+    
+    diff_df_min <- diff_df_min %>%
+        arrange(desc(gene_biotype == "protein_coding"), Fold, p.value) %>% 
+        mutate(group = ifelse(row_number() < top_gene_number + 1 & abs(Fold) > fold_change_value, "top_signif_fc", group))
+    
+    return(diff_df_min)
+    
+}
+
+
+# Function for Plot.ly volcano plot
+DiffBind_volcano_plotly_top_protein_coding_promoters <- function(diff_df, signif_p_value=0.05, 
+                                                               fold_change_value=1, 
+                                                               plot_colors=c("red","gray","orange", "blue", "green"), 
+                                                               top_gene_number=10, ... ){
+    
+    
+    diff_df_min <- Diff_process_data(diff_df)
+
+    # ~~~~~~ MAKE PLOT ~~~~~~~~ # 
+    mycat('### Volcano Plot: Plot.ly\n')
+    suppressPackageStartupMessages(library("plotly"))
+    
+    plot_ly(data = diff_df_min, x = Fold, y = -log10(p.value), text = external_gene_name, mode = "markers", color = as.ordered(group), colors = plot_colors)
+    
+    # my_plot <- # can also save it to an object to be returned
+    # print(my_plot)
+    # print(htmltools::tagList(list(as.widget(my_plot))))
+    # return(my_plot)
+    
+    
+}
+
+
+Diff_stats <- function(diff_df, signif_p_value=0.05, fold_change_value=1, plot_colors=c("red","gray","orange", "blue", "green"), top_gene_number=10, ... ){
+    
+    # process the DiffData
+    diff_df_min <- Diff_process_data(diff_df)
+    
+    # print some gene table stats into the report; this could use optimization
+    mycat('\n\n')
+    mycat('\n******\n')
+    # FULL DATASET STATS
+    mycat('### Overall DiffBind Stats\n')
+    mycat(paste0('Total number of DiffBind peaks:\n', length(as.data.frame(diff_df)[["external_gene_name"]]), '\n\n'))
+    mycat(paste0('Total number of DiffBind genes:\n', length(unique(diff_df_min[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0('Total number positive fold change genes:\n', 
+                 length(unique(subset(diff_df_min, Fold > 0 )[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0('Total number negative fold change genes:\n', 
+                 length(unique(subset(diff_df_min, Fold < 0 )[["external_gene_name"]])), '\n\n'))
+    
+    # significant 
+    mycat('\n******\n')
+    mycat(paste0('Total number of p <' ,signif_p_value,' genes:\n', 
+                 length(unique(subset(diff_df_min, p.value<signif_p_value )[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0('Total number of p <' ,signif_p_value,' genes (pos. FC):\n', 
+                 length(unique(subset(diff_df_min, p.value<signif_p_value &
+                                          Fold > 0)[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0('Total number of p <' ,signif_p_value,' genes (neg. FC):\n', 
+                 length(unique(subset(diff_df_min, p.value<signif_p_value &
+                                          Fold < 0)[["external_gene_name"]])), '\n\n'))
+    
+    # fold change
+    mycat('\n******\n')
+    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes:\n',
+                 length(unique(subset(diff_df_min, abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes (pos. FC):\n',
+                 length(unique(subset(diff_df_min, abs(Fold)>fold_change_value & 
+                                          Fold > 0)[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes (neg. FC):\n',
+                 length(unique(subset(diff_df_min, abs(Fold)>fold_change_value & 
+                                          Fold < 0)[["external_gene_name"]])), '\n\n'))
+    
+    # siginificant & fold change
+    mycat('\n******\n')
+    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes:\n',
+                 length(unique(subset(diff_df_min, p.value<signif_p_value &
+                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes (pos. FC):\n',
+                 length(unique(subset(diff_df_min, p.value<signif_p_value & 
+                                          Fold > 0 &
+                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes (neg. FC):\n',
+                 length(unique(subset(diff_df_min, p.value<signif_p_value & 
+                                          Fold < 0 &
+                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
+    
+    
+    mycat('\n\n')
+    mycat('\n******\n')
+    # ONLY PROTEIN CODING GENES
+    mycat('### Protein Coding Gene Stats\n') # gene_biotype=="protein_coding"
+    mycat(paste0('Total number of DiffBind peaks:\n', 
+                 length(subset(as.data.frame(diff_df), gene_biotype=="protein_coding")[["external_gene_name"]]), '\n\n'))
+    mycat(paste0('Total number of DiffBind genes:\n', 
+                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding")[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0('Total number positive fold change genes:\n', 
+                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" & 
+                                          Fold > 0 )[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0('Total number negative fold change genes:\n', 
+                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
+                                          Fold < 0 )[["external_gene_name"]])), '\n\n'))
+    
+    # significant 
+    mycat('\n******\n')
+    mycat(paste0('Total number of p <' ,signif_p_value,' genes:\n', 
+                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
+                                          p.value<signif_p_value )[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0('Total number of p <' ,signif_p_value,' genes (pos. FC):\n', 
+                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
+                                          p.value<signif_p_value &
+                                          Fold > 0)[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0('Total number of p <' ,signif_p_value,' genes (neg. FC):\n', 
+                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
+                                          p.value<signif_p_value &
+                                          Fold < 0)[["external_gene_name"]])), '\n\n'))
+    
+    # fold change
+    mycat('\n******\n')
+    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes:\n',
+                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
+                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes (pos. FC):\n',
+                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
+                                          abs(Fold)>fold_change_value & 
+                                          Fold > 0)[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes (neg. FC):\n',
+                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
+                                          abs(Fold)>fold_change_value & 
+                                          Fold < 0)[["external_gene_name"]])), '\n\n'))
+    
+    # siginificant & fold change
+    mycat('\n******\n')
+    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes:\n',
+                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
+                                          p.value<signif_p_value &
+                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes (pos. FC):\n',
+                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
+                                          p.value<signif_p_value & 
+                                          Fold > 0 &
+                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
+    
+    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes (neg. FC):\n',
+                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
+                                          p.value<signif_p_value & 
+                                          Fold < 0 &
+                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
+    
+    
+    
+    mycat('\n')
+    mycat('\n******\n')
+    mycat('\n******\n')
+    
+}
+
+# function for the base R plots:
 DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p_value=0.05, 
                                                                fold_change_value=1, 
                                                                plot_colors=c("grey","red","orange","blue", "green"), 
@@ -100,6 +321,7 @@ DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p
     # browser() # use this for debugging
     
     # ~~~~~~ MAKE PLOT ~~~~~~~~ # 
+    mycat('### Volcano Plot: base R\n')
     # set the multi-pane plot layout matrix
     plot_layout_matrix<-structure(c(1L, 2L, 2L, 2L, 2L, 2L, 3L, 3L, 3L, 3L, 
                                     3L, 1L, 2L, 2L, 2L, 2L, 2L, 3L, 3L, 3L, 
@@ -159,501 +381,11 @@ DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p
     
     
     
-    # print some gene table stats into the report; this could use optimization
-    mycat('\n\n')
-    mycat('\n******\n')
-    # FULL DATASET STATS
-    mycat('### Overall DiffBind Stats\n')
-    mycat(paste0('Total number of DiffBind peaks:\n', length(as.data.frame(diff_df)[["external_gene_name"]]), '\n\n'))
-    mycat(paste0('Total number of DiffBind genes:\n', length(unique(diff_df_min[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number positive fold change genes:\n', 
-                 length(unique(subset(diff_df_min, Fold > 0 )[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number negative fold change genes:\n', 
-                 length(unique(subset(diff_df_min, Fold < 0 )[["external_gene_name"]])), '\n\n'))
-    
-    # significant 
-    mycat('\n******\n')
-    mycat(paste0('Total number of p <' ,signif_p_value,' genes:\n', 
-                 length(unique(subset(diff_df_min, p.value<signif_p_value )[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number of p <' ,signif_p_value,' genes (pos. FC):\n', 
-                 length(unique(subset(diff_df_min, p.value<signif_p_value &
-                                          Fold > 0)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number of p <' ,signif_p_value,' genes (neg. FC):\n', 
-                 length(unique(subset(diff_df_min, p.value<signif_p_value &
-                                          Fold < 0)[["external_gene_name"]])), '\n\n'))
-    
-    # fold change
-    mycat('\n******\n')
-    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes:\n',
-                 length(unique(subset(diff_df_min, abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes (pos. FC):\n',
-                 length(unique(subset(diff_df_min, abs(Fold)>fold_change_value & 
-                                          Fold > 0)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes (neg. FC):\n',
-                 length(unique(subset(diff_df_min, abs(Fold)>fold_change_value & 
-                                          Fold < 0)[["external_gene_name"]])), '\n\n'))
-    
-    # siginificant & fold change
-    mycat('\n******\n')
-    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes:\n',
-                 length(unique(subset(diff_df_min, p.value<signif_p_value &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes (pos. FC):\n',
-                 length(unique(subset(diff_df_min, p.value<signif_p_value & 
-                                          Fold > 0 &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes (neg. FC):\n',
-                 length(unique(subset(diff_df_min, p.value<signif_p_value & 
-                                          Fold < 0 &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    
-    mycat('\n\n')
-    mycat('\n******\n')
-    # ONLY PROTEIN CODING GENES
-    mycat('### Protein Coding Gene Stats\n') # gene_biotype=="protein_coding"
-    mycat(paste0('Total number of DiffBind peaks:\n', 
-                 length(subset(as.data.frame(diff_df), gene_biotype=="protein_coding")[["external_gene_name"]]), '\n\n'))
-    mycat(paste0('Total number of DiffBind genes:\n', 
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding")[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number positive fold change genes:\n', 
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" & 
-                                          Fold > 0 )[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number negative fold change genes:\n', 
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          Fold < 0 )[["external_gene_name"]])), '\n\n'))
-    
-    # significant 
-    mycat('\n******\n')
-    mycat(paste0('Total number of p <' ,signif_p_value,' genes:\n', 
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          p.value<signif_p_value )[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number of p <' ,signif_p_value,' genes (pos. FC):\n', 
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          p.value<signif_p_value &
-                                          Fold > 0)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number of p <' ,signif_p_value,' genes (neg. FC):\n', 
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          p.value<signif_p_value &
-                                          Fold < 0)[["external_gene_name"]])), '\n\n'))
-    
-    # fold change
-    mycat('\n******\n')
-    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes:\n',
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes (pos. FC):\n',
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          abs(Fold)>fold_change_value & 
-                                          Fold > 0)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes (neg. FC):\n',
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          abs(Fold)>fold_change_value & 
-                                          Fold < 0)[["external_gene_name"]])), '\n\n'))
-    
-    # siginificant & fold change
-    mycat('\n******\n')
-    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes:\n',
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          p.value<signif_p_value &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes (pos. FC):\n',
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          p.value<signif_p_value & 
-                                          Fold > 0 &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes (neg. FC):\n',
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          p.value<signif_p_value & 
-                                          Fold < 0 &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    
-    
-    mycat('\n')
-    mycat('\n******\n')
-    mycat('\n******\n')
-    
-    
-}
-
-```
-
-
-
-
-```{r, echo=TRUE}
-DiffBind_volcano_plotly_top_protein_coding_promoters <- function(diff_df, signif_p_value=0.05, 
-                                                               fold_change_value=1, 
-                                                               plot_colors=c("red","gray","orange", "blue", "green"), 
-                                                               top_gene_number=10){
-    # browser() # use this for debugging
-    
-    # this function makes the custom DiffBind volcano plots
-    # only plots protein coding promoter genes from DiffBind output
-    # highlights top x fold changed genes
-    
-    
-    # ~~~~~~ PROCESS DATA ~~~~~~~~ # 
-    # get the colname order for later
-    original_colnames <- colnames(diff_df)
-    
-    suppressPackageStartupMessages(library("data.table"))
-    # GET THE CLOSEST DIFFBIND PEAK PER GENE 
-    # in Diffbind subset, getthe peaks closest to each gene
-    # # for each gene name, find the peak with the lowest "shortestDistance" value
-    # make it a data.table type
-    setDT(diff_df)
-    # get min value per factor, also remove duplicates
-    diff_df_min <- as.data.frame(diff_df[, .SD[which.min(shortestDistance)], by=external_gene_name])
-    # fix the colname order
-    diff_df_min <- diff_df_min[,original_colnames]
-    
-    # get sample ID's from 7th, 8th colnames
-    sampleID_1 <- colnames(diff_df_min)[7]
-    sampleID_2 <- colnames(diff_df_min)[8]
-    
-    
-    # subset for significant genes
-    diff_df_min_signiff <- as.data.frame(subset(diff_df_min, p.value<signif_p_value & abs(Fold)>fold_change_value))
-    
-    # subset for protein coding genes
-    diff_df_min_signiff_protein <- as.data.frame(subset(diff_df_min_signiff, gene_biotype=="protein_coding"))
-    
-    # subset top up/down protein coding genes
-    diff_df_min_signiff_UpFold <- diff_df_min_signiff_protein[with(diff_df_min_signiff_protein, 
-                                                                   order(Fold, p.value)), 
-                                                              c("Fold","p.value","external_gene_name")][1:top_gene_number,]
-    diff_df_min_signiff_DnFold <- diff_df_min_signiff_protein[with(diff_df_min_signiff_protein, 
-                                                                   order(-Fold, p.value)), 
-                                                              c("Fold","p.value","external_gene_name")][1:top_gene_number,]
-    # ~~~~~~~~~~~~~~ # 
-    
-    
-    
-    
-    diff_df_min <-diff_df_min[c("external_gene_name", "gene_biotype", "Fold", "p.value")]
-    diff_df_min["group"] <- "not_signif"
-    diff_df_min[which(diff_df_min['p.value'] < signif_p_value & abs(diff_df_min['Fold']) < fold_change_value ),"group"] <- "signif"
-    diff_df_min[which(diff_df_min['p.value'] > signif_p_value & abs(diff_df_min['Fold']) > fold_change_value ),"group"] <- "fc"
-    diff_df_min[which(diff_df_min['p.value'] < signif_p_value & abs(diff_df_min['Fold']) > fold_change_value ),"group"] <- "signif_fc"
-        # browser() # use this for debugging
-
-    # to test:
-    # diff_df_min[which(diff_df_min['external_gene_name'] == "CROCC"),]
-#        external_gene_name   gene_biotype Fold  p.value     group
-# 12              CROCC protein_coding 5.46 3.44e-14 signif_fc
-
-    
-    suppressPackageStartupMessages(library(dplyr))
-    # mydf %>%
-    # group_by(yearmonth) %>%
-    # arrange(desc(count)) %>%
-    # slice(1:2)
-    
-    # head(diff_df_min)
-    # dim(diff_df_min)
-    
-    # diff_df_min %>%
-    #     filter(gene_biotype == "protein_coding") %>% # subset for protein coding genes
-    #     arrange(-Fold, p.value) %>% # Sort by Fold change, then by p value
-    #     slice(1:10) %>% # take the top 10 entries... 
-    #     mutate(group = "top_signif_fc") # ... and change the "group" column value to "top_signif_fc"
-    # 
-        
-    # diff_df_minNew <- diff_df_min %>%
-    #                   mutate(ind = gene_biotype  != "protein_coding") %>% 
-    #                   arrange(ind, -Fold, p.value) %>% 
-    #                   mutate(group = ifelse(row_number() < 11, "top_signif_fc", group)) %>%
-    #                   select(-ind)
-    
-    # p.value<signif_p_value & abs(Fold)>fold_change_value
-    
-    diff_df_min <- diff_df_min %>%
-        arrange(desc(gene_biotype == "protein_coding"), desc(Fold), p.value) %>% 
-        mutate(group = ifelse(row_number() < top_gene_number + 1 & abs(Fold) > fold_change_value, "top_signif_fc", group))
-    
-    diff_df_min <- diff_df_min %>%
-        arrange(desc(gene_biotype == "protein_coding"), Fold, p.value) %>% 
-        mutate(group = ifelse(row_number() < top_gene_number + 1 & abs(Fold) > fold_change_value, "top_signif_fc", group))
-    
-    
-    # which(diff_df_min)
-    # diff_df_min[which(diff_df_min['gene_biotype'] == "protein_coding"),]
-    # 
-    # head(within(subset(diff_df_min, gene_biotype == "protein_coding"), order(-Fold, p.value))) 
-    # 
-    # diff_df_min[with(diff_df_min[which(diff_df_min[['gene_biotype']] == "protein_coding", arr.ind = TRUE),], order(-Fold, p.value) ),"gene_biotype"][1:top_gene_number]
-    # 
-    # diff_df_min[with(diff_df_min[which(diff_df_min['gene_biotype'] == "protein_coding"),], order(-Fold, p.value) ),"gene_biotype"][1:top_gene_number] <- "top_signif_fc"
-    # diff_df_min[with(diff_df_min[which(diff_df_min['gene_biotype'] == "protein_coding"),], order(-Fold, p.value) ),"group"][1:top_gene_number] <- "top_signif_fc"
-    # # diff_df_min[with(diff_df_min, order(Fold, p.value)),"group"][1:top_gene_number] <- "top_signif_fc" 
-    
-    
-    
-    # require(data.table)
-    # d <- data.table(mtcars, key="cyl")
-    # d[, head(.SD, 4), by=cyl]
-    # 
-    # setDT(diff_df_min,key = "external_gene_name")
-    # diff_df_min <- diff_df_min[gene_biotype == "protein_coding"][order(-Fold, p.value), head(.SD, 10)][,group := "top_signif_fc"]
-    # diff_df_min[gene_biotype == "protein_coding"][order(Fold, p.value), head(.SD, top_gene_number)][,group := "top_signif_fc"]
-    
-    # diff_df_min[gene_biotype == "protein_coding" & order(Fold, p.value), head(.SD, top_gene_number)][,group := "top_signif_fc"]
-    
-    # diff_df_min[gene_biotype == "protein_coding" & order(Fold, p.value)]
-    # ~~~~~~ MAKE PLOT ~~~~~~~~ # 
-    mycat('### Volcano Plot\n')
-    suppressPackageStartupMessages(library("plotly"))
-    my_plot <- plot_ly(data = diff_df_min, x = Fold, y = -log10(p.value), text = external_gene_name, mode = "markers", color = as.ordered(group), colors = plot_colors)
-    
-    # print(my_plot)
-    # print(htmltools::tagList(list(as.widget(my_plot))))
-    return(my_plot)
-    
-    
-}
-
-
-Diff_stats <- function(diff_df, signif_p_value=0.05, fold_change_value=1, plot_colors=c("red","gray","orange", "blue", "green"), top_gene_number=10){
-    # ~~~~~~ PROCESS DATA ~~~~~~~~ # 
-    # get the colname order for later
-    original_colnames <- colnames(diff_df)
-    
-    suppressPackageStartupMessages(library("data.table"))
-    # GET THE CLOSEST DIFFBIND PEAK PER GENE 
-    # in Diffbind subset, getthe peaks closest to each gene
-    # # for each gene name, find the peak with the lowest "shortestDistance" value
-    # make it a data.table type
-    setDT(diff_df)
-    # get min value per factor, also remove duplicates
-    diff_df_min <- as.data.frame(diff_df[, .SD[which.min(shortestDistance)], by=external_gene_name])
-    # fix the colname order
-    diff_df_min <- diff_df_min[,original_colnames]
-    
-    # get sample ID's from 7th, 8th colnames
-    sampleID_1 <- colnames(diff_df_min)[7]
-    sampleID_2 <- colnames(diff_df_min)[8]
-    
-    
-    # subset for significant genes
-    diff_df_min_signiff <- as.data.frame(subset(diff_df_min, p.value<signif_p_value & abs(Fold)>fold_change_value))
-    
-    # subset for protein coding genes
-    diff_df_min_signiff_protein <- as.data.frame(subset(diff_df_min_signiff, gene_biotype=="protein_coding"))
-    
-    # subset top up/down protein coding genes
-    diff_df_min_signiff_UpFold <- diff_df_min_signiff_protein[with(diff_df_min_signiff_protein, 
-                                                                   order(Fold, p.value)), 
-                                                              c("Fold","p.value","external_gene_name")][1:top_gene_number,]
-    diff_df_min_signiff_DnFold <- diff_df_min_signiff_protein[with(diff_df_min_signiff_protein, 
-                                                                   order(-Fold, p.value)), 
-                                                              c("Fold","p.value","external_gene_name")][1:top_gene_number,]
-    # ~~~~~~~~~~~~~~ # 
-    
-    
-    
-    
-    diff_df_min <-diff_df_min[c("external_gene_name", "gene_biotype", "Fold", "p.value")]
-    diff_df_min["group"] <- "not_signif"
-    diff_df_min[which(diff_df_min['p.value'] < signif_p_value & abs(diff_df_min['Fold']) < fold_change_value ),"group"] <- "signif"
-    diff_df_min[which(diff_df_min['p.value'] > signif_p_value & abs(diff_df_min['Fold']) > fold_change_value ),"group"] <- "fc"
-    diff_df_min[which(diff_df_min['p.value'] < signif_p_value & abs(diff_df_min['Fold']) > fold_change_value ),"group"] <- "signif_fc"
-        # browser() # use this for debugging
-
-    # to test:
-    # diff_df_min[which(diff_df_min['external_gene_name'] == "CROCC"),]
-#        external_gene_name   gene_biotype Fold  p.value     group
-# 12              CROCC protein_coding 5.46 3.44e-14 signif_fc
-
-    
-    suppressPackageStartupMessages(library(dplyr))
-    # mydf %>%
-    # group_by(yearmonth) %>%
-    # arrange(desc(count)) %>%
-    # slice(1:2)
-    
-    # head(diff_df_min)
-    # dim(diff_df_min)
-    
-    # diff_df_min %>%
-    #     filter(gene_biotype == "protein_coding") %>% # subset for protein coding genes
-    #     arrange(-Fold, p.value) %>% # Sort by Fold change, then by p value
-    #     slice(1:10) %>% # take the top 10 entries... 
-    #     mutate(group = "top_signif_fc") # ... and change the "group" column value to "top_signif_fc"
-    # 
-        
-    # diff_df_minNew <- diff_df_min %>%
-    #                   mutate(ind = gene_biotype  != "protein_coding") %>% 
-    #                   arrange(ind, -Fold, p.value) %>% 
-    #                   mutate(group = ifelse(row_number() < 11, "top_signif_fc", group)) %>%
-    #                   select(-ind)
-    
-    # p.value<signif_p_value & abs(Fold)>fold_change_value
-    
-    diff_df_min <- diff_df_min %>%
-        arrange(desc(gene_biotype == "protein_coding"), desc(Fold), p.value) %>% 
-        mutate(group = ifelse(row_number() < top_gene_number + 1 & abs(Fold) > fold_change_value, "top_signif_fc", group))
-    
-    diff_df_min <- diff_df_min %>%
-        arrange(desc(gene_biotype == "protein_coding"), Fold, p.value) %>% 
-        mutate(group = ifelse(row_number() < top_gene_number + 1 & abs(Fold) > fold_change_value, "top_signif_fc", group))
-    
-    # print some gene table stats into the report; this could use optimization
-    mycat('\n\n')
-    mycat('\n******\n')
-    # FULL DATASET STATS
-    mycat('### Overall DiffBind Stats\n')
-    mycat(paste0('Total number of DiffBind peaks:\n', length(as.data.frame(diff_df)[["external_gene_name"]]), '\n\n'))
-    mycat(paste0('Total number of DiffBind genes:\n', length(unique(diff_df_min[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number positive fold change genes:\n', 
-                 length(unique(subset(diff_df_min, Fold > 0 )[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number negative fold change genes:\n', 
-                 length(unique(subset(diff_df_min, Fold < 0 )[["external_gene_name"]])), '\n\n'))
-    
-    # significant 
-    mycat('\n******\n')
-    mycat(paste0('Total number of p <' ,signif_p_value,' genes:\n', 
-                 length(unique(subset(diff_df_min, p.value<signif_p_value )[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number of p <' ,signif_p_value,' genes (pos. FC):\n', 
-                 length(unique(subset(diff_df_min, p.value<signif_p_value &
-                                          Fold > 0)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number of p <' ,signif_p_value,' genes (neg. FC):\n', 
-                 length(unique(subset(diff_df_min, p.value<signif_p_value &
-                                          Fold < 0)[["external_gene_name"]])), '\n\n'))
-    
-    # fold change
-    mycat('\n******\n')
-    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes:\n',
-                 length(unique(subset(diff_df_min, abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes (pos. FC):\n',
-                 length(unique(subset(diff_df_min, abs(Fold)>fold_change_value & 
-                                          Fold > 0)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes (neg. FC):\n',
-                 length(unique(subset(diff_df_min, abs(Fold)>fold_change_value & 
-                                          Fold < 0)[["external_gene_name"]])), '\n\n'))
-    
-    # siginificant & fold change
-    mycat('\n******\n')
-    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes:\n',
-                 length(unique(subset(diff_df_min, p.value<signif_p_value &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes (pos. FC):\n',
-                 length(unique(subset(diff_df_min, p.value<signif_p_value & 
-                                          Fold > 0 &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes (neg. FC):\n',
-                 length(unique(subset(diff_df_min, p.value<signif_p_value & 
-                                          Fold < 0 &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    
-    mycat('\n\n')
-    mycat('\n******\n')
-    # ONLY PROTEIN CODING GENES
-    mycat('### Protein Coding Gene Stats\n') # gene_biotype=="protein_coding"
-    mycat(paste0('Total number of DiffBind peaks:\n', 
-                 length(subset(as.data.frame(diff_df), gene_biotype=="protein_coding")[["external_gene_name"]]), '\n\n'))
-    mycat(paste0('Total number of DiffBind genes:\n', 
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding")[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number positive fold change genes:\n', 
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" & 
-                                          Fold > 0 )[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number negative fold change genes:\n', 
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          Fold < 0 )[["external_gene_name"]])), '\n\n'))
-    
-    # significant 
-    mycat('\n******\n')
-    mycat(paste0('Total number of p <' ,signif_p_value,' genes:\n', 
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          p.value<signif_p_value )[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number of p <' ,signif_p_value,' genes (pos. FC):\n', 
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          p.value<signif_p_value &
-                                          Fold > 0)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0('Total number of p <' ,signif_p_value,' genes (neg. FC):\n', 
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          p.value<signif_p_value &
-                                          Fold < 0)[["external_gene_name"]])), '\n\n'))
-    
-    # fold change
-    mycat('\n******\n')
-    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes:\n',
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes (pos. FC):\n',
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          abs(Fold)>fold_change_value & 
-                                          Fold > 0)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of log2(Fold Change) > ",fold_change_value, ' genes (neg. FC):\n',
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          abs(Fold)>fold_change_value & 
-                                          Fold < 0)[["external_gene_name"]])), '\n\n'))
-    
-    # siginificant & fold change
-    mycat('\n******\n')
-    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes:\n',
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          p.value<signif_p_value &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes (pos. FC):\n',
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          p.value<signif_p_value & 
-                                          Fold > 0 &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    mycat(paste0("Total number of p < ",signif_p_value," & log2(Fold Change) > ",fold_change_value, ' genes (neg. FC):\n',
-                 length(unique(subset(diff_df_min, gene_biotype=="protein_coding" &
-                                          p.value<signif_p_value & 
-                                          Fold < 0 &
-                                          abs(Fold)>fold_change_value)[["external_gene_name"]])), '\n\n'))
-    
-    
-    
-    mycat('\n')
-    mycat('\n******\n')
-    mycat('\n******\n')
-    
 }
 ```
-
 
 
 ```{r, results='asis', echo=TRUE}
-suppressPackageStartupMessages(library("plotly"))
-
 mycat('# Plots and Results {.tabset}\n\n') # .tabset-fade .tabset-pills
 
 # out_dir <- "/ifs/home/kellys04/projects/Bioinformatics/DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/input"
@@ -666,83 +398,45 @@ diff_cl4_ctrl_file <- paste0(out_dir,"/diff_bind.Treatment4-ChIPSeq-vs-Control-C
 diff_cl4_cl5_file <- paste0(out_dir,"/diff_bind.Treatment4-ChIPSeq-vs-Treatment5-ChIPSeq.p100.csv")
 diff_cl5_ctrl_file <- paste0(out_dir,"/diff_bind.Treatment5-ChIPSeq-vs-Control-ChIPSeq.p100.csv")
 
-# pdf(file = paste0(diff_cl4_ctrl_file,"_volcano_plot.pdf"),height = 8,width = 8)
-mycat(paste0("## ", basename(diff_cl4_ctrl_file), ' {.tabset}\n'))
-diff_df <- read.delim(file = diff_cl4_ctrl_file,header = TRUE,sep = ',')
-# DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
+sample_file_list <- setNames(c(diff_cl4_ctrl_file, diff_cl4_cl5_file, diff_cl5_ctrl_file),
+                             c("Sample4_Control", "Sample4_Sample5", "Sample5_Control"))
+
+
+
+sample_file <- sample_file_list[1]
+mycat(paste0("## ", names(sample_file), ' {.tabset}\n'))
+diff_df <- read.delim(file = sample_file,header = TRUE,sep = ',')
 DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
-Diff_stats(diff_df = diff_df)
-# my_plot <- DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
-# htmltools::tagList(list(as.widget(my_plot)))
-# dev.off()
-
-# pdf(file = paste0(diff_cl4_cl5_file,"_volcano_plot.pdf"),height = 8,width = 8)
-mycat(paste0("## ", basename(diff_cl4_cl5_file), ' {.tabset}\n'))
-diff_df <- read.delim(file = diff_cl4_cl5_file,header = TRUE,sep = ',')
 # DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
-DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
 Diff_stats(diff_df = diff_df)
-# my_plot <- DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
-# htmltools::tagList(list(as.widget(my_plot)))
 
-# dev.off()
 
-# pdf(file = paste0(diff_cl5_ctrl_file,"_volcano_plot.pdf"),height = 8,width = 8)
-mycat(paste0("## ", basename(diff_cl5_ctrl_file), ' {.tabset}\n'))
-diff_df <- read.delim(file = diff_cl5_ctrl_file,header = TRUE,sep = ',')
+sample_file <- sample_file_list[2]
+mycat(paste0("## ", names(sample_file), ' {.tabset}\n'))
+diff_df <- read.delim(file = sample_file,header = TRUE,sep = ',')
+DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
 # DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
-DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
 Diff_stats(diff_df = diff_df)
-# my_plot <- DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
-# htmltools::tagList(list(as.widget(my_plot)))
 
-# dev.off()
+sample_file <- sample_file_list[3]
+mycat(paste0("## ", names(sample_file), ' {.tabset}\n'))
+diff_df <- read.delim(file = sample_file,header = TRUE,sep = ',')
+DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
+# DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
+Diff_stats(diff_df = diff_df)
 
-```
+# LOOP DOES NOT WORK, FIGURE THIS OUT LATER
+# DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = read.delim(file = sample_file_list[1], header = TRUE,sep = ','))
 
-
-```{r, eval=FALSE}
-mycat('# Plotly Test\n\n')
-# https://plot.ly/r/knitr/
-# install.packages("plotly")
-suppressPackageStartupMessages(library("plotly"))
-# p <- plot_ly(economics, x = date, y = unemploy / pop)
-# p
-p <- plot_ly(economics, x = date, y = uempmed, name = "unemployment")
-p <- p %>% add_trace(y = fitted(loess(uempmed ~ as.numeric(date))), x = date)
-
-p2 <- plot_ly(data = iris, x = Sepal.Length, y = Petal.Length, mode = "markers", color = Species)
-
-htmltools::tagList(list(as.widget(p), as.widget(p2)))
-
-# test the plotly..
-
-# base R 
- # # add base volcano plot; all points
- #    with(diff_df_min, plot(Fold, -log10(p.value), pch=20, xlim=c(min(Fold)-1,max(Fold)+1),col=plot_colors[1],xlab = "log2(Fold Change)"))
- #    
- #    # Add colored points for data subsets
- #    with(subset(diff_df_min, p.value<signif_p_value ), points(Fold, -log10(p.value), pch=20, col=plot_colors[2]))
- #    with(subset(diff_df_min, abs(Fold)>fold_change_value), points(Fold, -log10(p.value), pch=20, col=plot_colors[3]))
- #    with(subset(diff_df_min, p.value<signif_p_value & abs(Fold)>fold_change_value), points(Fold, -log10(p.value), pch=20, col=plot_colors[4]))
-
-# # melt it into long format
-#     if (melt_df) diff_log_ratio <- reshape2::melt(diff_log_ratio,id.vars="gene",variable.name="sample",value.name="diff_peak_log_ratio")
-# 
-# diff_df_min_sub <-diff_df_min[c("external_gene_name", "gene_biotype", "Fold", "p.value")]
-# diff_df_min_sub["group"] <- "NotSignif"
-# diff_df_min_sub[which(diff_df_min_sub['p.value'] < signif_p_value & abs(diff_df_min_sub['Fold']) < fold_change_value ),"group"] <- "signif"
-# diff_df_min_sub[which(diff_df_min_sub['p.value'] > signif_p_value & abs(diff_df_min_sub['Fold']) > fold_change_value ),"group"] <- "FC"
-# diff_df_min_sub[which(diff_df_min_sub['p.value'] < signif_p_value & abs(diff_df_min_sub['Fold']) > fold_change_value ),"group"] <- "signif_FC"
-# 
-# head(diff_df_min_sub, 100)
-# 
-# plot_ly(data = diff_df_min_sub, x = Fold, y = -log10(p.value), mode = "markers", color = group)
-# <!-- # References -->
-# citation_package: natbib
-# bibliography: references.bib
-# biblio-style: apsr
-# <!-- [@DiffBind] -->
+# for(i in seq_along(sample_file_list)){
+#     sample_file <- sample_file_list[i]
+#     mycat(paste0("## ", names(sample_file), ' {.tabset}\n'))
+#     # mycat(paste0("File: ", sample_file, '\n'))
+#     diff_df <- read.delim(file = sample_file,header = TRUE,sep = ',')
+#     print(DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df))
+#     DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
+#     Diff_stats(diff_df = diff_df)
+# }
 ```
 
 # System Information
