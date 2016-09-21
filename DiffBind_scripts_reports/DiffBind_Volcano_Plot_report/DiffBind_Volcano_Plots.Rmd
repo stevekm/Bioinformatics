@@ -34,10 +34,10 @@ mycat <- function(text){
 }
 
 # function to process the DiffBind data
-Diff_process_data <- function(diff_df, signif_p_value=0.05, 
-                                                               fold_change_value=1, 
-                                                               plot_colors=c("red","gray","orange", "blue", "green"), 
-                                                               top_gene_number=10){
+Diff_process_data <- function(diff_df, signif_p_value=0.05,
+                              fold_change_value=1, 
+                              top_gene_number=10){
+    
     # browser() # use this for debugging
     suppressPackageStartupMessages(library("data.table"))
     # this function makes the custom DiffBind volcano plots
@@ -109,13 +109,11 @@ Diff_process_data <- function(diff_df, signif_p_value=0.05,
 
 
 # Function for Plot.ly volcano plot
-DiffBind_volcano_plotly_top_protein_coding_promoters <- function(diff_df, signif_p_value=0.05, 
-                                                               fold_change_value=1, 
-                                                               plot_colors=c("red","gray","orange", "blue", "green"), 
-                                                               top_gene_number=10, ... ){
+DiffBind_volcano_plotly_top_protein_coding_promoters <- function(diff_df, plot_colors=c("red","gray","orange", "blue", "green"), ... ){
     
     
-    diff_df_min <- Diff_process_data(diff_df)
+    # diff_df_min <- Diff_process_data(diff_df)
+    diff_df_min <- diff_df
 
     # ~~~~~~ MAKE PLOT ~~~~~~~~ # 
     mycat('### Volcano Plot: Plot.ly\n')
@@ -132,7 +130,7 @@ DiffBind_volcano_plotly_top_protein_coding_promoters <- function(diff_df, signif
 }
 
 
-Diff_stats <- function(diff_df, signif_p_value=0.05, fold_change_value=1, plot_colors=c("red","gray","orange", "blue", "green"), top_gene_number=10, ... ){
+Diff_stats <- function(diff_df, signif_p_value=0.05, fold_change_value=1, top_gene_number=10, ... ){
     
     # process the DiffData
     diff_df_min <- Diff_process_data(diff_df)
@@ -386,8 +384,9 @@ DiffBind_volcano_plot_top_protein_coding_promoters <- function(diff_df, signif_p
 
 
 ```{r, results='asis', echo=TRUE}
+#
+suppressPackageStartupMessages(library("plotly"))
 mycat('# Plots and Results {.tabset}\n\n') # .tabset-fade .tabset-pills
-
 # out_dir <- "/ifs/home/kellys04/projects/Bioinformatics/DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/input"
 out_dir <- "/Users/kellys04/Bioinformatics/DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/input"
 
@@ -402,11 +401,11 @@ sample_file_list <- setNames(c(diff_cl4_ctrl_file, diff_cl4_cl5_file, diff_cl5_c
                              c("Sample4_Control", "Sample4_Sample5", "Sample5_Control"))
 
 
-
+ 
 sample_file <- sample_file_list[1]
 mycat(paste0("## ", names(sample_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = sample_file,header = TRUE,sep = ',')
-DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
+DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = Diff_process_data(diff_df))
 # DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
 Diff_stats(diff_df = diff_df)
 
@@ -414,16 +413,19 @@ Diff_stats(diff_df = diff_df)
 sample_file <- sample_file_list[2]
 mycat(paste0("## ", names(sample_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = sample_file,header = TRUE,sep = ',')
-DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
+DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = Diff_process_data(diff_df))
 # DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
 Diff_stats(diff_df = diff_df)
 
+
+# NOTE: THIS ONE IS MESSED UP CHECK THE NUMBERS IN THE STATS!!
 sample_file <- sample_file_list[3]
 mycat(paste0("## ", names(sample_file), ' {.tabset}\n'))
 diff_df <- read.delim(file = sample_file,header = TRUE,sep = ',')
-DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df)
+DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = Diff_process_data(diff_df))
 # DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
 Diff_stats(diff_df = diff_df)
+
 
 # LOOP DOES NOT WORK, FIGURE THIS OUT LATER
 # DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = read.delim(file = sample_file_list[1], header = TRUE,sep = ','))
@@ -433,10 +435,23 @@ Diff_stats(diff_df = diff_df)
 #     mycat(paste0("## ", names(sample_file), ' {.tabset}\n'))
 #     # mycat(paste0("File: ", sample_file, '\n'))
 #     diff_df <- read.delim(file = sample_file,header = TRUE,sep = ',')
-#     print(DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df))
-#     DiffBind_volcano_plot_top_protein_coding_promoters(diff_df = diff_df)
+#     diff_df_processed <- Diff_process_data(diff_df)
+#     DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = diff_df_processed)
 #     Diff_stats(diff_df = diff_df)
 # }
+
+# this also does not work... 
+
+# Map(function(x){
+#     mycat(paste0("## ", names(x), ' {.tabset}\n'))
+#     mycat('### Volcano Plot: Plot.ly\n')
+#     print(plot_ly(data = Diff_process_data(read.delim(file = x, header = TRUE,sep = ',')), 
+#             x = Fold, y = -log10(p.value), text = external_gene_name, mode = "markers", color = as.ordered(group), colors = plot_colors))
+#     # DiffBind_volcano_plotly_top_protein_coding_promoters(diff_df = Diff_process_data(read.delim(file = x, header = TRUE,sep = ',')))
+#     Diff_stats(diff_df = read.delim(file = x, header = TRUE,sep = ','))
+# }, sample_file_list)
+
+
 ```
 
 # System Information
