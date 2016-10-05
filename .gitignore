@@ -17,3 +17,5 @@ DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/DiffBind_Volcano_Plots_fil
 DiffBind_scripts_reports/DiffBind_Volcano_Plot_report/input/*
 .DS_Store
 *.html
+DiffBind_scripts_reports/DiffBind_GeneExpression_Beanplot_report/input/
+.RData

@@ -1,0 +1,18 @@
+---
+title: "DiffBind GeneExpresion Beanplot"
+author: "Stephen Kelly"
+date: "10/5/2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, engine='bash'}
+
+# path to the DiffBind directory
+input_dir="/ifs/home/kellys04/projects/Bioinformatics/DiffBind_scripts_reports/DiffBind_GeneExpression_Beanplot_report/input"
+
+```
