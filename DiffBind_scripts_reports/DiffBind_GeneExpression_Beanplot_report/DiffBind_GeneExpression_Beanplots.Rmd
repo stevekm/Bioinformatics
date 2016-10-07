@@ -34,6 +34,12 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # <link href="markdown-custom.css" rel="stylesheet">
 
+# http://stackoverflow.com/questions/15385696/how-to-adjust-the-output-width-of-rstudio-markdown-output-to-html
+# http://stackoverflow.com/questions/28480625/r-knitr-markown-setting-html-page-width
+# http://stackoverflow.com/questions/14662626/set-page-width-in-knitr-for-md-or-html-output
+# https://github.com/yihui/knitr/issues/362
+# https://nsaunders.wordpress.com/2012/08/27/custom-css-for-html-generated-using-rstudio/
+# http://stackoverflow.com/questions/25166624/insert-picture-table-in-rmarkdown
 ```
 
 # Introduction
