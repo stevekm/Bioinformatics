@@ -40,11 +40,17 @@ knitr::opts_chunk$set(echo = TRUE)
 # https://github.com/yihui/knitr/issues/362
 # https://nsaunders.wordpress.com/2012/08/27/custom-css-for-html-generated-using-rstudio/
 # http://stackoverflow.com/questions/25166624/insert-picture-table-in-rmarkdown
+# https://github.com/yihui/knitr/issues/362
 ```
 
 # Introduction
 
+During analysis of a ChIP-Seq experiment, we wanted to compare the differential peak data from DiffBind with gene expression data from a microarray analysis. 
+
 # Setup
+
+
+First, required pacakges will be loaded. 
 
 ```{r}
 # ~~~~~ LOAD PACKAGES ~~~~~~~~ #
@@ -58,8 +64,13 @@ library("ggplot2")
 library("reshape2")
 library("preprocessCore")
 
+```
 
+Due to the complexity of this analysis pipeline, custom functions will be created. 
 
+Our pipeline will need to match up information on samples between two data sets. Sample ID's are saved in the column headings of both data sets, but include multiple entries for each sample set, and not all samples are present in both sets. This function will use a supplied regular expression to return a character vector of unqiue matching sample ID's in the supplied column names. 
+
+```{r}
 # ~~~~~ CUSTOM FUNCTIONS ~~~~~~~~ #
 get_replacements <- function(source_data, uniq=TRUE, pattern = "", remove_entry = NULL, ...){
     # return vector of first matches to regex
@@ -79,7 +90,11 @@ get_replacements <- function(source_data, uniq=TRUE, pattern = "", remove_entry 
     return(matches)
 }
 
+```
 
+This function will be used to search for multiple patterns in a character vector by passing a vector of patterns to be matched. 
+
+```{r}
 multi_grep <- function(source_data, patterns){
     # find multiple patterns in a char vector
     # make a regex to search with
@@ -96,6 +111,11 @@ multi_grep <- function(source_data, patterns){
     return(matches)
 }
 
+```
+
+This function will be used to find the set of Sample ID's that are present in both the DiffBind and gene expression data sets.
+
+```{r}
 sampleID_intersects <- function(IDs1, pattern1 = "", IDs2, pattern2 = "", removeID2 = NULL ){
     # get the intersect between sets of ID's after gsub pattern replacements
     ID1_match <- get_replacements(source_data = IDs1, pattern = pattern1)
@@ -105,12 +125,22 @@ sampleID_intersects <- function(IDs1, pattern1 = "", IDs2, pattern2 = "", remove
     return(ID2_match)
 }
 
+```
+
+This function will be uses to transform a data frame by quantile normalizing its values.
+
+```{r}
 quantile_normalize_df <- function(df){
     # quantile normalization of a dataframe
     df <- setnames(x = as.data.frame(normalize.quantiles(as.matrix(df))), colnames(df))
     return(df)
 }
 
+```
+
+This funtion will 
+
+```{r}
 diff_subset <- function(df, patientID_matches){
     # subset for DiffPeaks >= 1 per sample
     for(i in seq_along(patientID_matches)){
