@@ -580,14 +580,47 @@ head(diffbind_df, n = 3)
 dim(diffbind_df)
 ```
 
+We can also create some basic plots to visualize some of the data. We can see here that the raw values have a very large and skewed distribution. 
+
+```{r}
+# distribution of raw Fold changes for a sample
+with(diffbind_df, hist(AADC.2.H3K27AC/AADC.1.H3K27AC))
+```
+
+Using the log2(Fold change) helps to normalize the distribution. 
+
+```{r}
+# distribution of log2 Fold changes for a sample
+with(diffbind_df, hist(log2(AADC.2.H3K27AC/AADC.1.H3K27AC)))
+
+```
+
 ## Gene Expression data
 
-Our gene expression data set was obtained from microarray analysis of all samples included in the study. For example, here `AADC.Exp.1` and `AADC.Exp.2` correspond to the samples before and after treatment, while `AADC.Exp.LR` is the log2 ratio of the two values. 
+Our gene expression data set was obtained from microarray analysis of all samples included in the study. For example, here `AADC.Exp.1` and `AADC.Exp.2` correspond to the samples before and after treatment, while `AADC.Exp.LR` is the log2 ratio of the two values. We will preview some aspects of the data set. 
 
 ```{r}
 head(gene_expr_df, n = 3)
 dim(gene_expr_df)
 ```
+
+Next we will check the distribution of gene expression values for one sample's log ratio change in gene expressions.
+
+```{r}
+# distribution of log ratio values for a sample
+with(gene_expr_df, hist(AADC.Exp.LR))
+```
+
+We can preview the effects of quantile normalization with this data set. We will normalize all of the Log Ratio columns in the dataset, and re-create the plot for the same sample's data. 
+
+```{r}
+# preview quantile normalization effect
+with(quantile_normalize_df(gene_expr_df[multi_grep(source_data = colnames(gene_expr_df), 
+                                            patterns = "^.*LR$")]), 
+     hist(AADC.Exp.LR))
+```
+
+# Run Pipeline {.tabset}
 
 During DiffBind analysis, some samples failed and were excluded from the output. On the other hand, all samples were included in the microarray gene expression analysis. Because of this, we need to find the samples that both data sets have in common. To accomplish this, we will use our `sampleID_intersects` function with a regular expression that returns the intersect of the two lists of samples. Due to failure on other quality control measures, we decided to exclude sample sample `HHDC` from the analysis; this will be accomplished with this step as well. 
 
@@ -617,8 +650,6 @@ gene_names_overlap <- intersect(rownames(gene_expr_df),
 
 head(gene_names_overlap)
 ```
-
-# Run Pipeline {.tabset}
 
 Due to the wide range of values in our data sets, we need to apply normalization measures to make the data points within and between samples more comparable to each other. In order to evaluate the effects of different normalization methods, we will run the entire pipeline with different sets of options in regards to quantile flooring and quantile normalization of the DiffBind and gene expression data sets. Beanplots showing results will be shown as output. Full-sized plots can be viewed by right-clicking on the images and selecting 'View Image' in your web browser. 
 
