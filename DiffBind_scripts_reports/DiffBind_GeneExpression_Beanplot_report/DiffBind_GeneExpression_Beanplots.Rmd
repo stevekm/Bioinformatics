@@ -1,18 +1,743 @@
 ---
-title: "DiffBind GeneExpresion Beanplot"
+title: "ChIP-Seq DiffBind vs. Microarray Gene Expression Analysis with Beanplots"
 author: "Stephen Kelly"
 date: "10/5/2016"
-output: html_document
+output: 
+  html_document: 
+    css: "markdown-custom.css"
+    keep_md: yes
+    number_sections: true
+    code_folding: show
+    toc: true
+    toc_float: true
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+    # fig_height: 8
+    # fig_width: 8
+# citation_package: natbib
+# bibliography: references.bib
+# biblio-style: apsr
+# <link href="test.css" rel="stylesheet">
+
+# options(width = 2000)
+# options(rstudio.markdownToHTML = 
+#   function(inputFile, outputFile) {      
+#     require(markdown)
+#     markdownToHTML(inputFile, outputFile, stylesheet='markdown-custom.css')   
+#   }
+# )
+#    css: "markdown-custom.css"
+
+# 
+
+# <link href="markdown-custom.css" rel="stylesheet">
+
+# http://stackoverflow.com/questions/15385696/how-to-adjust-the-output-width-of-rstudio-markdown-output-to-html
+# http://stackoverflow.com/questions/28480625/r-knitr-markown-setting-html-page-width
+# http://stackoverflow.com/questions/14662626/set-page-width-in-knitr-for-md-or-html-output
+# https://github.com/yihui/knitr/issues/362
+# https://nsaunders.wordpress.com/2012/08/27/custom-css-for-html-generated-using-rstudio/
+# http://stackoverflow.com/questions/25166624/insert-picture-table-in-rmarkdown
+# https://github.com/yihui/knitr/issues/362
+```
+
+# Introduction
+
+This example will walk through the analysis of a ChIP-Seq experiment conducted on human samples before and after treatment. Samples were immunoprecipitated for five histone marks (only the results of H3K27AC are shown here). We will compare the differential peak data from DiffBind with gene expression data from a microarray analysis of the same samples. The goal of this analysis is to determine if any patterns can be found between genes that were differentially bound and the changes in expression of those genes. To accomplish this, we will first subset the DiffBind data set for peaks within 3000 base pairs of the gene start site. The table of differential binding values per sample will be merged with the gene expression values. Gene expression values will then be grouped into genes that were upregulate (`UP`) and genes that were down regulated (`DOWN`). In order to visualize the data, split beanplots will be created for each sample; one side of the split will contain the DiffBind values for the `UP` genes, while the other side contains the DiffBind values for the `DOWN` genes. Each sample will also be tested for significance of difference between the `UP` and `DOWN` groupings, and significance will be marked on the plot. 
+
+# Packages
+
+First, required packages will be loaded. 
+
+```{r}
+# ~~~~~ LOAD PACKAGES ~~~~~~~~ #
+
+# install.packages(c("devtools"))
+# source("http://www.bioconductor.org/biocLite.R")
+# biocLite(c("Biobase","preprocessCore"))
+library("data.table")
+library("beanplot")
+library("ggplot2")
+library("reshape2")
+library("preprocessCore")
+
 ```
 
 
-```{r, engine='bash'}
+# Functions
 
-# path to the DiffBind directory
-input_dir="/ifs/home/kellys04/projects/Bioinformatics/DiffBind_scripts_reports/DiffBind_GeneExpression_Beanplot_report/input"
+Due to the complexity of this analysis pipeline and the need for repeated analysis with different parameters, custom functions will be created. 
 
+Our pipeline will need to match up information on samples between two data sets. Sample ID's are saved in the column headings of both data sets, but include multiple entries for each sample set, and not all samples are present in both sets. The `get_replacements` function will use a supplied regular expression to return a character vector of unique matching sample ID's in the supplied column names. 
+
+```{r}
+# ~~~~~ CUSTOM FUNCTIONS ~~~~~~~~ #
+get_replacements <- function(source_data, uniq=TRUE, pattern = "", 
+                             remove_entry = NULL, ...){
+    # return vector of first matches to regex
+    matches <-  gsub(x = source_data, 
+                     pattern = pattern,
+                     replacement = "\\1")
+    
+    # return only unique entries
+    if(uniq) matches <- unique(matches)
+    
+    # remove an entry from the output
+    if ( ! is.null(remove_entry)){
+        if(any(grepl(pattern = remove_entry,x = matches))){
+            matches <- matches[grep(pattern = remove_entry, x = matches, 
+                                    value = FALSE, invert = TRUE)]  
+        } 
+    }
+    return(matches)
+}
+
+```
+
+The `multi_grep` function will be used to search for multiple patterns in a character vector by passing a vector of patterns to be matched. 
+
+```{r}
+multi_grep <- function(source_data, patterns){
+    # find multiple patterns in a char vector
+    # make a regex to search with
+    if (length(patterns) > 1){
+        search_pattern <- paste(patterns,
+                                collapse = "|") 
+    } else {
+        search_pattern <- patterns
+    }
+    
+    matches <- grep(x = source_data,
+                    pattern = search_pattern,
+                    value = TRUE)
+    return(matches)
+}
+
+```
+
+The `sampleID_intersects` function will be used to find the set of Sample ID's that are present in both the DiffBind and gene expression data sets.
+
+```{r}
+sampleID_intersects <- function(IDs1, pattern1 = "", 
+                                IDs2, pattern2 = "", 
+                                removeID2 = NULL ){
+    # get the intersect between sets of ID's after gsub pattern replacements
+    ID1_match <- get_replacements(source_data = IDs1, pattern = pattern1)
+    
+    ID2_intersect_ID1 <-  multi_grep(patterns = ID1_match, 
+                                     source_data = IDs2)
+    ID2_match <- get_replacements(source_data = ID2_intersect_ID1, 
+                                  pattern = pattern2, remove_entry = removeID2)
+    return(ID2_match)
+}
+
+```
+
+The `quantile_normalize_df` function will be uses to transform a data frame by quantile normalizing its values.
+
+```{r}
+quantile_normalize_df <- function(df){
+    # quantile normalization of a dataframe
+    df <- setnames(x = as.data.frame(normalize.quantiles(as.matrix(df))), 
+                   colnames(df))
+    return(df)
+}
+
+```
+
+The `diff_subset` function will subset the DiffBind data frame for differential peak score entries per Sample that are greater than or equal to 1. 
+
+```{r}
+diff_subset <- function(df, patientID_matches){
+    # subset for DiffPeaks >= 1 per sample
+    for(i in seq_along(patientID_matches)){
+        tmp_ID <- patientID_matches[i]
+        
+        # print(tmp_ID %in% colnames(diffbind_df_intersect_min))
+        
+        # get the diffBind columns with the patient's ID
+        tmp_colnames <- grep(pattern = tmp_ID,x = colnames(df),value = TRUE)
+        
+        # make sure there are 2 colnames, otherwise 
+        # skip to the next iteration of the loop!
+        if (length(tmp_colnames) !=2) next
+        
+        # get the 2 colname
+        tmp_colnames_2 <- grep(pattern = paste0("^",tmp_ID,"[[:punct:]]2.*$"),
+                               x = tmp_colnames,perl = TRUE,value = TRUE)
+        
+        # get the 1 colname
+        tmp_colnames_1 <- grep(pattern = paste0("^",tmp_ID,"[[:punct:]]1.*$"),
+                               x = tmp_colnames,perl = TRUE,value = TRUE)
+        
+        # diffbind_df <- subset(diffbind_df, tmp_colnames_R >= 1)
+        # diffbind_df <- subset(diffbind_df, tmp_colnames_D >= 1)
+        df <- df[which(df[[tmp_colnames_2]] >= 1 | df[[tmp_colnames_1]] >= 1),]
+        # diffbind_df <- diffbind_df[which(diffbind_df[[tmp_colnames_D]] >= 1),]
+    }
+    
+    return(df)
+}
+```
+
+The `quantile_cutoff` function will apply a quantile cut off to a numeric vector. This 'quantile flooring' will raise all values below the 25th quantile up to the 25th quantile. This measure was implemented to account for potential skewing caused by extremely low values. 
+
+```{r}
+quantile_cutoff <- function(vec, cutoff = 0.25){
+    # replace lowest values with the x'th quantile value
+    vec_quantile <- quantile(vec, probs = cutoff)
+    vec <- sapply(vec, function(x) max(x, vec_quantile))
+    return(vec)
+}
+```
+
+The `calc_fold_change` function calculates the fold change value for two numeric vectors. 
+
+```{r}
+calc_fold_change <- function(sample1, sample2, calc_log = TRUE, log_base = 2){
+    # sample1, sample2: numeric vectors
+    # fc: fold change output vector
+    
+    if(calc_log){
+        fc <- log((sample2/sample1), base = log_base)  
+    } else {
+        fc <- (sample2/sample1)
+    }
+    
+    return(fc)
+}
+```
+
+The `log_ratio_df` function will create a data frame that contains only the fold change values for the DiffBind samples
+
+```{r}
+log_ratio_df <- function(diffbind_df, diff_gene_colname = "external_gene_name", 
+                         patientID_matches, calc_cutoff = FALSE, melt_df = FALSE, 
+                         add_status = FALSE, ...){
+    # create a df to hold the DiffBind log ratio entries
+    # create an empty data frame to fill with log ratio values
+    diff_log_ratio <- setNames(data.frame(matrix(nrow = nrow(diffbind_df), 
+                                                 ncol = length(patientID_matches))), 
+                               patientID_matches)
+    # add the genes from DiffBind
+    diff_log_ratio[["gene"]] <- diffbind_df[[diff_gene_colname]]
+    
+    # enter the log ratio values into the df per patient
+    # # iterate over the samples; get only diff min cols per patient
+    for(i in seq_along(patientID_matches)){
+        tmp_ID <- patientID_matches[i]
+        
+        # get the diffBind columns with the patient's ID
+        tmp_colnames <- grep(pattern = tmp_ID,x = colnames(diffbind_df),
+                             value = TRUE)
+        
+        # make sure there are 2 colnames, 
+        # otherwise skip to the next iteration of the loop!
+        if (length(tmp_colnames) !=2) next
+        
+        # get the 2 colname
+        tmp_colnames_2 <- grep(pattern = paste0("^",tmp_ID,"[[:punct:]]2.*$"),
+                               x = tmp_colnames,perl = TRUE,value = TRUE)
+        
+        # get the 1 colname
+        tmp_colnames_1 <- grep(pattern = paste0("^",tmp_ID,"[[:punct:]]1.*$"),
+                               x = tmp_colnames,perl = TRUE,value = TRUE)
+        
+        if(calc_cutoff){
+            # apply quantil cutoffs to the 2 and 1 values
+            tmp_2 <- quantile_cutoff(diffbind_df[[tmp_colnames_2]])
+            tmp_1 <- quantile_cutoff(diffbind_df[[tmp_colnames_1]])
+        } else {
+            tmp_2 <- diffbind_df[[tmp_colnames_2]]
+            tmp_1 <- diffbind_df[[tmp_colnames_1]]
+        }
+        
+        # get the fold change
+        diff_log_ratio[,tmp_ID] <- calc_fold_change(sample1 = tmp_1, 
+                                                    sample2 = tmp_2, 
+                                                    calc_log = TRUE, 
+                                                    log_base = 2)
+        
+    }
+    
+    
+    # melt it into long format
+    if (melt_df) diff_log_ratio <- reshape2::melt(diff_log_ratio,id.vars="gene",
+                                                  variable.name="sample",
+                                                  value.name="diff_peak_log_ratio")
+    
+    # add a column to hold the 'status' 
+    # e.g. Up regulated vs. Down regulated in the gene_expr table
+    if (add_status) diff_log_ratio[["gene_expression_status"]] <- NA
+    
+    return(diff_log_ratio)
+}
+```
+
+The `mark_test_type` function will retrieve the 'test' value for a given histone mark based on the supplied dataframe of marks and tests. 
+
+```{r}
+mark_test_type <- function(hist_mark, mark_key){
+    # get the alternative value for the ttest/utest from the mark key
+    test_alt <- as.character(subset(mark_key, marks == hist_mark)[['test']])
+    return(test_alt)
+}
+```
+
+The `plot_signif_pvalue` function will be used to add a '*' character to the plots to indicate if each sample has passed significance testing, using either a one-sided T-test or U-test.  
+
+```{r}
+plot_signif_pvalue <- function(df, y_colname, x_colname, x_group, p_value_cutoff=0.05, test_method = "ttest", ...){
+    # plot points on a barplot / beanplot marking significant categories
+    y_max <- max(df[[y_colname]],na.rm = TRUE)
+    
+    for(i in seq_along(unique(as.character(df[[x_group]])))){
+        tmp_ID <- unique(as.character(df[[x_group]]))[i]
+        tmp_df <- subset(df, get(x_group) == tmp_ID)
+        
+        # get the one-sided test type value
+        test_alt <- mark_test_type(...)
+        if(test_method == 'ttest') tmp_pvalue <- t.test(get(y_colname)~get(x_colname),
+                                                        data = tmp_df, 
+                                                        alternative = test_alt,
+                                                        na.action = na.omit,
+                                                        paired = FALSE)["p.value"]
+        
+        # Wilcoxon rank-sum test applied to independent samples
+        if(test_method == 'utest'){
+            tmp_pvalue <- wilcox.test(get(y_colname)~get(x_colname),
+                                      data = tmp_df,
+                                      alternative = test_alt,
+                                      na.action = na.omit, 
+                                      paired = FALSE)["p.value"]
+            
+            print(wilcox.test(get(y_colname)~get(x_colname),
+                              data = tmp_df,
+                              paired = FALSE))
+            
+        } 
+        if(tmp_pvalue < p_value_cutoff){
+            print(points(x = i, 
+                         y = y_max - 1,
+                         pch ='*', 
+                         col ='red',
+                         cex=2))
+            print(text(x = i, 
+                       y = y_max,
+                       labels = paste0('p = ',
+                                       format(tmp_pvalue,
+                                              digits = 2)),
+                       cex=0.7))
+        }
+    }
+}
+```
+
+The `diff_beanplot` function will create the DiffBind beanplots. 
+
+```{r}
+diff_beanplot <- function(df, x1_colname, x2_colname, y_colname, main_text_1 = "", 
+                          y_lab = "", main_text_2 = "", save_output = FALSE, 
+                          file = "./plot.pdf", strip_chart = FALSE, ... ){
+    # make the DiffBind split beanplots
+    
+    # only make a plot of there are at least 50 genes
+    if(nrow(unique(subset(df, get(x1_colname) == "UP")["gene"]))>=50 &&
+       nrow(unique(subset(df, get(x1_colname) == "DOWN")["gene"]))>=50){
+        
+        if(save_output) pdf(file = file,height = 8,width = 12)
+        
+        beanplot(get(y_colname)~get(x1_colname)*get(x2_colname),
+                 data=df,
+                 what=c(0,1,1,0), 
+                 # # EXTRA OPTIONS HERE: # what=c(0,1,1,1),
+                 # maxstripline = 0, # ll = 0.04,varwidth = TRUE,
+                 border = NA,
+                 bw="nrd0", # gave errors with default and "nrd" 
+                 overallline = 'mean', #median',
+                 col=list('grey','purple'),
+                 ylab = y_lab, 
+                 main=paste0("DiffBind results for ",
+                             main_text_1,
+                             " ",
+                             main_text_2), 
+                 cex.main=0.9,
+                 side = "both"
+        )
+        
+        legend('bottomright', 
+               fill=c('grey','purple'), 
+               legend= c('Down Genes', 'Up Genes'))
+        
+        # add a horizontal line at 0
+        abline(h=0,col="darkgrey",lty="dotted")
+        
+        # add p value and *'s
+        plot_signif_pvalue(df = df,y_colname = y_colname, 
+                           x_colname = x1_colname, 
+                           x_group = x2_colname, ...) 
+        
+        if (strip_chart){
+            # creates a stripchart overlay
+            # # don't use this !!
+            stripchart(y_colname~x_colname*sample,data = df,
+                       vertical=TRUE,
+                       add=TRUE,
+                       cex=0.1,
+                       method="jitter",
+                       jitter=0.05)   
+        }
+        
+        if(save_output) dev.off()
+    }
+}
+```
+
+The `gene_expression_raw_pipeline` function will contain the steps required for processing the microarray expression data. 
+
+```{r}
+gene_expression_raw_pipeline <- function(gene_expr_df, patientID_matches, 
+                                         gene_names_overlap, quant_norm = FALSE){
+    # keep only LR columns; log ratio
+    gene_expr_df <- gene_expr_df[multi_grep(source_data = colnames(gene_expr_df), 
+                                            patterns = "^.*LR$")]
+    # quantil normalize the gene expression dataset
+    if (quant_norm) gene_expr_df <- quantile_normalize_df(gene_expr_df)
+    # fix colnames
+    colnames(gene_expr_df) <- get_replacements(source_data = colnames(gene_expr_df), 
+                                               uniq=TRUE, 
+                                               pattern = "^([[:alpha:]]*)([[:punct:]]*.*)$")
+    # keep matched columns
+    gene_expr_df <- gene_expr_df[patientID_matches]
+    # add a column with the gene names for melting
+    gene_expr_df[["gene"]] <- rownames(gene_expr_df)
+    
+    # subset for intersected genes only
+    gene_expr_df <- droplevels(gene_expr_df[rownames(gene_expr_df)  %in% gene_names_overlap,])
+    
+    # melt it into long format
+    gene_expr_df <- reshape2::melt(gene_expr_df,
+                                   id.vars="gene",
+                                   variable.name="sample",
+                                   value.name="gene_expression_log_ratio")
+    
+    return(gene_expr_df)
+}
+```
+
+The `diffbind_raw_pipeline` function will hold the steps required to process the DiffBind data set.
+
+```{r}
+diffbind_raw_pipeline <- function(diffbind_df, patientID_matches, 
+                                  gene_names_overlap, quant_norm = FALSE){
+    # quantile normalize entires DiffBind dataset
+    if (quant_norm) {
+        norm_cols <- multi_grep(source_data = colnames(diffbind_df), 
+                                patterns = patientID_matches)
+        diffbind_df[norm_cols] <- quantile_normalize_df(diffbind_df[norm_cols])
+    }
+    
+    
+    # subset for closest genes
+    diffbind_df <- subset(diffbind_df, abs(distancetoFeature)<=3000)
+    # subset for intersected genes only
+    diffbind_df <- droplevels(diffbind_df[diffbind_df[["external_gene_name"]] %in% gene_names_overlap,])
+    # remove extraneous columns
+    diffbind_cols_to_remove <-c("seqnames","start","end","width","strand",
+                                "Conc","Conc_D","Conc_R","Fold",
+                                "p.value","FDR","feature","gene_biotype",
+                                "start_position","end_position",
+                                "insideFeature","shortestDistance",
+                                "fromOverlappingOrNearest", "distancetoFeature")
+    diffbind_df <- diffbind_df[,! colnames(diffbind_df) %in% diffbind_cols_to_remove]
+    return(diffbind_df)
+}
+```
+
+The `combined_full_pipeline` function contains the steps needed for running the entire analysis pipeline. 
+
+```{r}
+combined_full_pipeline <- function(diffbind_df, gene_expr_df, patientID_matches, 
+                                   gene_names_overlap, diff_quant_norm = FALSE, 
+                                   gene_quant_norm = FALSE, diff_lr_cutoff = FALSE, 
+                                   make_plot = TRUE, data_file = "./data.Rdata", 
+                                   plot_file = "./plot.pdf", histone_mark, 
+                                   params_branch, mark_key, ...){
+    
+    # process the DiffBind data
+    diffbind_df <- diffbind_raw_pipeline(diffbind_df = diffbind_df, 
+                                         patientID_matches = patientID_matches, 
+                                         gene_names_overlap = gene_names_overlap, 
+                                         quant_norm = diff_quant_norm)
+    
+    # process the gene expression data
+    gene_expr_df <- gene_expression_raw_pipeline(gene_expr_df = gene_expr_df, 
+                                                 patientID_matches = patientID_matches,
+                                                 gene_names_overlap = gene_names_overlap, 
+                                                 quant_norm = gene_quant_norm)
+    
+    # create the DiffBind log ratio data frame
+    diff_log_ratio <- log_ratio_df(diffbind_df = diffbind_df, 
+                                   diff_gene_colname = "external_gene_name", 
+                                   patientID_matches = patientID_matches, 
+                                   calc_cutoff = diff_lr_cutoff,
+                                   melt_df = TRUE, add_status = TRUE)
+    
+    # merge the tables
+    # # merge together the two long format diff_log_ratio's and gene_expr log ratio's
+    diff_gene_expr_merged <- base::merge(gene_expr_df,
+                                         diff_log_ratio,by=c("gene","sample")) 
+    
+    # set the gene expression status to UP or DOWN based on gene expression value
+    # # 1.5x up/down expression
+    diff_gene_expr_merged[["gene_expression_status"]] <- ifelse(diff_gene_expr_merged[["gene_expression_log_ratio"]]>=0.58, "UP", ifelse(diff_gene_expr_merged[["gene_expression_log_ratio"]]<=-0.58, "DOWN", no = NA))
+    
+    
+    # ~~~~~~ SUBSET DIFF FOLD CHANGE ~~~~~~~~~ #
+    # subset for log ratio >1.5x change; log2 0.58
+    # diff_gene_expr_merged <- subset(diff_gene_expr_merged, abs(diff_peak_log_ratio) >= 0.58)
+    # diff_gene_expr_merged <- droplevels(diff_gene_expr_merged)
+    # ~~~~~~~~~~~~~~~ #
+    
+    
+    if (make_plot){
+        
+        # make the DiffBind beanplots
+        save.image(file=data_file, compress = TRUE) 
+        
+        diff_beanplot(df = diff_gene_expr_merged,
+                      x1_colname =  'gene_expression_status', 
+                      x2_colname = 'sample',
+                      y_colname = 'diff_peak_log_ratio', 
+                      main_text_1 = histone_mark, 
+                      main_text_2 = params_branch,
+                      y_lab = "DiffBind ratio = log2 ( Diff peak 2 / Diff peak 1 )",
+                      test_method = 'utest',
+                      hist_mark = histone_mark, 
+                      mark_key = mark_key,
+                      # save_output = TRUE, # use this in script, but not in this document
+                      file = plot_file) 
+    }
+}
+```
+
+# Setup
+
+Input files and output locations will be specified. A key will be created that relates each histone mark studied in our experiment with its role, and its one-sided significance test. 
+
+```{r load_data}
+# location for the output
+main_outdir <- "."
+setwd(main_outdir)
+
+# path to the TSV file containing the microarray gene expression data
+gene_expr_file <- "input/gene_expression2.tsv"
+
+# path to the file containing the differential binding DiffBind sheet
+diffbind_file <- "input/diffbind_H3K27AC.csv"
+
+# get the unique ID to use for the sample
+histone_mark <- "H3K27AC"
+
+# get the analysis params branch for the samples
+params_branch <- "diffbind.by_chip.status-peaks.by_sample.macs_broad"
+
+# histone marks included in the experiment
+mark_key <- data.frame(marks = c('H3K9ME3', 'H3K27ME3', 'H3K9AC', 
+                                 'H3K27AC', 'H3K4ME3'), 
+                       type = c('repressive', 'repressive','activating',
+                                'activating','activating'),
+                       test = c('greater', 'greater', 'less', 'less', 'less'))
+
+mark_key
+```
+
+# Load Data
+
+The DiffBind and microarray gene expression data sets will be loaded. 
+
+```{r}
+# ~~~~~~ READ IN FILE ~~~~~~~~ #
+# diffbind data
+diffbind_df <- read.csv(diffbind_file)
+# gene expression data
+gene_expr_df <- read.table(gene_expr_file,sep = '\t',header = TRUE,
+                           row.names = 1,quote = "")
+
+# save current state # use this in the script
+# save.image(file=paste0(main_outdir,"/raw_data.Rdata"),compress = TRUE)
+```
+
+## DiffBind data
+
+In our DiffBind data set, each entry corresponds to a peak that has been determined to be differentially bound between sample sets. For our experiment, we used paired samples before and after treatment. For example, here `AADC.1.H3K27AC` corresponds to sample AADC before treatment, and `AADC.2.H3K27AC` corresponds to the same sample group after treatment. Both samples have undergone chromatin immunoprecipitation for histone mark H3K27AC. In our data set, `FDR` corresponds to the false discovery rate, which is a form of adjusted p value. 
+
+```{r}
+# check some attributes of the data sets
+head(diffbind_df, n = 3)
+dim(diffbind_df)
+```
+
+We can also create some basic plots to visualize some of the data. We can see here that the raw values have a very large and skewed distribution. 
+
+```{r}
+# distribution of raw Fold changes for a sample
+with(diffbind_df, hist(AADC.2.H3K27AC/AADC.1.H3K27AC))
+```
+
+Using the log2(Fold change) helps to normalize the distribution. 
+
+```{r}
+# distribution of log2 Fold changes for a sample
+with(diffbind_df, hist(log2(AADC.2.H3K27AC/AADC.1.H3K27AC)))
+
+```
+
+## Gene Expression data
+
+Our gene expression data set was obtained from microarray analysis of all samples included in the study. For example, here `AADC.Exp.1` and `AADC.Exp.2` correspond to the samples before and after treatment, while `AADC.Exp.LR` is the log2 ratio of the two values. We will preview some aspects of the data set. 
+
+```{r}
+head(gene_expr_df, n = 3)
+dim(gene_expr_df)
+```
+
+Next we will check the distribution of gene expression values for one sample's log ratio change in gene expressions.
+
+```{r}
+# distribution of log ratio values for a sample
+with(gene_expr_df, hist(AADC.Exp.LR))
+```
+
+We can preview the effects of quantile normalization with this data set. We will normalize all of the Log Ratio columns in the dataset, and re-create the plot for the same sample's data. 
+
+```{r}
+# preview quantile normalization effect
+with(quantile_normalize_df(gene_expr_df[multi_grep(source_data = colnames(gene_expr_df), 
+                                            patterns = "^.*LR$")]), 
+     hist(AADC.Exp.LR))
+```
+
+# Run Pipeline {.tabset}
+
+During DiffBind analysis, some samples failed and were excluded from the output. On the other hand, all samples were included in the microarray gene expression analysis. Because of this, we need to find the samples that both data sets have in common. To accomplish this, we will use our `sampleID_intersects` function with a regular expression that returns the intersect of the two lists of samples. Due to failure on other quality control measures, we decided to exclude sample sample `HHDC` from the analysis; this will be accomplished with this step as well. 
+
+First, we will check on the column headers
+
+```{r}
+# the column headings from the two group
+colnames(diffbind_df)
+colnames(gene_expr_df)
+
+# get the patient ID intersects
+patientID_matches <- sampleID_intersects(IDs1 = colnames(gene_expr_df), 
+                                         pattern1 = "^([[:alpha:]]*)[[:punct:]]*.*$", 
+                                         IDs2 = colnames(diffbind_df), 
+                                         pattern2 = "^([[:alpha:]]*)[[:punct:]]*.*$", 
+                                         removeID2 = "HHDC")
+
+patientID_matches
+```
+
+Similarly, we need to find the list of genes that are shared between the DiffBind and gene expression data sets.
+
+```{r}
+# get the genes in common between the diffbind and gene expression data
+gene_names_overlap <- intersect(rownames(gene_expr_df),
+                                unique(diffbind_df[["external_gene_name"]]))
+
+head(gene_names_overlap)
+```
+
+Due to the wide range of values in our data sets, we need to apply normalization measures to make the data points within and between samples more comparable to each other. In order to evaluate the effects of different normalization methods, we will run the entire pipeline with different sets of options in regards to quantile flooring and quantile normalization of the DiffBind and gene expression data sets. Beanplots showing results will be shown as output. Full-sized plots can be viewed by right-clicking on the images and selecting 'View Image' in your web browser. 
+
+## Without Normalization
+
+```{r, fig.width=12, fig.height=8, cache=FALSE} 
+# without normalization
+combined_full_pipeline(diffbind_df = diffbind_df, 
+                       gene_expr_df = gene_expr_df, 
+                       patientID_matches = patientID_matches, 
+                       gene_names_overlap = gene_names_overlap,
+                       diff_quant_norm = FALSE, 
+                       gene_quant_norm = FALSE, 
+                       diff_lr_cutoff = FALSE,
+                       make_plot = TRUE, 
+                       # data_file = paste0(main_outdir,"/data.Rdata"), 
+                       # plot_file = paste0(main_outdir,"/beanplot_no_normalization.pdf"), 
+                       histone_mark = histone_mark, 
+                       params_branch = params_branch, 
+                       mark_key = mark_key)
+```
+
+## DiffBind Raw Data Matrix Quantile Normalization
+
+```{r, fig.width=12, fig.height=8, cache=FALSE} 
+# DiffBind matrix quantile normalization
+combined_full_pipeline(diffbind_df = diffbind_df, 
+                       gene_expr_df = gene_expr_df, 
+                       patientID_matches = patientID_matches, 
+                       gene_names_overlap = gene_names_overlap,
+                       diff_quant_norm = TRUE, 
+                       gene_quant_norm = FALSE, 
+                       diff_lr_cutoff = FALSE,
+                       make_plot = TRUE, 
+                       # data_file = paste0(main_outdir,"/data.Rdata"), 
+                       # plot_file = paste0(main_outdir,"/beanplot_DiffQnorm.pdf"), 
+                       histone_mark = histone_mark, 
+                       params_branch = params_branch, 
+                       mark_key = mark_key)
+```
+
+## DiffBind Raw Value Quantile Normalization & Log Ratio Cutoffs
+
+```{r, fig.width=12, fig.height=8, cache=FALSE} 
+# DiffBind matrix quantile normalization + per sample quantile cutoffs
+combined_full_pipeline(diffbind_df = diffbind_df, 
+                       gene_expr_df = gene_expr_df, 
+                       patientID_matches = patientID_matches, 
+                       gene_names_overlap = gene_names_overlap,
+                       diff_quant_norm = TRUE, 
+                       gene_quant_norm = FALSE, 
+                       diff_lr_cutoff = TRUE,
+                       make_plot = TRUE, 
+                       # data_file = paste0(main_outdir,"/data.Rdata"), 
+                       # plot_file = paste0(main_outdir,"/beanplot_DiffQnorm_Qcutoff.pdf"), 
+                       histone_mark = histone_mark, 
+                       params_branch = params_branch, 
+                       mark_key = mark_key)
+```
+
+## DiffBind Log Ratio Quantile Cutoffs
+
+```{r, fig.width=12, fig.height=8, cache=FALSE} 
+# per sample quantile cutoffs
+combined_full_pipeline(diffbind_df = diffbind_df, 
+                       gene_expr_df = gene_expr_df, 
+                       patientID_matches = patientID_matches, 
+                       gene_names_overlap = gene_names_overlap,
+                       diff_quant_norm = FALSE, 
+                       gene_quant_norm = FALSE, 
+                       diff_lr_cutoff = TRUE,
+                       make_plot = TRUE, 
+                       # data_file = paste0(main_outdir,"/data.Rdata"), 
+                       # plot_file = paste0(main_outdir,"/beanplot_Qcutoff.pdf"), 
+                       histone_mark = histone_mark, 
+                       params_branch = params_branch, 
+                       mark_key = mark_key)
+
+```
+
+# Conclusion
+
+After reviewing the results, it was determined that `DiffBind Raw Data Matrix Quantile Normalization` gave the best results. These parameters normalized some of the data variance that was seen without causing too much distortion of the results. It can be seen from the beanplots that many of the samples had higher differential binding for H3K27AC in genes that were upregulated after treatment. 
+
+# System Information
+
+```{r}
+system('uname -srv',intern=T)
+sessionInfo()
+# save.image(compress = TRUE, ) # use this in the script, not in this document
 ```
