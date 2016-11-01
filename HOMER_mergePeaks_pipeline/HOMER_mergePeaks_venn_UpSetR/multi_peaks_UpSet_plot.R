@@ -83,6 +83,6 @@ upset_expression<-setNames(venn_summary[['Total']],gsub("|","&",venn_summary[['N
 cat("Plot output file is:\n"); plot_filepath
 
 pdf(plot_filepath,width = 8,height = 8)
-upset(fromExpression(upset_expression),order.by = "degree", decreasing = F,mainbar.y.label = "Overlapping Peaks", sets.x.label = "Peaks per Category") # , group.by = "sets"
+upset(fromExpression(upset_expression),nsets = num_categories, nintersects = min(50, nrow(venn_table_df)), order.by = "freq", decreasing = T,mainbar.y.label = "Overlapping Peaks", sets.x.label = "Peaks per Category") # , group.by = "sets"
 dev.off()
 
