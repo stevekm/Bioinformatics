@@ -21,15 +21,16 @@ OUTDIR="$1" # outdir
 mkdir -p "$OUTDIR"
 FASTQ_R1="$2" # Read 1 input file
 
+# THREADS is defined by qsub; if not, set with 2 threads
+THREADS=${NSLOTS:=2} 
+
+
 # ~~~~~~ params ~~~~~~ #
 # these need to be installed on the cluster
 export KRAKEN_DEFAULT_DB="$HOME/ref/Kraken/nt-48G"
 export KRAKEN_NUM_THREADS="$THREADS"
 module load fastqc/0.11.4 # use this if FastQC is not in your $PATH
 
-
-# THREADS is defined by qsub; if not, set with 2 threads
-THREADS=${NSLOTS:=2} 
 echo "OUTDIR is $OUTDIR"
 echo "FASTQ_R1 is $FASTQ_R1"
 echo "THREADS is $THREADS"
