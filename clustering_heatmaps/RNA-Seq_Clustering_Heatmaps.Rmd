@@ -1,0 +1,338 @@
+---
+title: "Clustering Heatmaps"
+author: "Stephen Kelly"
+date: "11/21/2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+# output:
+#   html_document:
+#     code_folding: hide
+```
+
+```{r load_packages}
+suppressPackageStartupMessages(library("pheatmap"))
+suppressPackageStartupMessages(library("RColorBrewer"))
+```
+
+```{r custom_functions}
+# function for formatting text in the report
+mycat <- function(text){
+    cat(gsub(pattern = "\n", replacement = "  \n", x = text))
+}
+
+
+filter_counts_table <- function(counts_df, ...){
+    # function for cleaning the df for pheatmap to prevent errors due to divide by zero in the calculations
+    # remove rows with sum, sd of 0
+    counts_df <- counts_df[apply(counts_df, MARGIN = 1, FUN = function(x) sd(x) != 0),]
+    counts_df <- counts_df[apply(counts_df, MARGIN = 1, FUN = function(x) sum(x) != 0),]
+    # counts_df <- counts_df[apply(counts_df, MARGIN = 1, FUN = function(x) all(x > 1)), ]
+    
+    return(counts_df)
+}
+
+```
+
+```{r df_filter_setup}
+# processed file location
+clustering_dir <- "/ifs/home/kellys04/projects/SmithLab-RNA-Seq-2016-12-31/clustering_heatmaps"
+results_dir_36h <- file.path(clustering_dir, "DGE-DESeq2-rev-15samples_36h")
+counts_file_36h <- file.path(results_dir_36h, "counts.norm.csv")
+
+results_dir_ALL <- file.path(clustering_dir, "DGE-DESeq2-rev-28samples_ALL")
+counts_file_ALL <- file.path(results_dir_ALL, "counts.norm.csv")
+
+
+# ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # 
+# show all genes that has the following information added:
+# which chromosome a gene is one (mainly to exclude X and Y linked genes)
+# Expression  levels in samples MEF-A/B/C and iPCS-Mono-A/B/C
+# 
+# 
+# ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # 
+
+
+# ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # 
+# set up the chromosome lists to remove chXY genes with
+# merge with refGene mm10 ID's for chrom pos
+chrom_ref_file <- "/ifs/home/kellys04/projects/SmithLab-RNA-Seq-2016-12-31/mm10_ref_chrom_gene.tsv"
+chrom_ref_df <- read.delim(file = chrom_ref_file, header = FALSE, sep = '\t')
+
+colnames(chrom_ref_df) <- c("refID", "chrom", "start", "stop", "gene")
+
+# length(chrom_ref_df[["gene"]]) # 36333
+# length(unique(chrom_ref_df[["gene"]])) # 24525
+chrom_ref_df[["chrom"]] <- as.character(chrom_ref_df[["chrom"]])
+
+# drop the alternate transcript chroms
+chrom_list <- unique(chrom_ref_df[["chrom"]])[ ! grepl(pattern = '_', x = unique(chrom_ref_df[["chrom"]]))]
+# ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # 
+
+
+
+# ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # 
+# load the TF gene list
+list_genes_file <- file.path(clustering_dir, "TF_GO_gene_list.txt")
+list_genes <- unique(scan(list_genes_file,what = ""))
+# > length(list_genes)
+# [1] 1275
+tf_list_genes <- list_genes
+# ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # 
+
+
+
+# ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # 
+# load the GO gene list
+list_genes_file <- file.path(clustering_dir, "Chromatin_GO_gene_list.txt")
+list_genes <- unique(scan(list_genes_file,what = ""))
+# Read 766 items
+go_list_genes <- list_genes
+# ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # 
+
+
+
+
+
+# ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # 
+# # drop all the entries with the alt chroms
+# chrom_ref_df <- chrom_ref_df[chrom_ref_df[["chrom"]] %in% chrom_list, ]
+# 
+# # sort df
+# chrom_ref_df <- chrom_ref_df[with(chrom_ref_df, order(gene)), ]
+# 
+# # remove all but the first entry for each gene
+# chrom_ref_df <- chrom_ref_df[!duplicated(chrom_ref_df$gene),]
+# ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # ~~~~~~~~~~ # 
+
+# # the df I need to merge with
+# counts_df_log <- log2(counts_df[comparison_genes,] + 0.01)
+# counts_df_log['gene'] <- row.names(counts_df_log)
+# nrow(counts_df_log) # [1] 1077
+# 
+# counts_df_merged <- merge(x = counts_df_log, y = chrom_ref_df[,c("chrom", "gene")], by = "gene", all.x = TRUE)
+# 
+# # fileter out the XY chroms
+# counts_df_merged <- subset(counts_df_merged, chrom != "chrX" & chrom != "chrY")
+
+```
+
+
+# Project Info
+
+PROJECT ID: SmithLab-RNA-Seq-2016-12-31
+
+# Clustering
+
+## Clustering of 36h samples based on expression of transcription factors (TF GO list)
+
+- Include only genes with FPKM>1 in both replicates of at least one sample
+
+- Include all genes with p-value <0.05 between at least one set of replicates and all other replicates
+
+```{r load_data, fig.height=8, fig.width=12, cache=TRUE}
+# load counts table
+counts_df_36h <- read.csv(file=counts_file_36h, row.names=1, check.names=F, stringsAsFactors=F)
+
+
+# get the sample grouping for each replicate; name = replicate ID, element = group
+sample_groups <- sapply(X = colnames(counts_df_36h), FUN = function(x) gsub(x = x, pattern = '^(.*)-.$', replacement = '\\1', perl = TRUE))
+
+# Include only genes with FPKM>1 in both replicates of at least one sample
+# for each group, make sure all(x >= 1)
+# get the rows to keep from the dataframe
+significant_genes <- character()
+for(i in seq_along(sample_groups)){
+    selected_group <- sample_groups[i]
+    replicate_name <- names(sample_groups[i])
+    group_replicates <- grep(pattern = selected_group, x = colnames(counts_df_36h), value = TRUE)
+
+    test_rows <- apply(counts_df_36h[,group_replicates], MARGIN = 1, FUN = function(x) all(x >= 1))
+    significant_genes <- unique(append(significant_genes, names(test_rows[test_rows])))
+}
+# > length(significant_genes)
+# [1] 20750
+
+
+# Include all genes with p-value <0.05 between at least one set of replicates and all other replicates
+# get all the genes with significant p value from all the dge csv files
+diff_gene_expr_files <- dir(results_dir_36h, pattern = "dge.*.csv", full.names = TRUE)
+for(i in seq_along(diff_gene_expr_files)){
+    dge_file <- diff_gene_expr_files[i]
+    test_genes <- row.names(subset(read.csv(dge_file, row.names = 1)["padj"], padj < 0.05))
+    significant_genes <- unique(append(significant_genes, test_genes))
+}
+# > length(significant_genes)
+# [1] 20765
+
+
+# filter for genes from the TF list
+tf_comparison_genes <- significant_genes[significant_genes %in% tf_list_genes]
+# > length(comparison_genes)
+# [1] 1077
+
+
+
+# length(significant_genes[list_genes %in% significant_genes])
+# length(significant_genes[significant_genes %in% list_genes])
+# length(list_genes)
+
+# test to see if it worked
+# apply(X = counts_filtered_df, MARGIN = 2, FUN = min)
+# apply(X = counts_filtered_df, MARGIN = 2, FUN = sum)
+# counts_filtered_df[apply(counts_filtered_df[,group_replicates], MARGIN = 1, FUN = function(x) all(x >= 1)),]
+# nrow(counts_filtered_df[rows_to_keep,])
+# nrow(counts_filtered_df)
+
+# apply(X = counts_df[comparison_genes,], MARGIN = 2, FUN = min)
+# counts_filtered_df <- counts_df[comparison_genes,]
+# pheatmap(log2(counts_filtered_df + 0.01), scale="row", filename=file.path(clustering_dir, "36h_TF_heatmap.png"), width=12, height=8)
+
+
+
+
+
+# make the log'd table
+counts_df_36h_tf_log <- log2(counts_df_36h[tf_comparison_genes,] + 0.01)
+
+
+# merge with the chrom df
+# the df I need to merge with
+counts_df_36h_tf_log['gene'] <- row.names(counts_df_36h_tf_log)
+# nrow(counts_df_36h_tf_log) # [1] 1077
+counts_df_36h_tf_merged <- merge(x = counts_df_36h_tf_log, y = chrom_ref_df[,c("chrom", "gene")], by = "gene", all.x = TRUE)
+
+# fileter out the XY chroms
+counts_df_36h_tf_merged <- subset(counts_df_36h_tf_merged, chrom != "chrX" & chrom != "chrY")
+
+write.csv(x = counts_df_36h_tf_merged, file = file.path(clustering_dir, "36h_TF_signif-genes_log2norm-noXY.csv"))
+# pheatmap(log2(counts_df[comparison_genes,] + 0.01), scale="row")
+pheatmap(counts_df_36h_tf_merged[ , !(names(counts_df_36h_tf_merged) %in% c("gene", "chrom"))], scale="row")
+```
+
+## Clustering of 36h samples based on expression of epigenetic regulators (Chromatin GO list).
+
+```{r, fig.height=8, fig.width=12, eval=TRUE, cache=TRUE}
+
+# filter for genes from the GO list
+go_comparison_genes <- significant_genes[significant_genes %in% go_list_genes]
+# > length(go_comparison_genes)
+# [1] 700
+
+
+# make the log'd table
+counts_df_36h_go_log <- log2(counts_df_36h[go_comparison_genes,] + 0.01)
+
+# merge with the chrom df
+# the df I need to merge with
+counts_df_36h_go_log['gene'] <- row.names(counts_df_36h_go_log)
+# nrow(counts_df_36h_go_log) # [1] 700
+counts_df_36h_go_merged <- merge(x = counts_df_36h_go_log, y = chrom_ref_df[,c("chrom", "gene")], by = "gene", all.x = TRUE)
+
+# fileter out the XY chroms
+counts_df_36h_go_merged <- subset(counts_df_36h_go_merged, chrom != "chrX" & chrom != "chrY")
+
+write.csv(x = counts_df_36h_go_merged, file = file.path(clustering_dir, "36h_ChromatinGO_signif-genes_log2norm-noXY.csv"))
+# pheatmap(log2(counts_df[comparison_genes,] + 0.01), scale="row")
+pheatmap(counts_df_36h_go_merged[ , !(names(counts_df_36h_go_merged) %in% c("gene", "chrom"))], scale="row")
+
+```
+
+
+## Heatmap of all genes differential between two 36h sample groups
+
+```{r, fig.height=8, fig.width=12, eval=TRUE, cache=TRUE}
+# get all genes that were differentially expressed
+# diff_gene_expr_files <- dir(results_dir, pattern = "dge.*.csv", full.names = TRUE)
+# differential_genes <- character()
+# for(i in seq_along(diff_gene_expr_files)){
+#     dge_file <- diff_gene_expr_files[i]
+#     test_genes <- row.names(read.csv(dge_file, row.names = 1))
+#     differential_genes <- unique(append(differential_genes, test_genes))
+# }
+
+# make the log'd table
+counts_df_36h_allsignif_log <- log2(counts_df_36h[significant_genes,] + 0.01)
+# > length(significant_genes)
+# [1] 20765
+
+# merge with the chrom df
+# the df I need to merge with
+counts_df_36h_allsignif_log['gene'] <- row.names(counts_df_36h_allsignif_log)
+# nrow(counts_df_36h_allsignif_log) # [1] 20765
+counts_df_36h_allsignif_merged <- merge(x = counts_df_36h_allsignif_log, y = chrom_ref_df[,c("chrom", "gene")], by = "gene", all.x = TRUE)
+
+# fileter out the XY chroms
+counts_df_36h_allsignif_merged <- subset(counts_df_36h_allsignif_merged, chrom != "chrX" & chrom != "chrY")
+
+
+# pheatmap(counts_filtered_df, scale="row", filename=file.path(proj_dir, "36h_GO_heatmap.png"), width=12, height=8)
+pheatmap(filter_counts_table(counts_df_36h_allsignif_merged[ , !(names(counts_df_36h_allsignif_merged) %in% c("gene", "chrom"))]), scale="row")
+write.csv(x = counts_df_36h_allsignif_merged, file = file.path(clustering_dir, "36h_AllDiff_signif-genes_log2norm-noXY.csv"))
+```
+
+## Heatmap of all samples
+
+```{r, fig.height=8, fig.width=12, eval=TRUE, cache=TRUE}
+# load counts table for all samples
+counts_df_ALL <- read.csv(file=counts_file_ALL, row.names=1, check.names=F, stringsAsFactors=F)
+
+
+
+# DON'T RUN THIS IT RETURNS ALL GENES
+# get the sample grouping for each replicate; name = replicate ID, element = group
+# sample_groups_ALL <- sapply(X = colnames(counts_df_ALL), FUN = function(x) gsub(x = x, pattern = '^(.*)-.$', replacement = '\\1', perl = TRUE))
+# Include only genes with FPKM>1 in both replicates of at least one sample
+# for each group, make sure all(x >= 1)
+# get the rows to keep from the dataframe
+# significant_genes_ALL <- character()
+# for(i in seq_along(sample_groups_ALL)){
+#     selected_group <- sample_groups_ALL[i]
+#     replicate_name <- names(sample_groups_ALL[i])
+#     group_replicates <- grep(pattern = selected_group, x = colnames(counts_df_36h), value = TRUE)
+# 
+#     test_rows <- apply(counts_df_36h[,group_replicates], MARGIN = 1, FUN = function(x) all(x >= 1))
+#     significant_genes_ALL <- unique(append(significant_genes_ALL, names(test_rows[test_rows])))
+# }
+# > length(significant_genes_ALL)
+# [1] 47480
+
+# DONT RUN THIS, IT RETURNS ALL GENES
+# Include all genes with p-value <0.05 between at least one set of replicates and all other replicates
+# get all the genes with significant p value from all the dge csv files
+# diff_gene_expr_files_ALL <- dir(results_dir_ALL, pattern = "dge.*.csv", full.names = TRUE)
+# for(i in seq_along(diff_gene_expr_files_ALL)){
+#     dge_file <- diff_gene_expr_files_ALL[i]
+#     test_genes <- row.names(subset(read.csv(dge_file, row.names = 1)["padj"], padj < 0.05))
+#     significant_genes_ALL <- unique(append(significant_genes_ALL, test_genes))
+# }
+# > length(significant_genes_ALL)
+# [1] 47480
+
+
+
+
+# make the log'd table
+counts_df_ALL_log <- log2(counts_df_ALL + 0.01)
+
+
+# merge with the chrom df
+# the df I need to merge with
+counts_df_ALL_log['gene'] <- row.names(counts_df_ALL_log)
+# nrow(counts_df_ALL_log) # [1] 47480
+counts_df_ALL_merged <- merge(x = counts_df_ALL_log, y = chrom_ref_df[,c("chrom", "gene")], by = "gene", all.x = TRUE)
+
+# fileter out the XY chroms
+counts_df_ALL_merged <- subset(counts_df_ALL_merged, chrom != "chrX" & chrom != "chrY")
+
+write.csv(x = counts_df_ALL_merged, file = file.path(clustering_dir, "AllSamples_signif-genes_log2norm-noXY.csv"))
+pheatmap(filter_counts_table(counts_df_ALL_merged[ , !(names(counts_df_ALL_merged) %in% c("gene", "chrom"))]), scale="row")
+
+```
+
+
+
+
+
