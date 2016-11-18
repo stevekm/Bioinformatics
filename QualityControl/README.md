@@ -7,6 +7,8 @@ Current tools:
 - Kraken: metagenomic analysis, useful for detecting possible contaminants
 - Krona: create interactive pie chart from Kraken output
 
+These tools must be installed and configured for your system.
+
 This script is designed to work on the NYU HPC system by submitting jobs to the SGE cluster, but it can also be modified to simply run in the current session. 
 
 In the current implementation, the script will search the `input_dir` for all `*.fastq.gz` files, and run the selected script on them. A subdirectory for each input file will be create in the `output_dir`, where program output will be placed. 
