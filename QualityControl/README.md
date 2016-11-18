@@ -1,4 +1,4 @@
-# QC Scripts
+# Quality Control Scripts
 
 Scripts for running Quality Control on NGS data in fastq.gz format
 
