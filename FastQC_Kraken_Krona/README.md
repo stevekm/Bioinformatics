@@ -1,3 +1,5 @@
+# QC Scripts
+
 Scripts for running Quality Control on NGS data in fastq.gz format
 
 Current tools:
@@ -5,7 +7,16 @@ Current tools:
 - Kraken: metagenomic analysis, useful for detecting possible contaminants
 - Krona: create interactive pie chart from Kraken output
 
-Sample output:
+This script is designed to work on the NYU HPC system by submitting jobs to the SGE cluster, but it can also be modified to simply run in the current session. 
+
+In the current implementation, the script will search the `input_dir` for all `*.fastq.gz` files, and run the selected script on them. A subdirectory for each input file will be create in the `output_dir`, where program output will be placed. 
+
+Usage:
+```bash
+run_qc.sh /path/to/output_dir /path/to/input_dir FastQC_Kraken_Krona.sh
+```
+
+# Sample output
 
 FastQC ouptput
 
