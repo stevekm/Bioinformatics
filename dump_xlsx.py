@@ -17,6 +17,8 @@ import os
 
 file_name = sys.argv[1]
 file_base = os.path.splitext(os.path.basename(file_name))[0]
+file_dir = os.path.dirname(file_name)
+
 
 # read excel file
 xls_file = pd.ExcelFile(file_name)
@@ -30,6 +32,7 @@ for sheet_name, sheet_data, in xls_dict.iteritems():
     sheet_df = xls_dict[sheet_name]
     # out_file_name = '.'.join([file_base, sheet_name, "tsv"]) # use this if you want to preserve the sheet names
     out_file_name = '.'.join([file_base, "sheet_" + str(count), "tsv"])
-    sheet_df.to_csv(out_file_name,sep ='\t', index = False)
+    out_file_path = os.path.join(file_dir, out_file_name)
+    sheet_df.to_csv(out_file_path,sep ='\t', index = False)
     count += 1
 
