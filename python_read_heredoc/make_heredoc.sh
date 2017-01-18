@@ -9,3 +9,4 @@ $py_script foo.txt bar.txt - <<E0F
 $program1_args
 $program2_args
 E0F
+
