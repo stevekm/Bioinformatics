@@ -4,7 +4,7 @@
 '''
 USAGE: dump_xlsx.py /path/to/my_file.xlsx
 
-OUTPUT: my_file.sheet_1.tsv
+OUTPUT: /path/to/my_file.sheet_1.tsv
 
 This script will dump every sheet in an XLSX Excel file to a TSV
 '''
