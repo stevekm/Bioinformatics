@@ -32,7 +32,7 @@ E0F
 
 # you can can submit an R script to run from qsub as well:
 
-qsub -b y -wd "$tmp_outdir" -o :${tmp_logdir}/ -e :${tmp_logdir}/ -pe threaded 1 my_script.R "$arg_1" "$arg_2"
+qsub -b y -wd "$tmp_outdir" -o :${tmp_logdir}/ -e :${tmp_logdir}/ -pe threaded 1 Rscript my_script.R "$arg_1" "$arg_2"
 
 # NOTE: '-b y' is required here
 # also your R script needs to start like this:
