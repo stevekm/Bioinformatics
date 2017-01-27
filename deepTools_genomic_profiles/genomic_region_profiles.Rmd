@@ -1,0 +1,796 @@
+---
+title: "Genomic Region Profiles"
+author: "Stephen Kelly"
+date: "1/17/2017"
+output: 
+  html_document: 
+    keep_md: yes
+    toc: true
+    toc_float: true
+    toc_depth: 3    
+    number_sections: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup & Workflow {.tabset .tabset-pills}
+
+## Hide
+
+## Show
+
+### Find BigWigs
+
+First, start a sample sheet with the paths to all of the bigwig files we will need to process. 
+
+```{r, engine='bash', eval=FALSE}
+# module unload python
+# deeptools/2.3.3 # computeMatrix 1.5.11
+
+
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+region_dir="${project_dir}/project_notes/region_profiles"
+cd "$region_dir"
+
+# find the bigwigs from the pipeline, make a sample sheet
+find "${project_dir}/pipeline/align/" -type f -name "track.bw" -exec readlink -f {} \; > bigwig_sample_sheet_og.tsv
+
+# manually edit the sample sheet in Excel
+```
+
+Set up a directory with symlinks to all of the bigwig files, for easy access. 
+
+```{r, engine='bash', eval=FALSE}
+# set up the bigwig links
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+region_dir="${project_dir}/project_notes/region_profiles"
+cd "$region_dir"
+
+bigwig_dir="${region_dir}/bigwigs"
+matrix_dir="${region_dir}/matricies"
+
+mkdir -p "$bigwig_dir"
+mkdir -p "$matrix_dir"
+
+sample_sheet="${region_dir}/bigwig_sample_sheet.tsv"
+
+# iterate over entries in the sample sheet
+tail -n +2 "$sample_sheet"| while read line; do
+if [ ! -z "$line" ]; then
+filepath="$(echo "$line" | cut -f1)"
+
+link_name="$(echo "$line" | cut -f5).bw"
+
+echo "$filepath"
+echo "$link_name"
+echo ""
+
+(cd "$bigwig_dir"
+ln -fs "$filepath" "$link_name"
+)
+
+
+fi
+done
+```
+
+### Install deepTools
+
+We will need to install deepTools. A Python virtual environment will be set up for this in order to isolate it from the rest of the installed system packages. 
+
+```{r, engine='bash', eval=FALSE}
+# set up DeepTools
+module unload python
+unset PYTHONPATH
+
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+cd "$project_dir"
+
+virtualenv venv --no-site-packages
+source venv/bin/activate
+pip install deeptools
+
+# check the install
+plotProfile --version # plotProfile 2.4.2
+computeMatrix --version # computeMatrix 2.4.2
+
+# http://deeptools.readthedocs.io/en/latest/content/tools/plotProfile.html
+# http://deeptools.readthedocs.io/en/latest/content/tools/computeMatrix.html
+```
+
+### Get Gencode Genes
+
+A set of gene locations will be obtained from Gencode, and the GTF file will be converted to BED format with BEDOPS, and subset for only gene entries. 
+
+```{r, engine='bash', eval=FALSE}
+# get the Gencode genes file to use
+module unload gcc
+module load bedtools/2.22.0
+
+# file prefix
+gen_file="gencode.v19.annotation"
+# Download source data ; http://www.gencodegenes.org/releases/19.html
+[ ! -f ${gen_file}.gtf.gz ] && wget "ftp://ftp.sanger.ac.uk/pub/gencode/Gencode_human/release_19/gencode.v19.annotation.gtf.gz"
+
+# convert the GTF to BED witht he BEDOPS converter
+[ ! -f ${gen_file}.bed ] && zcat ${gen_file}.gtf.gz | convert2bed --input=gtf - > ${gen_file}.bed
+
+
+# get only the 'gene' entries from the BED file
+grep -E '[[:space:]]gene[[:space:]]' ${gen_file}.bed > ${gen_file}.genes_only.bed
+```
+
+### Get DiffBind Data
+
+The DiffBind ChIP-Seq datasets for differentially bound regions between samples per histone marks will be found and linked
+
+
+```{r, engine='bash', eval=FALSE}
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+region_dir="${project_dir}/project_notes/region_profiles"
+cd "$region_dir"
+
+diffbind_dir="${region_dir}/diffbind_sheets"
+mkdir -p "$diffbind_dir"
+
+diffbind_data_location="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/results_dir/diffbind_DESeq2/"
+
+diffbind_files="$(find "$diffbind_data_location" -type f -name "diff_bind.*" -name "*.csv" -exec readlink -f {} \;)"
+
+for diff_file in $diffbind_files; do
+(
+echo "$diff_file"
+hist_mark="$(basename "$(dirname "$diff_file")")"
+echo "$hist_mark"
+out_name="$(echo "$(basename "$diff_file")" | sed "s/diff_bind/$hist_mark/")"
+echo "$out_name"
+
+cd "$diffbind_dir"
+ln -fs "$diff_file" "$out_name"
+)
+done
+
+
+```
+
+### Match BigWigs to DiffBind sheets
+
+A sample sheet will be made to match each BigWig sample file with the corresponding DiffBind sheet
+
+```{r, engine='bash', eval=FALSE}
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+region_dir="${project_dir}/project_notes/region_profiles"
+cd "$region_dir"
+
+diffbind_dir="${region_dir}/diffbind_sheets"; diffbind_dir="$(readlink -f "$diffbind_dir")"
+bigwig_dir="${region_dir}/bigwigs"; bigwig_dir="$(readlink -f "$bigwig_dir")"
+
+bigwig_files="$(find "$bigwig_dir" -type l -name "*.bw")"
+
+bigwig_diffbind_samplesheet="${region_dir}/bigwig_diffbind_samplesheet.tsv"
+# clear the sheet
+echo -n "" > "$bigwig_diffbind_samplesheet"
+
+
+# iterate over the bigwig files
+for bigwig in $bigwig_files; do
+echo "$bigwig"
+
+# parse the file name
+bigwig_basename="$(basename "$bigwig")"
+echo "$bigwig_basename"
+sample_ID="$(echo "$bigwig_basename" | cut -d '-' -f1)"
+echo "$sample_ID"
+status_ID="$(echo "$bigwig_basename" | cut -d '-' -f2)"
+echo "$status_ID"
+mark_ID="$(echo "$bigwig_basename" | cut -d '-' -f3 | cut -d '.' -f1)"
+echo "$mark_ID"
+
+# get the DiffBind file
+sample_diffbind_file="$(find "$diffbind_dir" -name "*${mark_ID}*")"
+
+# write to the sample sheet
+echo -e "${bigwig}\t${sample_diffbind_file}\t${sample_ID}\t${status_ID}\t${mark_ID}" >> "$bigwig_diffbind_samplesheet"
+done
+
+```
+
+
+### Find Up/Down Regulated Genes, Top/Bottom Expressed Genes
+
+Gene expression data from a microarray for each sample will be used to determine which genes were up or down regulated in each sample. First, we will read in the gene expression data with R, then for each sample a text file will be written with the genes that have increased (`up`) or decreased (`dn`) gene expression. A gene expression log ratio cutoff of 1.5x increase or decrease will be applied; this translates to a value of > 0.58 or < -0.58 ( log2(1.5) = 0.58 ). 
+
+Additionally, the list of genes used will be filtered to only include genes that overlap peaks which were differentially bound by the H3K27AC histone mark in the ChIP-Seq data produced by DiffBind. 
+
+```{r, eval=FALSE}
+# project_dir <- "/Users/kellys04/projects/tmp_Teena"
+# region_dir <- file.path(project_dir,"region_profiles")
+
+project_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+region_dir <- file.path(project_dir,"project_notes/region_profiles")
+setwd(region_dir)
+
+# output location for gene lists
+top_bottom_gene_list_dir <- file.path(region_dir,"top_bottom_expressed_genes/gene_lists")
+up_down_regulated_gene_list_dir <- file.path(region_dir, "up_down_regulated_genes/gene_lists")
+
+diffbind_sheet_dir <- file.path(region_dir, "diffbind_sheets")
+diffbind_sheet_files <- dir(path = diffbind_sheet_dir, pattern = ".csv", full.names = TRUE)
+diffbind_sheet_files <- setNames(object = diffbind_sheet_files, nm = basename(diffbind_sheet_files))
+
+# read all the DiffBind sheets into a list of df's
+diffbind_df_list <- lapply(diffbind_sheet_files, function(x) read.csv(file = x, header = TRUE, stringsAsFactors = FALSE))
+
+bigwig_diffbind_samplesheet_file <- file.path(region_dir, "bigwig_diffbind_samplesheet.tsv")
+bigwig_diffbind_samplesheet_df <- read.table(file = bigwig_diffbind_samplesheet_file, header = FALSE, sep = '\t')
+
+# don't do Input files; remove from df
+bigwig_diffbind_samplesheet_df <- subset(x = bigwig_diffbind_samplesheet_df, subset=(V5 != "INPUT"))
+
+# load the gene expression data
+gene_expr_file <-"gene_expression_microarray/GeneExpression18Patients_includes_SRR.sheet_1.tsv"
+gene_expr_df <- read.table(gene_expr_file,sep = '\t',header = TRUE, 
+                           row.names = 1, quote = "")
+
+
+# function for getting the diffbind genes
+get_unique_diffbind_genes <- function(diffbind_df){
+    # get the DiffBind genes that match our criteria
+    diffbind_genes <- unique(diffbind_df[which(diffbind_df[["insideFeature"]] %in% c("overlapStart", "overlapEnd")), "external_gene_name"])
+    return(diffbind_genes)
+    
+}
+
+# iterate over every entry in the samplesheet
+for(i in seq(nrow(bigwig_diffbind_samplesheet_df))){
+    # parse entry
+    df_row <- bigwig_diffbind_samplesheet_df[i,]
+    diffbind_file <- as.character(df_row[["V2"]])
+    diffbind_file_basename <- basename(diffbind_file)
+    sampleID <- as.character(df_row[["V3"]])
+    statusID <- as.character(df_row[["V4"]])
+    markID <- as.character(df_row[["V5"]])
+    
+    full_sampleID <- paste(sampleID, statusID, markID, sep = '-')
+    
+    # get the DiffBind genes that match our criteria
+    diffbind_genes <- get_unique_diffbind_genes(diffbind_df_list[[diffbind_file_basename]])
+    
+    # subset the gene expression df for the desired DiffBind genes
+    gene_expr_df_copy <- gene_expr_df
+    gene_expr_df_copy <- gene_expr_df_copy[which(rownames(gene_expr_df_copy) %in% diffbind_genes), ]
+    
+    
+    # UP AND DOWN REGULATED GENES
+    # get the genes that were differntially up or down regulated by at least 1.5x
+    # e.g. Log Ratio D vs. R >log2(1.5) or <log2(-1.5)
+    # get the log ratio columns from the table
+    sample_LR_colname <- paste(sampleID, "Exp", "LR", sep = ".")
+    up_genes <- rownames(gene_expr_df_copy[gene_expr_df_copy[sample_LR_colname] > 0.58,])
+    dn_genes <- rownames(gene_expr_df_copy[gene_expr_df_copy[sample_LR_colname] < -0.58,])
+    
+    up_file <- file.path(up_down_regulated_gene_list_dir, paste0(full_sampleID, '_Up_regulated_genes_list.txt'))
+    dn_file <- file.path(up_down_regulated_gene_list_dir, paste0(full_sampleID, '_Down_regulated_genes_list.txt'))
+    
+    writeLines(text = sapply(X = up_genes, FUN = function(x) paste0('gene_name "', x, '"')), con = up_file)
+    writeLines(text = sapply(X = dn_genes, FUN = function(x) paste0('gene_name "', x, '"')), con = dn_file)
+    
+    
+    
+    # TOP AND BOTTOM EXPRESSED GENES
+    # get the genes per each D and R sample that were the most and lest expressed
+    # e.g. the top 3000 expressed genes, and bottom 3000 expressed genes, for every sample
+    sample_gene_expr_colname <- paste(sampleID, 'Exp', statusID, sep = '.')
+    # re-ordered df on the sample col
+    gene_expr_df_copy <- gene_expr_df_copy[order(gene_expr_df_copy[[sample_gene_expr_colname]], decreasing = TRUE), ]
+    
+    top_genes <- rownames(head(gene_expr_df_copy, 3000))
+    bottom_genes <- rownames(tail(gene_expr_df_copy, 3000))
+
+    top_file <- file.path(top_bottom_gene_list_dir, paste0(full_sampleID, '_Top_expressed_genes_list.txt'))
+    bottom_file <- file.path(top_bottom_gene_list_dir, paste0(full_sampleID, '_Bottom_expressed_genes_list.txt'))
+
+    writeLines(text = sapply(X = top_genes, FUN = function(x) paste0('gene_name "', x, '"')), con = top_file)
+    writeLines(text = sapply(X = bottom_genes, FUN = function(x) paste0('gene_name "', x, '"')), con = bottom_file)
+}
+
+
+```
+
+In bash, we will use the text files generated to create subsets of the Gencode BED file which only contain the gene ID's that match the genes from the microarray data which had increased or decreased expression. Since this operation takes a decent amount of compute power, we will submit each one to a job on the HPC cluster
+
+```{r, engine='bash', eval=FALSE}
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+region_dir="${project_dir}/project_notes/region_profiles"
+log_dir="${region_dir}/logs"; mkdir -p "$log_dir"
+cd "$region_dir"
+
+# gencode genes offical list of all genes
+gen_bed="${region_dir}/gencode.v19.annotation.genes_only.bed"
+
+# dir with the gene list patterns to search with
+top_bottom_gene_listdir="${region_dir}/top_bottom_expressed_genes/gene_lists"
+up_down_regulated_gene_listdir="${region_dir}/up_down_regulated_genes/gene_lists"
+
+# dir to put the output filtered beds
+top_bottom_gene_bed_dir="${region_dir}/top_bottom_expressed_genes/beds"
+up_down_regulated_gene_bed_dir="${region_dir}/up_down_regulated_genes/beds"
+
+
+# diff_gene_listdir="${region_dir}/diff_gene_lists"
+# diff_bed_dir="${region_dir}/diff_gene_beds"
+mkdir -p "$top_bottom_gene_bed_dir"
+mkdir -p "$up_down_regulated_gene_bed_dir"
+
+
+job_threads="1"
+job_mem="5G"
+
+
+# filter the up down genes
+for patternfile in ${up_down_regulated_gene_listdir}/*.txt; do
+echo "$patternfile"
+sampleID="$(basename "$patternfile")"
+sampleID="${sampleID%%_list.txt}"
+job_name="$sampleID"
+echo "$sampleID"
+
+outfile="${up_down_regulated_gene_bed_dir}/${sampleID}.bed"
+echo "$outfile"
+
+qsub -wd "$region_dir" -o :${log_dir}/ -e :${log_dir}/ -pe threaded "$job_threads" -l mem_free="$job_mem" -l h_vmem="$job_mem" -l mem_token="$job_mem" -N "$job_name" <<E0F
+set -x
+grep -f "$patternfile" "$gen_bed" | cut -f 1-3 > "$outfile"
+E0F
+
+
+echo ""
+done
+
+# filter the top and bottom genes
+for patternfile in ${top_bottom_gene_listdir}/*.txt; do
+echo "$patternfile"
+sampleID="$(basename "$patternfile")"
+sampleID="${sampleID%%_list.txt}"
+job_name="$sampleID"
+echo "$sampleID"
+
+outfile="${top_bottom_gene_bed_dir}/${sampleID}.bed"
+echo "$outfile"
+
+qsub -wd "$region_dir" -o :${log_dir}/ -e :${log_dir}/ -pe threaded "$job_threads" -l mem_free="$job_mem" -l h_vmem="$job_mem" -l mem_token="$job_mem" -N "$job_name" <<E0F
+set -x
+grep -f "$patternfile" "$gen_bed" | cut -f 1-3 > "$outfile"
+E0F
+
+
+echo ""
+done
+
+
+```
+
+### deepTools: Compute Matrix
+
+#### Make deepTools sample sheet
+
+Need to make a sample sheet that links each sample with its corresponding Up, Down, and Top, Bottom BED region files to be run. 
+
+```{r, engine='bash', eval=FALSE}
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+region_dir="${project_dir}/project_notes/region_profiles"
+cd "$region_dir"
+
+# dir with the filtered beds to be matched
+top_bottom_gene_bed_dir="${region_dir}/top_bottom_expressed_genes/beds"
+up_down_regulated_gene_bed_dir="${region_dir}/up_down_regulated_genes/beds"
+
+# dir with our bigwig files
+bigwig_dir="${region_dir}/bigwigs"; bigwig_dir="$(readlink -f "$bigwig_dir")"
+bigwig_files="$(find "$bigwig_dir" -type l -name "*.bw")"
+
+
+
+
+bigwig_BED_samplesheet="${region_dir}/bigwig_BED_samplesheet.tsv"
+# clear the sheet
+echo -n "" > "$bigwig_BED_samplesheet"
+
+
+# iterate over the bigwig files
+for bigwig in $bigwig_files; do
+echo "$bigwig"
+
+# parse the file name
+bigwig_basename="$(basename "$bigwig")"
+echo "$bigwig_basename"
+
+full_sampleID="${bigwig_basename//.bw}"
+sample_ID="$(echo "$bigwig_basename" | cut -d '-' -f1)"
+echo "$sample_ID"
+status_ID="$(echo "$bigwig_basename" | cut -d '-' -f2)"
+echo "$status_ID"
+mark_ID="$(echo "$bigwig_basename" | cut -d '-' -f3 | cut -d '.' -f1)"
+echo "$mark_ID"
+
+echo "$full_sampleID"
+
+# !! DONT PROCESS INPUT SAMPLES
+# set -x
+case "$mark_ID" in 
+  *INPUT*)
+    echo "Its an INPUT, skipping"
+    continue
+    ;;
+esac
+# set +x
+
+# get the top_bottom_gene_bed_dir file
+top_gene_bed_file="$(find "$top_bottom_gene_bed_dir" -name "*${full_sampleID}_Top_expressed_genes.bed")"
+bottom_gene_bed_file="$(find "$top_bottom_gene_bed_dir" -name "*${full_sampleID}_Bottom_expressed_genes.bed")"
+
+# get the up_down_regulated_gene_bed_dir file
+up_gene_bed_file="$(find "$up_down_regulated_gene_bed_dir" -name "*${full_sampleID}_Up_regulated_genes.bed")"
+down_gene_bed_file="$(find "$up_down_regulated_gene_bed_dir" -name "*${full_sampleID}_Down_regulated_genes.bed")"
+# ex:
+# ZNK-D-H3K27AC_Up_regulated_genes.bed
+# SRR-R-H3K4ME3_Down_regulated_genes.bed
+# ZNK-D-H3K27AC_Top_expressed_genes.bed
+# ZNK-D-H3K27AC_Bottom_expressed_genes.bed
+
+echo "$top_gene_bed_file"
+echo "$bottom_gene_bed_file"
+echo "$up_gene_bed_file"
+echo "$down_gene_bed_file"
+
+
+# write to the sample sheet
+echo -e "${bigwig}\t${top_gene_bed_file}\t${bottom_gene_bed_file}\t${up_gene_bed_file}\t${down_gene_bed_file}\t${sample_ID}\t${status_ID}\t${mark_ID}\t${full_sampleID}" >> "$bigwig_BED_samplesheet"
+
+echo ""
+echo "-------------------"
+done
+
+
+
+```
+
+#### Run computeMatrix
+
+Run each D and R sample against its own up & down regulated genes, and top and bottom expressed genes. 
+
+```{r, engine='bash', eval=FALSE}
+# run DeepTools make matricies
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+region_dir="${project_dir}/project_notes/region_profiles"
+cd "$region_dir"
+
+bigwig_BED_samplesheet="${region_dir}/bigwig_BED_samplesheet.tsv"
+
+# matrix params
+bin_size="50"
+region_size="5000"
+
+bigwig_dir="${region_dir}/bigwigs"; bigwig_dir="$(readlink -f "$bigwig_dir")"
+matrix_dir="${region_dir}/deepTools_profiles_per_group-bin${bin_size}bp"
+mkdir -p "$matrix_dir"
+matrix_dir="$(readlink -f "$matrix_dir")"
+
+
+# qsub params
+job_threads="8"
+job_mem="4G"
+job_options="-j y" # merge stderr and stdout # job_options="-l mem_free=$job_mem -l h_vmem=$job_mem -l mem_token=$job_mem"
+
+# computeMatrix settings
+compute_settings='--referencePoint TSS  --averageTypeBins sum '
+
+
+# iterate over lines in the sample sheet
+while read line; do
+if [ ! -z "$line" ]; then
+
+# parse line
+sample_bigwig="$(echo "$line" | cut -f1)"
+echo "$sample_bigwig"
+sample_ID="$(echo "$line" | cut -f6)"
+status_ID="$(echo "$line" | cut -f7)"
+mark_ID="$(echo "$line" | cut -f8)"
+full_sampleID="$(echo "$line" | cut -f9)"
+
+# qsub job name
+job_name="$full_sampleID"
+
+# make a list of the BED files to use
+sample_Up_Down_bed_files="$(echo "$line" | cut -f4-5 | tr '\t' ' ')"
+sample_Top_Bottom_bed_files="$(echo "$line" | cut -f2-3 | tr '\t' ' ')"
+echo "$sample_Up_Down_bed_files"
+echo "$sample_Top_Bottom_bed_files"
+
+# make the output labels to use for each
+sample_Up_Down_label="${full_sampleID}_Up_Down_regulated_genes"
+sample_Top_Bottom_label="${full_sampleID}_Top_Bottom_expressed_genes"
+
+sample_Up_Down_matrix_file="${matrix_dir}/${sample_Up_Down_label}_matrix.gz"
+sample_Up_Down_heatmap_file="${matrix_dir}/${sample_Up_Down_label}_heatmap.png"
+sample_Up_Down_profile_file="${matrix_dir}/${sample_Up_Down_label}_profile.png"
+sample_Up_Down_logdir="${matrix_dir}/${sample_Up_Down_label}_logs"; mkdir -p "$sample_Up_Down_logdir"
+
+sample_Top_Bottom_matrix_file="${matrix_dir}/${sample_Top_Bottom_label}_matrix.gz"
+sample_Top_Bottom_heatmap_file="${matrix_dir}/${sample_Top_Bottom_label}_heatmap.png"
+sample_Top_Bottom_profile_file="${matrix_dir}/${sample_Top_Bottom_label}_profile.png"
+sample_Top_Bottom_logdir="${matrix_dir}/${sample_Top_Bottom_label}_logs"; mkdir -p "$sample_Top_Bottom_logdir"
+
+## # # # ## ## # 
+# submit the Up Down job
+## # # # ## ## # 
+qsub -wd "$matrix_dir" -o :${sample_Up_Down_logdir}/ -e :${sample_Up_Down_logdir}/ -pe threaded "$job_threads" -N "$job_name" $job_options <<E0F
+module unload python
+unset PYTHONPATH
+set -x
+
+cd "$region_dir"
+source venv/bin/activate
+
+cd "$matrix_dir"
+
+# make the profile matrix
+computeMatrix reference-point --scoreFileName $sample_bigwig --regionsFileName $sample_Up_Down_bed_files  -a $region_size -b $region_size --outFileName "$sample_Up_Down_matrix_file" --numberOfProcessors "$job_threads" --binSize $bin_size $compute_settings
+
+plotProfile -m "$sample_Up_Down_matrix_file" -out "$sample_Up_Down_profile_file" --plotTitle "${full_sampleID}"  --perGroup # --numPlotsPerRow 2 # --regionsLabel sample_beds_labels --samplesLabel $bigwig_files_labels
+
+plotProfile -m "$sample_Up_Down_matrix_file" --kmeans 2 --plotType heatmap -out "$sample_Up_Down_heatmap_file" --perGroup 
+
+E0F
+
+
+## # # # ## ## # 
+# submit the Top Bottom job
+## # # # ## ## # 
+qsub -wd "$matrix_dir" -o :${sample_Top_Bottom_logdir}/ -e :${sample_Top_Bottom_logdir}/ -pe threaded "$job_threads" -N "$job_name" $job_options <<E0F
+module unload python
+unset PYTHONPATH
+set -x
+
+cd "$region_dir"
+source venv/bin/activate
+
+cd "$matrix_dir"
+
+# make the profile matrix
+computeMatrix reference-point --scoreFileName $sample_bigwig --regionsFileName $sample_Top_Bottom_bed_files  -a $region_size -b $region_size --outFileName "$sample_Top_Bottom_matrix_file" --numberOfProcessors "$job_threads" --binSize $bin_size $compute_settings
+
+plotProfile -m "$sample_Top_Bottom_matrix_file" -out "$sample_Top_Bottom_profile_file" --plotTitle "${full_sampleID}"  --perGroup # --numPlotsPerRow 2 # --regionsLabel sample_beds_labels --samplesLabel $bigwig_files_labels
+
+plotProfile -m "$sample_Top_Bottom_matrix_file" --kmeans 2 --plotType heatmap -out "$sample_Top_Bottom_heatmap_file" --perGroup 
+
+E0F
+
+
+
+
+echo ""
+fi
+done < "$bigwig_BED_samplesheet"
+
+```
+
+#### Custom Profile Plots
+
+Use R to create custom profile plots for each matrix
+
+
+
+```{r, engine='bash', eval=FALSE}
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+region_dir="${project_dir}/project_notes/region_profiles"
+cd "$region_dir"
+
+matrix_dir="${region_dir}/deepTools_profiles_per_group-bin${bin_size}bp"
+plot_output_dir="${region_dir}/ggplot_profiles"
+
+matrix_files="$(find "$matrix_dir" -name "*matrix.gz")"
+for mat_file in $matrix_files; do
+echo "$mat_file"
+file_basename="$(basename "$mat_file")"
+output_name="${file_basename//matrix.gz}ggplot_profile.pdf"
+output_path="${plot_output_dir}/${output_name}"
+output_logdir="${plot_output_dir}/${output_name//.pdf}/logs"
+mkdir -p "$output_logdir"
+echo "$output_path"
+
+
+qsub -wd $PWD -o :${output_logdir}/ -j y <<E0F
+pwd
+Rscript - "${mat_file}" "${output_path}" <<E0F2
+args <- commandArgs(TRUE)
+
+input_file <- args[1]
+output_file <- args[2]
+
+cat("input file is:\n")
+input_file
+
+cat("output file is:\n")
+output_file
+sessionInfo()
+
+region_profile_plot <- function(matrix_file_gz, plot_pdf_output_file){
+    region_df <- read.table(gzfile(matrix_file_gz), header=FALSE, na.strings = "nan", comment.char = "@")
+    # groups = BED region sets = rows
+    # samples = BigWig sample files = columns
+    
+    gz <- gzfile(matrix_file_gz, open = "rt"); sample_JSON <- readLines(gz, 1); close(gz)
+    sample_JSON <- gsub(pattern = '^@', replacement = '', x = sample_JSON)
+    
+    # install.packages("RJSONIO")
+    library("RJSONIO")
+    param_list <- fromJSON(content = sample_JSON, asText = TRUE)
+    
+    # remove the chom cols
+    chrom_df <- region_df[1:6]
+    region_df <- region_df[7:ncol(region_df)]
+    
+    sample1_df <- region_df[1:param_list[["sample_boundaries"]][2]]
+    
+    
+    sample1_profile <- colSums(region_df[1:param_list[["sample_boundaries"]][2]], na.rm=TRUE)
+    
+    
+    library("ggplot2")
+    
+    # empty df to hold the data
+    profile_df <- data.frame()
+    
+    # iterate over samples 
+    for(i in seq_along(param_list[["sample_labels"]])){ 
+        print("i is:")
+        print(i)
+        
+        print("Sample is:")
+        sampleID <- param_list[["sample_labels"]][i]
+        print(sampleID)
+        
+        print("Sample Start:")
+        sample_start <- param_list[["sample_boundaries"]][i]
+        sample_start <- as.numeric(sample_start) + 1
+        print(sample_start)
+        
+        print("Sample End:")
+        sample_end <- param_list[["sample_boundaries"]][i + 1]
+        print(sample_end)
+        
+        # iterate over groups 
+        for(q in seq_along(param_list[["group_labels"]])){
+            print("q is:")
+            print(q)
+            
+            print("Group is:")
+            groupID <- param_list[["group_labels"]][q]
+            print(groupID)
+            
+            print("Group start:")
+            group_start <- param_list[["group_boundaries"]][q]
+            group_start <- as.numeric(group_start) + 1
+            print(group_start)
+            
+            print("Group End:")
+            group_end <- param_list[["group_boundaries"]][q + 1]
+            print(group_end)
+            
+            # samples = columns = BigWigs, groups = rows = BEDs
+            
+            profile_vec <- colSums(region_df[group_start:group_end, sample_start:sample_end], na.rm=TRUE)
+            
+            # normalize profile values by number of genes
+            profile_vec <- profile_vec /(group_end - group_start)
+            
+            sample_profile_df <- data.frame(profile=profile_vec,
+                                            sample=rep(x = sampleID, times = length(profile_vec)),
+                                            group=rep(x = groupID, times = length(profile_vec)),
+                                            region=seq_along(profile_vec))
+            
+            profile_df <- rbind(profile_df, sample_profile_df)
+            print(head(sample_profile_df))
+            
+            cat("\n")
+        }# iterate over groups 
+    } # iterate over samples 
+    
+    
+    # all four on one graph
+    # ggplot(data = profile_df, aes(x=entry, y=profile, shape=group, col=interaction(sample,group))) + geom_line(aes(group=interaction(sample,group)))
+    
+    
+    # separate per sample D R
+    pdf(file = plot_pdf_output_file, width = 8, height = 8)
+    theme_set(theme_bw())
+    print(ggplot(data = profile_df, aes(x=region, y=profile, col=group)) + geom_line() + facet_wrap(~sample))
+    dev.off()
+    
+}
+# test
+# project_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/region_profiles"
+# outdir <- file.path(project_dir, "ggplot_profiles")
+# matrix_dir <- file.path(project_dir, "deepTools_profiles_per_group-bin50bp")
+# matrix_files <- dir(matrix_dir, pattern = "matrix.gz", full.names = TRUE)
+# matrix_files <- setNames(object = matrix_files, nm = file.path(outdir, paste0(gsub(pattern = '_matrix.gz', replacement = '', x = basename(matrix_files)), '_ggplot_profile.pdf')))
+# region_profile_plot(matrix_file_gz = matrix_files[1], plot_pdf_output_file = names(matrix_files[1]))
+
+region_profile_plot
+region_profile_plot(matrix_file_gz = input_file, plot_pdf_output_file = output_file)
+E0F2
+E0F
+
+
+done
+
+
+
+
+
+```
+
+convert all the individual PDFs to a multipage PDF
+
+```{r, engine='bash', eval=FALSE}
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+region_dir="${project_dir}/project_notes/region_profiles"
+cd "$region_dir"
+
+plot_output_dir="${region_dir}/ggplot_profiles"
+merged_plot_file="${region_dir}/ggplot_region_profiles_merged.pdf"
+FILES="$(find "$plot_output_dir" -type f -name "*profile.pdf" | sort)"
+gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile="$merged_plot_file" $FILES
+```
+
+
+# Results {.tabset .tabset-pills}
+
+DeepTools profile plots created using the set of all Gencode genes
+
+```{r, results='asis', eval=TRUE}
+profiles_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/region_profiles/profiles_per_group-UPDNHILO-bin50bp"
+
+profile_plots <- sort(dir(path = profiles_dir, pattern = "profile.png", recursive = TRUE, full.names = TRUE))
+profile_plots <- setNames(object = profile_plots, nm = gsub(pattern = '_profile.png', replacement = '', x = basename(profile_plots)))
+
+updn_plot <- profile_plots[which(grepl(pattern = 'updn', x = names(profile_plots)))]
+hilo_plot <- profile_plots[which(grepl(pattern = 'hilo', x = names(profile_plots)))]
+
+sample_IDs <- unique(gsub(x = names(profile_plots), pattern = '([[:alpha:]]*)(.*)', replacement = '\\1', perl = TRUE))
+
+# Up Down comparisons
+cat(paste0('## Up vs. Down  \n \n')) # {.tabset .tabset-pills}
+cat('Genes that were up vs. down regulated in the gene expression data from the microarray. \n \n')
+
+for(ID in sample_IDs){
+    sample_plots <- updn_plot[grepl(pattern = ID, x = names(updn_plot))]
+    # cat(paste0('### ', ID, ' \n \n'))
+    
+    for(sample_plot in sample_plots){
+        cat(paste0('![](',sample_plot,') \n \n'))
+    }
+}
+
+# Up Down comparisons
+cat(paste0('## Top vs. Bottom  \n \n')) # {.tabset .tabset-pills}
+cat('The top 3000 genes vs. the bottom 3000 expressed genes from the microarray. \n \n')
+
+for(ID in sample_IDs){
+    sample_plots <- hilo_plot[grepl(pattern = ID, x = names(hilo_plot))]
+    # cat(paste0('### ', ID, ' \n \n'))
+    
+    for(sample_plot in sample_plots){
+        cat(paste0('![](',sample_plot,') \n \n'))
+    }
+}
+
+
+
+```
+
+
