@@ -30,9 +30,8 @@ xls_dict = {sheet_name: xls_file.parse(sheet_name) for sheet_name in xls_file.sh
 count = 1
 for sheet_name, sheet_data, in xls_dict.iteritems():
     sheet_df = xls_dict[sheet_name]
-    # out_file_name = '.'.join([file_base, sheet_name, "tsv"]) # use this if you want to preserve the sheet names
-    out_file_name = '.'.join([file_base, "sheet_" + str(count), "tsv"])
+    out_file_name = '.'.join([file_base, sheet_name, "tsv"]).replace(" ", "_") # use this if you want to preserve the sheet names
+    # out_file_name = '.'.join([file_base, "sheet_" + str(count), "tsv"]) # use this if you don't want to preserve sheet names
     out_file_path = os.path.join(file_dir, out_file_name)
     sheet_df.to_csv(out_file_path,sep ='\t', index = False)
     count += 1
-
