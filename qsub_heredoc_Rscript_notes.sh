@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # manual: http://gridscheduler.sourceforge.net/htmlman/htmlman1/qsub.html
+# better manual: https://genome.med.nyu.edu/hpcf/wiki/Manual:Cluster_User_Guide#Requesting_Resources_for_Multi-threaded_Jobs
 
 # here are some notes about using heredocs and qsub and Rscript
 
@@ -59,4 +60,49 @@ Greetings to you, $NAME, from $RESPONDENT.
 
 Endofmessage
 
-# TO-DO: try to qsub an R script heredoc directly.. 
+
+
+# submitting an R script or Python script within a bash heredoc
+# find files I need to process
+files_I_want="$(find /my/dir/ -type f -name "*.txt")"
+output_dir="/other/dir"
+
+# iterate over files
+for some_file in $files_I_want; do
+    # set output file path
+    output_file="${output_dir}/$(basename "$some_file")"
+
+    # submit bash heredoc qsub job
+    qsub -wd $PWD <<E0F
+# R example
+# start R heredoc
+Rscript - "${some_file}" "${output_file}" <<E0F2
+args <- commandArgs(TRUE)
+
+my_crazy_function <- function(input_file, output_file){
+    print("input file is:")
+    print(input_file)
+    print("output file is:")
+    print(output_file)
+}
+print("This is R")
+my_crazy_function(input_file = args[1], output_file = args[2])
+
+E0F2
+
+# Python example
+python - "${some_file}" "${output_file}" <<E0F3
+import sys
+
+def my_crazy_function(input_file, output_file):
+    print "Input file is: ", input_file
+    print "Output file is: ", output_file
+
+input_file = sys.argv[1]
+output_file = sys.argv[2]
+print "This is Python"
+my_crazy_function(input_file, output_file)
+E0F3
+E0F
+
+done
