@@ -1,13 +1,17 @@
 #!/usr/bin/env python
 # python 2.7
 '''
+USAGE: find_missing_samples.py /path/to/sample-sheet.tsv /path/to/results_dir
+
+EXAMPLE: find_missing_samples.py ~/projects/inputs/sample-sheet.tsv ~/projects/pipeline/align/results/
+
 This script will check the output directory of the analysis pipeline to make sure
 all the samples listed in the sample sheet are present in the output.
 
 For every sample in the samplesheet, there should be a corresponding directory
 in the results dir which has no subdirectories, and has the same name as a sample ID
 
-This script will find the sampleIDs that do not have a corresponding results subdir
+This script will find the sampleIDs that do not have a corresponding results subdir, and vice versa
 '''
 import sys
 import os
