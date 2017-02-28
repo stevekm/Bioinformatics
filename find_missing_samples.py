@@ -12,7 +12,6 @@ This script will find the sampleIDs that do not have a corresponding results sub
 import sys
 import os
 import csv
-# import toolbox as tb
 
 samplesheet_file = sys.argv[1] # should be tab separated!
 results_dir = sys.argv[2]
@@ -32,8 +31,8 @@ dir_sampleIDs = []
 for dirpath, dirnames, filenames in os.walk(results_dir):
     if not dirnames:
         dir_basename = os.path.basename(dirpath)
+        # skip the .db dir created by the pipeline
         if dir_basename != '.db':
-            # skip the .db dir created by the pipeline
             dir_sampleIDs.append(dir_basename)
 
 # sampleIDs with no corresponding results dir

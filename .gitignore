@@ -21,3 +21,5 @@ DiffBind_scripts_reports/DiffBind_GeneExpression_Beanplot_report/input/
 .RData
 *.gz
 DiffBind_scripts_reports/DiffBind_GeneExpression_Beanplot_report/code/clean_data.R
+toolbox.pyc
+*.pyc
