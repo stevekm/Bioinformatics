@@ -25,11 +25,14 @@ peaks_granges <- toGRanges(input_peaks_file, format="BED", header=FALSE)
 
 # for hg19
 # get biomart reference genome information
-cat("\nGetting biomart reference information for hg19...\n")
-martEns <- useMart(host="grch37.ensembl.org", biomart="ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl", verbose=F)
-martEnsTSS <- getAnnotation(mart=martEns, featureType="TSS")
-martEnsDF <- getBM(attributes=c("ensembl_gene_id", "external_gene_name", "gene_biotype"), mart=martEns)
+# cat("\nGetting biomart reference information for hg19...\n")
+# martEns <- useMart(host="grch37.ensembl.org", biomart="ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl", verbose=F)
+# martEnsTSS <- getAnnotation(mart=martEns, featureType="TSS")
+# martEnsDF <- getBM(attributes=c("ensembl_gene_id", "external_gene_name", "gene_biotype"), mart=martEns)
+# save(martEns, martEnsTSS, martEnsDF, file = "biomart_data.RData")
 
+cat("\nLoading biomart reference information for hg19...\n")
+load("biomart_data.RData")
 
 # get the annotations
 cat("\nGetting annotations...\n")
@@ -45,3 +48,4 @@ write.table(peaks_granges_df, row.names = FALSE, sep = '\t', quote = FALSE,
             file = output_annotated_peaks_file)
 
 
+sessionInfo()
