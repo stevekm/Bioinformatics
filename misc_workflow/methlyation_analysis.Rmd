@@ -1,0 +1,442 @@
+---
+title: "Methylation Data Analysis"
+author: "Stephen Kelly"
+date: "January 9, 2017"
+output: 
+  html_document: 
+    fig_height: 8
+    fig_width: 8
+    keep_md: yes
+    number_sections: true
+    code_folding: hide
+    toc: true
+    toc_float: true
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup {.tabset .tabset-pills}
+
+```{r custom_functions}
+project_dir <- "/ifs/home/kellys04/projects/CarrollLab_Teena_ChIpSeq_2016-03-10/project_notes/methylation_data"
+
+# function for formatting text in the report
+mycat <- function(text){
+    cat(gsub(pattern = "\n", replacement = "  \n", x = text))
+}
+# mycat('# Plots and Results {.tabset}\n\n') # .tabset-fade .tabset-pills
+```
+
+## Hide
+
+## Clean Up the Data
+
+```{r load_data, eval=FALSE}
+# ~~~~ LOAD DATA ~~~~ #
+# sheet1_file <- "methylation_data/methyldata_sheet1.tsv"
+
+# previously editted the file to remove empty cells, remove non-paired samples
+# sheet1_file <- "project_notes/methylation_data/methyldata_sheet1_editted.tsv"
+sheet1_file <- "methyldata_sheet1_editted.tsv"
+sheet1_file <- file.path(project_dir, sheet1_file)
+
+# load the table
+methyl_df <- read.delim(sheet1_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE)
+head(x = methyl_df)
+
+# ~~~~ FIX DATA ~~~~ #
+# the first two rows need to be the colnames
+fix_colnames <- paste(as.character(methyl_df[1,]), as.character(methyl_df[2,]), sep = '-')
+colnames(methyl_df) <- fix_colnames
+
+# drop the first rows which are bad col headings
+methyl_df <- methyl_df[4:nrow(methyl_df),]
+
+
+# pull off the probeset IDs to a separate DF
+probesets <- methyl_df[1]
+colnames(probesets) <- "probesets"
+
+# set rownames for og df to probesets
+rownames(methyl_df) <- probesets[[1]]
+
+# split into columns
+methylation_probesets_df <- as.data.frame(do.call(rbind, strsplit(probesets$probesets, ':')))
+methylation_probesets_df <- cbind(methylation_probesets_df[1], 
+                      as.data.frame(do.call(rbind, strsplit(as.character(methylation_probesets_df$V2), '-'))))
+
+# write out as BED file
+
+probesets_BED_file <- "methyl_probesets.bed"
+probesets_BED_file <- file.path(project_dir, probesets_BED_file)
+
+write.table(x = methylation_probesets_df, file = probesets_BED_file, quote = FALSE, sep = '\t', row.names = FALSE, col.names = FALSE)
+
+
+# hist(as.numeric(methyl_df[[2]]))
+# hist(as.numeric(methyl_df[[3]]))
+
+# remove probeset column
+methyl_df <- methyl_df[2:ncol(methyl_df)]
+
+# make numeric matrix
+methyl_df <- as.data.frame(apply(methyl_df,2,as.numeric))
+rownames(methyl_df) <- probesets[[1]]
+
+# save the final fixed data
+methyl_outfile <- "methyldata_USETHIS.tsv"
+methyl_outfile <- file.path(project_dir, probesets_BED_file)
+write.table(x = methyl_df, file = methyl_outfile, quote = FALSE, sep = '\t', na = 'NA', row.names = TRUE, col.names = NA)
+```
+
+# Analyze Data 
+
+```{r analyze_data, cache=TRUE}
+
+methyl_file <- "methyldata_USETHIS.tsv"
+methyl_file <- file.path(project_dir, methyl_file)
+methyl_df <- read.delim(methyl_file, header = TRUE, sep = '\t', row.names = 1)
+
+# head(methyl_df)
+# dim(methyl_df)
+# colnames(methyl_df)
+
+# get sample names
+sample_names <- setNames(object = colnames(methyl_df), nm = gsub(x = colnames(methyl_df), perl = TRUE, pattern = "^(.*)[[:punct:]].*$", replacement = '\\1'))
+# sample_names
+
+unique_names <- unique(names(sample_names))
+# unique_names
+```
+
+## Boxplot All Samples {.tabset .tabset-pills}
+
+```{r all_sample_plot, cache=TRUE, fig.width=12}
+library("reshape2")
+library("ggplot2")
+
+methyl_df_long <- reshape2::melt(as.matrix(methyl_df), value.name = "methylation")
+colnames(methyl_df_long) <- c("loci", "sample", "methylation")
+
+methyl_df_long['patient'] <- gsub(x = methyl_df_long[["sample"]], pattern = '^([[:alpha:]]*)[[:punct:]].*$', replacement = '\\1', perl = TRUE)
+methyl_df_long['status'] <- gsub(x = methyl_df_long[["sample"]], pattern = '^[[:alpha:]]*[[:punct:]](.*)$', replacement = '\\1', perl = TRUE)
+
+ggplot(aes(y = methylation, x = patient, fill = status), data = methyl_df_long) + geom_boxplot()
+
+```
+
+
+## Histograms per Sample {.tabset .tabset-pills}
+
+```{r make_hists, results='asis', cache=TRUE}
+# make hist of all sample pairs' difference in methyl values
+for( i in seq_along(unique_names)){
+    samplename <- unique_names[i]
+    mycat( paste0('### ', samplename, '\n\n'))
+    paired_samples <- sample_names[ names(sample_names) %in% samplename ]
+
+    relapse_sample <- paired_samples[grep(pattern = 'relapse', x = paired_samples, ignore.case = TRUE)]
+    diagnosis_sample <- paired_samples[grep(pattern = 'diagnosis', x = paired_samples, ignore.case = TRUE)]
+    
+    # mycat(paste0('- ', relapse_sample, '\n\n'))
+    # mycat(paste0('- ', diagnosis_sample, '\n\n'))
+    
+    diff_methyl <- methyl_df[[relapse_sample]] - methyl_df[[diagnosis_sample]]
+    
+    hist(diff_methyl, main = paste0(samplename, " Differential Methylation"), xlab = paste0(relapse_sample, ' - ', diagnosis_sample))
+    
+    plot(methyl_df[c(relapse_sample, diagnosis_sample)], col=c("blue", "red"), main = paste0(samplename, " Differential Methylation"))
+    abline(a = 0, b = 1, col = "grey", lwd = 5)
+    legend("topleft", legend = c("Relapse", "Diagnosis"), col=c("blue", "red"), pch = 1)
+    
+    pos_cutoffs <- c(0.25, 0.5, 0.75, 1)
+    neg_cutoffs <- c(-0.25, -0.5, -0.75, -1)
+    
+    cutoff_df <- data.frame()
+    
+    mycat("\n\n")
+    mycat("#### Number of Differential Loci at Cutoff Value \n\n")
+    for(cutoff in pos_cutoffs){
+        cutoff_loci <- length(diff_methyl[which(diff_methyl > cutoff)])
+        # mycat(paste0('- Cutoff: ', cutoff, '\t', cutoff_loci, '\n\n'))
+        cutoff_df <- rbind(cutoff_df, c(cutoff, cutoff_loci))
+    }
+    
+    for(cutoff in neg_cutoffs){
+        cutoff_loci <- length(diff_methyl[which(diff_methyl < cutoff)])
+        # mycat(paste0('- Cutoff: ', cutoff, '\t', cutoff_loci, '\n\n'))
+        cutoff_df <- rbind(cutoff_df, c(cutoff, cutoff_loci))
+    }
+    
+    colnames(cutoff_df) <- c("cutoff", "loci")
+    cutoff_df <- cutoff_df[order(-cutoff_df$cutoff),] 
+    # barplot(height = cutoff_df[["loci"]], names.arg = cutoff_df[['cutoff']], main = paste0(samplename, " Loci at Cutoff Value"), xlab = "Cutoff", ylab = "Number of Loci")
+    with(cutoff_df[order(cutoff_df$cutoff),], barplot(height = loci, names.arg = cutoff, main = paste0(samplename, " Loci at Cutoff Value"), xlab = "Cutoff", ylab = "Number of Loci") )
+
+    # library(xtable)
+    # print(xtable(cutoff_df), type="html", include.rownames = FALSE)
+    
+    library(knitr)
+    print(kable(cutoff_df, align = c("c", "c"), row.names = FALSE))
+    mycat("\n\n")
+}
+
+# # check min and max values in the dataset
+# apply(X = methyl_df,MARGIN = 2,FUN = min, na.rm=T)
+# apply(X = methyl_df,MARGIN = 2,FUN = max, na.rm=T)
+# 
+# hist(methyl_df[,2]-methyl_df[,1])
+# 
+# sum(methyl_df[,2]-methyl_df[,1] > 0.5,na.rm=T)
+# sum(methyl_df[,2]-methyl_df[,1] > 0.75,na.rm=T)
+# sum(methyl_df[,2]-methyl_df[,1] < -0.75,na.rm=T)
+
+```
+
+## Overlap ChIP-Seq and Methylation Differential Loci
+
+```{r make_diff_bed, cache=TRUE, eval=FALSE}
+cutoffs <- c(-0.25, -0.5, -0.75, -1, 0.25, 0.5, 0.75, 1)
+
+# "/ifs/home/kellys04/projects/CarrollLab_Teena_ChIpSeq_2016-03-10/project_notes/manuscript_figures/compare_SE_diff_peaks/data/Diffbind/diff_bind.D-vs-R.blocking.p100.csv"
+
+# load DiffBind data
+diffbind_file <- "diff_bind.D-vs-R.blocking.p100.csv"
+diffbind_file <- file.path(project_dir, diffbind_file)
+diffbind_df <- read.csv(file = diffbind_file)
+
+# save DiffBind BED file
+diffbind_bed_file <- "diffbind.bed"
+diffbind_bed_file <- file.path(project_dir, diffbind_bed_file)
+write.table(x = diffbind_df[1:3], file = diffbind_bed_file, quote = FALSE, sep = '\t', row.names = FALSE, col.names = FALSE)
+
+```
+
+```{r, engine='bash', eval=FALSE}
+# Need to get the DiffBind peaks that overlap Methylation loci
+proj_dir="/ifs/home/kellys04/projects/CarrollLab_Teena_ChIpSeq_2016-03-10/project_notes/methylation_data"
+diffbind_bed="${proj_dir}/diffbind.bed"
+methyl_probes="${proj_dir}/methyl_probesets.bed"
+module load bedtools/2.26.0
+
+cd "$proj_dir"
+
+function sort_bed {
+    local bed_file="$1"
+    sort -k1,1 -k2,2n "$bed_file" > tmp && mv tmp "$bed_file"
+}
+
+
+sort_bed "$diffbind_bed"
+sort_bed "$methyl_probes"
+
+wc -l $diffbind_bed
+# 126206 /ifs/home/kellys04/projects/CarrollLab_Teena_ChIpSeq_2016-03-10/project_notes/methylation_data/diffbind.bed
+wc -l $methyl_probes
+# 117521 /ifs/home/kellys04/projects/CarrollLab_Teena_ChIpSeq_2016-03-10/project_notes/methylation_data/methyl_probesets.bed
+
+# bedtools intersect -v -a "$peak_D_file" -b "$peak_R_file" > "$peak_D_overlap"
+# bedtools intersect -a "$D_peaks_merged" -b $all_D_uniq_bedfiles -names $all_D_IDs -loj > "${data_dir}/D-H3K27AC_SE_peaks_All_IDs.txt" 
+# bedtools intersect -a "$diff_SE_D_overlap_peaks" -b "$diff_SE_R_overlap_peaks" -wa > "$diff_SE_DR_shared_peaks"
+# cat $uniq_R_peaks | sort -k1,1 -k2,2n
+
+bedtools intersect -a "$diffbind_bed" -b "$methyl_probes" -wa -wb > diffbind_methyl_overlaps.bed
+bedtools intersect -a "$diffbind_bed" -b "$methyl_probes" -loj > diffbind_methyl_overlaps_loj.bed
+
+# $ wc -l diffbind_methyl_overlaps.bed
+# 116610 diffbind_methyl_overlaps.bed
+
+# $ wc -l diffbind_methyl_overlaps_loj.bed
+# 215335 diffbind_methyl_overlaps_loj.bed
+
+# get just the bed regions for the methly overlaps
+cat diffbind_methyl_overlaps.bed | cut -f 4-6 > methylation_probeset_regions_that_overlap_DiffBind_peaks.bed
+# $ wc -l methylation_probeset_regions_that_overlap_DiffBind_peaks.bed
+# 116610 methylation_probeset_regions_that_overlap_DiffBind_peaks.bed
+```
+
+Annotate the BED overlap coordinates 
+
+```{r annotatedBED, eval=FALSE}
+# source("https://bioconductor.org/biocLite.R")
+# biocLite("ChIPpeakAnno")
+library(ChIPpeakAnno)
+library(biomaRt)
+project_dir <- "/ifs/home/kellys04/projects/CarrollLab_Teena_ChIpSeq_2016-03-10/project_notes/methylation_data"
+# project_dir <- "/Users/kellys04/projects/tmp_Teena/methylation_data"
+
+methyl_regions_file <- file.path(project_dir, "methylation_probeset_regions_that_overlap_DiffBind_peaks.bed")
+
+# read in the BED file
+methyl_granges <- toGRanges(methyl_regions_file, format="BED", header=FALSE) 
+# > methyl_granges
+# GRanges object with 116610 ranges and 0 metadata columns:
+#           seqnames               ranges strand
+#              <Rle>            <IRanges>  <Rle>
+#   X000001     chr1     [761297, 762295]      *
+#   X000002     chr1     [762296, 762639]      *
+#   X000003     chr1     [763181, 763391]      *
+#   X000004     chr1     [763427, 763812]      *
+#   X000005     chr1     [761297, 762295]      *
+#       ...      ...                  ...    ...
+#   X116606     chrY [22922785, 22923014]      *
+#   X116607     chrY [22923015, 22923370]      *
+#   X116608     chrY [23757973, 23758265]      *
+#   X116609     chrY [23758320, 23758773]      *
+#   X116610     chrY [23758774, 23759184]      *
+#   -------
+#   seqinfo: 24 sequences from an unspecified genome; no seqlengths
+
+# for hg19
+# get biomart reference genome information
+martEns <- useMart(host="grch37.ensembl.org", biomart="ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl", verbose=F)
+martEnsTSS <- getAnnotation(mart=martEns, featureType="TSS")
+martEnsDF <- getBM(attributes=c("ensembl_gene_id", "external_gene_name", "gene_biotype"), mart=martEns)
+
+methyl_granges <- annotatePeakInBatch(methyl_granges, AnnotationData = martEnsTSS, PeakLocForDistance = "middle", FeatureLocForDistance = "TSS", output = "shortestDistance", multiple = TRUE)
+
+methyl_granges_df <- as.data.frame(methyl_granges)
+
+methyl_granges_df <- merge(as.data.frame(methyl_granges) , martEnsDF , by.x=c("feature"), by.y=c("ensembl_gene_id") , all.x=TRUE)
+
+write.table(methyl_granges_df, row.names = FALSE, file = file.path(project_dir, "methylation_probeset_regions_that_overlap_DiffBind_peaks-annotated.tsv"), sep = '\t', quote = FALSE)
+
+```
+
+Find the DiffBind peak genes which were had >1.5x increased on decreased Methylation values, per sample.
+
+```{r, eval=FALSE}
+library("beanplot")
+library("reshape2")
+
+chrom_rownames2cols <- function(df){
+    # split rownames into separate columns for chromosome coordinates
+    # chr10:100026989-100027328 
+    df_chrom <- as.data.frame(do.call(rbind, strsplit(rownames(df), ':')))
+    df_chrom <- cbind(df_chrom[1], as.data.frame(do.call(rbind, strsplit(as.character(df_chrom$V2), '-'))))
+    colnames(df_chrom) <- c("chrom", "start", "stop")
+    df <- cbind(df_chrom, df)
+    return(df)
+}
+
+
+diffbind_methyl_samples_DR_key <- "DiffBind_Name\tDiffBind_R_Status\tDiffBind_Mark\tDiffBind_R_Name-Status-Mark\tDiffBind_D_Status\tDiffBind_D_Name-Status-Mark\tMethyl_R_Name-Status\tMethyl_R_Name\tMethyl_R_Status\tMethyl_D_Name-Status\tMethyl_D_Name\tMethyl_D_Status
+AGK\tR\tH3K27AC\tAGK.R.H3K27AC\tD\tAGK.D.H3K27AC\tPAPAGK.Relapse\tPAPAGK\tRelapse\tPAPAGK.Diagnosis\tPAPAGK\tDiagnosis
+DKJ\tR\tH3K27AC\tDKJ.R.H3K27AC\tD\tDKJ.D.H3K27AC\tPAPDKJ.Relapse\tPAPDKJ\tRelapse\tPAPDKJ.Diagnosis\tPAPDKJ\tDiagnosis
+IDY\tR\tH3K27AC\tIDY.R.H3K27AC\tD\tIDY.D.H3K27AC\tPAPIDY.Relapse\tPAPIDY\tRelapse\tPAPIDY.Diagnosis\tPAPIDY\tDiagnosis
+SPN\tR\tH3K27AC\tSPN.R.H3K27AC\tD\tSPN.D.H3K27AC\tPAPSPN.Relapse\tPAPSPN\tRelapse\tPAPSPN.Diagnosis\tPAPSPN\tDiagnosis
+ZGR\tR\tH3K27AC\tZGR.R.H3K27AC\tD\tZGR.D.H3K27AC\tPAPZGR.Relapse\tPAPZGR\tRelapse\tPAPZGR.Diagnosis\tPAPZGR\tDiagnosis
+ZNK\tR\tH3K27AC\tZNK.R.H3K27AC\tD\tZNK.D.H3K27AC\tPAPZNK.Relapse\tPAPZNK\tRelapse\tPAPZNK.Diagnosis\tPAPZNK\tDiagnosis
+BVI\tR\tH3K27AC\tBVI.R.H3K27AC\tD\tBVI.D.H3K27AC\tPARBVI.Relapse\tPARBVI\tRelapse\tPARBVI.Diagnosis\tPARBVI\tDiagnosis
+CBK\tR\tH3K27AC\tCBK.R.H3K27AC\tD\tCBK.D.H3K27AC\tPARCBK.Relapse\tPARCBK\tRelapse\tPARCBK.Diagnosis\tPARCBK\tDiagnosis
+FLV\tR\tH3K27AC\tFLV.R.H3K27AC\tD\tFLV.D.H3K27AC\tPARFLV.Relapse\tPARFLV\tRelapse\tPARFLV.Diagnosis\tPARFLV\tDiagnosis"
+diffbind_samples_DR_key_df <- read.table(textConnection(diffbind_methyl_samples_DR_key), header = TRUE, sep = '\t')
+
+diffbind_sample_IDs <- c("AGK.R.H3K27AC", "DKJ.R.H3K27AC", "IDY.R.H3K27AC", "SPN.R.H3K27AC", "ZGR.R.H3K27AC", "ZNK.R.H3K27AC", "BVI.R.H3K27AC", "CBK.R.H3K27AC", "FLV.R.H3K27AC", "AGK.D.H3K27AC", "DKJ.D.H3K27AC", "IDY.D.H3K27AC", "SPN.D.H3K27AC", "ZGR.D.H3K27AC", "ZNK.D.H3K27AC", "BVI.D.H3K27AC", "CBK.D.H3K27AC", "FLV.D.H3K27AC")
+
+methylation_sample_IDs <- c("PAPAGK.Relapse", "PAPDKJ.Relapse", "PAPIDY.Relapse", "PAPSPN.Relapse", "PAPZGR.Relapse", "PAPZNK.Relapse", "PARBVI.Relapse", "PARCBK.Relapse", "PARFLV.Relapse", "PAPAGK.Diagnosis", "PAPDKJ.Diagnosis", "PAPIDY.Diagnosis", "PAPSPN.Diagnosis", "PAPZGR.Diagnosis", "PAPZNK.Diagnosis", "PARBVI.Diagnosis", "PARCBK.Diagnosis", "PARFLV.Diagnosis")
+
+
+project_dir <- "/ifs/home/kellys04/projects/CarrollLab_Teena_ChIpSeq_2016-03-10/project_notes/methylation_data"
+# project_dir <- "/Users/kellys04/projects/tmp_Teena/methylation_data"
+
+# laod the Diffbind merged BED we just made and annotate with gene IDs
+diffbind_overlap_bedfile <- "diffbind_methyl_overlaps.bed"
+diffbind_overlap_bedfile <- file.path(project_dir, diffbind_overlap_bedfile)
+diffbind_methylation_region_overlap <- read.table(file = diffbind_overlap_bedfile, header = FALSE, sep = '\t', stringsAsFactors = FALSE)
+colnames(diffbind_methylation_region_overlap) <- c("diff_chr", "diff_start", "diff_stop", "methyl_chr", "methyl_start", "methyl_stop")
+head(diffbind_methylation_region_overlap)
+
+# load DiffBind data
+diffbind_file <- "diff_bind.D-vs-R.blocking.p100.csv"
+diffbind_file <- file.path(project_dir, diffbind_file)
+diffbind_df <- read.csv(file = diffbind_file, stringsAsFactors = FALSE)
+
+
+# load the fixed methylation data
+methyl_file <- file.path(project_dir, "methyldata_USETHIS.tsv")
+methylation_df <- read.table(file = methyl_file, header = TRUE, sep = '\t', row.names = 1, stringsAsFactors = FALSE)
+
+# # # # # ## # # # ##
+
+
+# calculate the methylation ratio
+# empty dataframe to hold the ratio cols
+methylation_ratio_df <- data.frame()
+for(i in seq(nrow(diffbind_samples_DR_key_df))){
+    print(i)
+    sample_info_list <- as.list(diffbind_samples_DR_key_df[i,])
+    str(sample_info_list)
+    
+    
+    # methylation ratio
+    sample_methyl_ratio_df <- log2(methylation_df[as.character(sample_info_list[["Methyl_R_Name.Status"]])] / methylation_df[as.character(sample_info_list[["Methyl_D_Name.Status"]])])
+    colnames(sample_methyl_ratio_df)[1] <- "methyl_ratio"
+    sample_methyl_ratio_df['methyl_sample'] <- as.character(sample_info_list[["Methyl_R_Name"]])
+    sample_methyl_ratio_df['sample'] <- as.character(sample_info_list[["DiffBind_Name"]])
+    sample_methyl_ratio_df['status'] <- as.character(sample_info_list[["DiffBind_R_Status"]])
+    sample_methyl_ratio_df['mark'] <- as.character(sample_info_list[["DiffBind_Mark"]])
+    
+    # add chrom coordinate columns
+    sample_methyl_ratio_df <- chrom_rownames2cols(sample_methyl_ratio_df)
+    nrow(sample_methyl_ratio_df)
+    
+    # inner merge with DiffBind regions
+    sample_methyl_ratio_df <- merge(x = sample_methyl_ratio_df, y = diffbind_methylation_region_overlap, by.x = c("chrom", "start", "stop"), by.y = c("methyl_chr", "methyl_start", "methyl_stop"))
+    # nrow(sample_methyl_ratio_df) # 116610
+    
+    
+    
+    # merge with the desired DiffBind data values
+    head(diffbind_df)
+    # nrow(diffbind_df) # 126206
+    colnames(diffbind_df)
+    diff_cols_to_keep <- c("seqnames", "start", "end", "Fold", "p.value", "FDR")
+    sample_diffbind_df <- diffbind_df[c(diff_cols_to_keep, as.character(sample_info_list[["DiffBind_R_Name.Status.Mark"]]), as.character(sample_info_list[["DiffBind_D_Name.Status.Mark"]]))]
+    sample_diffbind_df <- subset(sample_diffbind_df, subset=(p.value <= 0.2))
+    
+    # calculate the log ratio of diffbind values to determine Up or Down status
+    sample_diffbind_df['diff_log_ratio'] <- log2(sample_diffbind_df[as.character(sample_info_list[["DiffBind_R_Name.Status.Mark"]])] / sample_diffbind_df[as.character(sample_info_list[["DiffBind_D_Name.Status.Mark"]])])
+    
+    sample_diffbind_df['diff_status'] <- ifelse(sample_diffbind_df[['diff_log_ratio']] >= 0.58, "UP", ifelse(sample_diffbind_df[['diff_log_ratio']] <= -0.58, "DOWN", no = NA))
+    
+    nrow(sample_diffbind_df) # 50742
+    nrow(sample_methyl_ratio_df) # 116610
+    
+    
+    # combine the DiffBind with the methylation data
+    sample_methyl_ratio_df <- merge(x = sample_methyl_ratio_df, y = sample_diffbind_df, by.x = c("diff_chr", "diff_start", "diff_stop"), by.y = c("seqnames", "start", "end"))
+    final_cols_to_keep <- c("chrom", "start", "stop", "sample", "methyl_ratio", "diff_status", "p.value", "FDR")
+    sample_methyl_ratio_df <- sample_methyl_ratio_df[,final_cols_to_keep]
+    # nrow(sample_methyl_ratio_df) # 251689
+    sample_methyl_ratio_df <- sample_methyl_ratio_df[! duplicated(sample_methyl_ratio_df),]
+    # nrow(sample_methyl_ratio_df) # 37973
+    
+    # add to final df
+    methylation_ratio_df <- rbind(methylation_ratio_df, sample_methyl_ratio_df)
+}
+
+head(methylation_ratio_df)
+
+# remove NA's
+methylation_ratio_df <- methylation_ratio_df[! is.na(methylation_ratio_df[["methyl_ratio"]]),]
+methylation_ratio_df <- methylation_ratio_df[! is.na(methylation_ratio_df[["diff_status"]]),]
+
+# don't work
+# beanplot(methyl_ratio ~ sample + diff_status, 
+#          data = methylation_ratio_df,
+#          what=c(0,1,1,0),
+#          border = NA,
+#          # bw="nrd0",
+#          overallline = 'mean',
+#          col=list('grey','purple')) #, side = "both"
+
+pdf(file = file.path(project_dir, "methylation_barplots.pdf"), width = 12, 12)
+ggplot(aes(y = methyl_ratio, x = sample, fill = diff_status), data = methylation_ratio_df) + geom_boxplot() + labs(y = "log2( methylation R / D)", fill = "DiffBind loci status") 
+dev.off()
+
+
+```
