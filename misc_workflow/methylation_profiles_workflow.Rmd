@@ -1,0 +1,516 @@
+---
+title: "Methylation Profiles"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Aris's script
+
+```
+for ChIP-seq: /ifs/home/at570/share/smithlab/chipseq
+for methylation: /ifs/home/at570/share/smithlab/methylation
+
+
+
+#!/bin/tcsh
+
+##
+## USAGE: run
+##
+## NOTES: adapted for DNA methylation
+##
+
+if ($#argv != 0) then
+  grep '^##' $0
+  exit
+endif
+
+set ref = ref.bed
+set bedgraphs = IDY-D.bedgraph
+foreach g (IDY-D-*_genes.txt)
+  set gname = `echo $g | sed 's/\.txt$//'`
+  set out = $gname.tsv
+  cat gene-name.bed | cols -t 3 0 1 2 3 4 5 | sort | join -t "<tab char>" - $g | cut -f2- | gtools-regions pos -op 5p | gtools-regions shiftp -5p -5000 -3p +5000 >! $ref            # flank TSS by 5kb
+  gtools-threaded matrix -v -i -o $out -i -nbins 51 --overlap-op value -rpkm -profile sum $bedgraphs $ref
+end
+```
+aris_methlyation_workflow/gene-name.bed : use for reference of Top/Bottom genes
+find top/bottom genes per patient
+intersect genes with list
+
+
+# Make the Bedgraphs
+
+Need to make a bedgraph for each sample in the methylation data; 
+
+- chrom : start : stop : value
+
+```{r make_bedgraphs, eval=FALSE}
+project_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/methylation_profiles"
+bedgraph_dir <- file.path(project_dir, "bedgraphs")
+
+setwd(project_dir)
+
+# load methylation file
+methylation_file <- file.path(project_dir, "methylation_dataset.tsv")
+methylation_df <- read.delim(file = methylation_file, header = TRUE, sep = '\t', row.names = 1)
+
+
+
+# split the chrom coordinates into columns
+probesets <- rownames(methylation_df)
+methylation_probesets_df <- as.data.frame(do.call(rbind, strsplit(probesets, ':')))
+methylation_probesets_df <- cbind(methylation_probesets_df[1],
+                                  as.data.frame(do.call(rbind, strsplit(as.character(methylation_probesets_df$V2), '-'))))
+
+# iterate over the columns
+for(i in seq(ncol(methylation_df))){
+    print(i)
+    sampleID <- print(colnames(methylation_df)[i])
+    
+    # add the chrom coordinate columns
+    sampled_df <- cbind(methylation_probesets_df, methylation_df[sampleID])
+    
+    # remove the NA's 
+    sampled_df <- sampled_df[! is.na(sampled_df[[sampleID]]), ]
+    
+    # write a bedgraph file for each sample column
+    write.table(x = sampled_df, file = file.path(bedgraph_dir, paste0(sampleID, ".bedgraph")), quote = FALSE, sep = '\t', row.names = FALSE, col.names = FALSE)
+}
+
+```
+
+Now need to make the Top and Bottom gene lists for each sample. 
+
+```{r get_top_bottom_expressed_genes, eval=FALSE}
+project_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/methylation_profiles"
+microarray_dir <- file.path(project_dir, "gene_expression_microarray")
+gene_lists_dir <- file.path(project_dir, "top_bottom_gene_lists")
+
+gene_regions_dir <- file.path(project_dir, "sample_gene_TSS_5Kbp_regions")
+
+setwd(project_dir)
+
+# load methylation file
+microarray_file <- file.path(microarray_dir, "GeneExpression18Patients_includes_SRR.sheet_1.tsv")
+microarray_df <- read.delim(file = microarray_file, header = TRUE, sep = '\t', row.names = 1)
+colnames(microarray_df)
+
+# make a vector of the sample ID's with adjusted names
+gene_expr_samples <- setNames(object = colnames(microarray_df), 
+                              nm = gsub(pattern = '.', replacement = '-', 
+                                        x = gsub(pattern = 'Exp.', replacement = '', 
+                                                 x = colnames(microarray_df)), fixed = TRUE))
+
+
+
+# load Aris' bed file with Gene names from Ensembl
+ref_bed_file <- file.path(project_dir, "aris_gene_names_hg19_ENSEMBL_69.bed")
+ref_bed_df <- read.delim(file = ref_bed_file, header = FALSE, sep = '\t')
+colnames(ref_bed_df) <- c("chrom", "start", "stop", "gene", "value", "strand")
+
+
+# get the top and bottom genes for each sample
+for(i in seq_along(gene_expr_samples)){
+    gene_sample <- gene_expr_samples[i]
+    print(gene_sample)
+    
+    # get separate df's for the top and bottom genes
+    top_genes_df <- head(microarray_df[order(microarray_df[[gene_sample]], decreasing = TRUE), ], 5000)
+    top_genes_df <- cbind(top_genes_df[gene_sample], gene = rownames(top_genes_df))
+    
+    bottom_genes_df <- tail(microarray_df[order(microarray_df[[gene_sample]], decreasing = TRUE), ], 5000)
+    bottom_genes_df <- cbind(bottom_genes_df[gene_sample], gene = rownames(bottom_genes_df))
+    
+    head(top_genes_df)
+    head(ref_bed_df)
+    
+    nrow(top_genes_df)
+    nrow(ref_bed_df)
+    
+    # merge them with the reference BED df by gene name
+    col_order <- c("chrom", "start", "stop", "gene", gene_sample)
+    top_genes_df <- merge(top_genes_df, ref_bed_df[c("chrom", "start", "stop", "gene")], by = "gene")[col_order]
+    bottom_genes_df <- merge(bottom_genes_df, ref_bed_df[c("chrom", "start", "stop", "gene")], by = "gene")[col_order]
+    
+    
+    # modify the gene regions; generate TSS +/- 5000bp gene regions
+    # chrom : start - 5000 : start + 5000
+    top_genes_df[["new_start"]] <- top_genes_df[["start"]] - 5000
+    top_genes_df[["new_stop"]] <- top_genes_df[["start"]] + 5000
+    
+    bottom_genes_df[["new_start"]] <- bottom_genes_df[["start"]] - 5000
+    bottom_genes_df[["new_stop"]] <- bottom_genes_df[["start"]] + 5000
+    
+    # reorder cols and rows, and write the dataframes to files
+    col_out_order <- c("chrom", "new_start", "new_stop", "gene")
+    top_genes_df <- top_genes_df[with(top_genes_df, order(chrom, new_start)), col_out_order]
+    bottom_genes_df <- bottom_genes_df[with(bottom_genes_df, order(chrom, new_start)), col_out_order]
+    write.table(x = top_genes_df[col_out_order], 
+                file = file.path(gene_regions_dir, paste0(names(gene_sample), '_Top_expressed_genes.bed')), 
+                quote = FALSE, sep = '\t', row.names = FALSE, col.names = FALSE)
+    write.table(x = bottom_genes_df[col_out_order], 
+                file = file.path(gene_regions_dir, paste0(names(gene_sample), '_Bottom_expressed_genes.bed')), 
+                quote = FALSE, sep = '\t', row.names = FALSE, col.names = FALSE)
+    
+    
+    # get the top and bottom genes in vectors
+    top_genes <- rownames(head(microarray_df[order(microarray_df[[gene_sample]], decreasing = TRUE),], 5000))
+    bottom_genes <- rownames(tail(microarray_df[order(microarray_df[[gene_sample]], decreasing = TRUE),], 5000))
+    # write out a list of the top and bottom genes
+    # make the output file names
+    top_file <- file.path(gene_lists_dir, paste0(names(gene_sample), '_Top_expressed_genes_list.txt'))
+    bottom_file <- file.path(gene_lists_dir, paste0(names(gene_sample), '_Bottom_expressed_genes_list.txt'))
+    # write the vectors to the files, one per line
+    writeLines(text = top_genes, con = top_file)
+    writeLines(text = bottom_genes, con = bottom_file)
+}
+
+
+
+```
+
+Make a sample sheet to connect the bedgraph files with the top and bottom gene beds we just made
+
+Write out an old sample sheet to start with...
+
+```{r, eval=FALSE}
+
+diffbind_methyl_samples_DR_key <- "DiffBind_Name\tDiffBind_R_Status\tDiffBind_Mark\tDiffBind_R_Name-Status-Mark\tDiffBind_D_Status\tDiffBind_D_Name-Status-Mark\tMethyl_R_Name-Status\tMethyl_R_Name\tMethyl_R_Status\tMethyl_D_Name-Status\tMethyl_D_Name\tMethyl_D_Status
+AGK\tR\tH3K27AC\tAGK.R.H3K27AC\tD\tAGK.D.H3K27AC\tPAPAGK.Relapse\tPAPAGK\tRelapse\tPAPAGK.Diagnosis\tPAPAGK\tDiagnosis
+DKJ\tR\tH3K27AC\tDKJ.R.H3K27AC\tD\tDKJ.D.H3K27AC\tPAPDKJ.Relapse\tPAPDKJ\tRelapse\tPAPDKJ.Diagnosis\tPAPDKJ\tDiagnosis
+IDY\tR\tH3K27AC\tIDY.R.H3K27AC\tD\tIDY.D.H3K27AC\tPAPIDY.Relapse\tPAPIDY\tRelapse\tPAPIDY.Diagnosis\tPAPIDY\tDiagnosis
+SPN\tR\tH3K27AC\tSPN.R.H3K27AC\tD\tSPN.D.H3K27AC\tPAPSPN.Relapse\tPAPSPN\tRelapse\tPAPSPN.Diagnosis\tPAPSPN\tDiagnosis
+ZGR\tR\tH3K27AC\tZGR.R.H3K27AC\tD\tZGR.D.H3K27AC\tPAPZGR.Relapse\tPAPZGR\tRelapse\tPAPZGR.Diagnosis\tPAPZGR\tDiagnosis
+ZNK\tR\tH3K27AC\tZNK.R.H3K27AC\tD\tZNK.D.H3K27AC\tPAPZNK.Relapse\tPAPZNK\tRelapse\tPAPZNK.Diagnosis\tPAPZNK\tDiagnosis
+BVI\tR\tH3K27AC\tBVI.R.H3K27AC\tD\tBVI.D.H3K27AC\tPARBVI.Relapse\tPARBVI\tRelapse\tPARBVI.Diagnosis\tPARBVI\tDiagnosis
+CBK\tR\tH3K27AC\tCBK.R.H3K27AC\tD\tCBK.D.H3K27AC\tPARCBK.Relapse\tPARCBK\tRelapse\tPARCBK.Diagnosis\tPARCBK\tDiagnosis
+FLV\tR\tH3K27AC\tFLV.R.H3K27AC\tD\tFLV.D.H3K27AC\tPARFLV.Relapse\tPARFLV\tRelapse\tPARFLV.Diagnosis\tPARFLV\tDiagnosis"
+diffbind_samples_DR_key_df <- read.table(textConnection(diffbind_methyl_samples_DR_key), header = TRUE, sep = '\t')
+project_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/methylation_profiles"
+write.table(x = diffbind_samples_DR_key_df, file = file.path(project_dir, "sample_sheet.tsv"), quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+```
+
+did stuff in Excel to make the new samplesheet, iterate over the rows of the new sample sheet to run Aris' gtools command to make the matrix for each sample
+
+EDIT: Dont run this vvvvv
+```{r make_bedgraph_samplesheet, engine='bash', eval=FALSE}
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/methylation_profiles"
+cd "$project_dir"
+
+bedgraphs_dir="${project_dir}/bedgraphs"
+regions_dir="${project_dir}/sample_gene_TSS_5Kbp_regions"
+matrix_dir="${project_dir}/matrices"
+mkdir -p "$matrix_dir"
+
+samplesheet="microarray_methlyation_samplesheet.tsv2"
+
+
+
+
+tail -n +2 "$samplesheet" | while read line; do
+if [ ! -z "$line" ]; then
+set -x
+# the methylation ID and files
+methyl_diagnosis_ID="$(echo "$line" | cut -f 3)"
+methyl_diagnosis_bedgraph="$(find "$bedgraphs_dir" -name "*${methyl_diagnosis_ID}*" -name "*.bedgraph")"
+methyl_relapse_ID="$(echo "$line" | cut -f 4)"
+methyl_relapse_bedgraph="$(find "$bedgraphs_dir" -name "*${methyl_relapse_ID}*" -name "*.bedgraph")"
+
+echo "$methyl_diagnosis_bedgraph"
+echo "$methyl_relapse_bedgraph"
+
+# the microarray ID and region files
+regions_D_ID="$(echo "$line" | cut -f 5)"
+regions_R_ID="$(echo "$line" | cut -f 6)"
+top_regions_D_file="$(find "$regions_dir" -name "*${regions_D_ID}*" -name "*Top_expressed_genes.bed")"
+bottom_regions_D_file="$(find "$regions_dir" -name "*${regions_D_ID}*" -name "*Bottom_expressed_genes.bed")"
+top_regions_R_file="$(find "$regions_dir" -name "*${regions_R_ID}*" -name "*Top_expressed_genes.bed")"
+bottom_regions_R_file="$(find "$regions_dir" -name "*${regions_R_ID}*" -name "*Bottom_expressed_genes.bed")"
+echo "$top_regions_D_file"
+echo "$bottom_regions_D_file"
+echo "$top_regions_R_file"
+echo "$bottom_regions_R_file"
+
+# set the output files
+
+
+# gtools-threaded matrix -v -i -o $out -i -nbins 51 --overlap-op value -rpkm -profile sum $bedgraphs $ref
+echo ""
+echo ""
+set +x
+fi
+done 
+
+
+```
+
+
+instead just do the Python script version:
+
+`$ python run_gtools_make_matrices.py`
+
+```{r, engine='python'}
+#/usr/bin/env python
+
+'''
+This script will run gtools in order to generate coverage matrices for a large number of bedgraphs with corresponding region BED files
+'''
+
+
+import os
+import sys
+import csv
+import toolbox as tb # my custom functions
+
+
+class projectLocs:
+    '''
+    An object class to hold locations of places in the project
+    '''
+    def __init__(self):
+        self.project_dir = "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/methylation_profiles"
+        self.bedgraphs_dir = os.path.join(self.project_dir, "bedgraphs")
+        self.regions_dir = os.path.join(self.project_dir, "sample_gene_TSS_5Kbp_regions")
+        self.matrix_dir = os.path.join(self.project_dir, "matrices")
+        self.matrix_logdir = tb.mkdir_p(os.path.join(self.matrix_dir, "logs"), return_path=True)
+        self.samplesheet = os.path.join(self.project_dir, "microarray_methlyation_samplesheet_3.tsv")
+
+
+def file_match(dir, start_pattern = '', end_pattern = '', contains_pattern = ''):
+    '''
+    Find a file in a dir which matches the supplied patterns
+    NOTE: Doesn't search recursively!
+    '''
+    file_match = []
+    for file in os.listdir(dir):
+        if file.startswith(start_pattern) and file.endswith(end_pattern) and contains_pattern in file:
+            file_match.append(os.path.join(dir, file))
+    return file_match
+
+
+def samplesheet2dict(samplesheet_file, sample_colname, sep = '\t'):
+    '''
+    Create a nested dict for each sample in a standard TSV samplesheet with headers
+    NOTE: If duplicate column headers exist, latter will overwrite former
+    '''
+    import csv
+    sample_files_dict = {}
+    with open(samplesheet_file) as csvfile:
+        reader = csv.DictReader(csvfile, delimiter = sep)
+        for row_dict in reader:
+            sample_files_dict[row_dict[sample_colname]] = row_dict
+    return sample_files_dict
+
+def print_samplesheet_dict(samplesheet_dict):
+    '''
+    Pretty printing for a samplesheet dict so its more readable on the console
+    '''
+    for key, value in samplesheet_dict.iteritems():
+        print key
+        for subkey, subvalue in value.iteritems():
+            print subkey,':', subvalue
+        print "\n"
+
+
+# sample sheet looks like this:
+# Sample_Name   Methylation_name    Methylation_name_D  Methylation_name_R  Microarray_name_D   Microarray_name_R   Microarray_name_LR  D_Status    R_Status    Microarray_name_D   Microarray_name_R   Microarray_name_LR
+# AGK   PAPAGK  PAPAGK.Diagnosis    PAPAGK.Relapse  AGK-D   AGK-R   AGK-LR  D   R   AGK-Exp-D   AGK-Exp-R   AGK-Exp-LR
+
+
+# create object to hold the project locations
+proj_locs = projectLocs()
+
+# create the samplesheet dict
+samplesheet_dict = samplesheet2dict(samplesheet_file = proj_locs.samplesheet, sample_colname = 'Sample_Name')
+
+# print it to the console
+# print_samplesheet_dict(samplesheet_dict)
+
+# samplesheet IDs whose values match filenames
+regions_r_ID_pattern = 'Microarray_name_R' # SPN-R
+regions_d_ID_pattern = 'Microarray_name_D'
+methyl_r_ID_pattern = 'Methylation_name_R' # PAPSPN.Relapse
+methyl_d_ID_pattern = 'Methylation_name_D'
+
+
+# filename patterns
+regions_top_pattern = 'Top_expressed_genes.bed'
+regions_bottom_pattern = 'Bottom_expressed_genes.bed'
+bedgraph_pattern = '.bedgraph'
+
+# make lists of the items from above to iterate over
+region_IDs = [regions_r_ID_pattern, regions_d_ID_pattern]
+region_expressions = [regions_top_pattern, regions_bottom_pattern]
+methyl_IDs = [methyl_r_ID_pattern, methyl_d_ID_pattern]
+
+
+def qsub_gtools_matrix(samplesheet_dict, proj_locs, region_IDs, region_expressions, methyl_IDs, bedgraph_pattern):
+    '''
+    Submit a qsub job to run every gtools matrix on the combinations of bedgraphs and region files
+    '''
+    # parameters for qsub job
+    job_threads = "1"
+    job_mem = "4G"
+    job_options = "-j y" # merge stderr and stdout # job_options="-l mem_free=$job_mem -l h_vmem=$job_mem -l mem_token=$job_mem"
+    for sampleID, items in samplesheet_dict.iteritems():
+        print(sampleID)
+        for region_ID in region_IDs:
+            print(samplesheet_dict[sampleID][region_ID])
+            for region_expression in region_expressions:
+                print(region_expression)
+                for methyl_ID in methyl_IDs:
+                    print(samplesheet_dict[sampleID][methyl_ID])
+                    # find the BED file for the combination of Sample + genes expression
+                    regions_file = file_match(proj_locs.regions_dir, start_pattern = samplesheet_dict[sampleID][region_ID], end_pattern = region_expression)[0]
+                    # find the bedgraph file with the values from the methylation analysis
+                    bedgraph_file = file_match(proj_locs.bedgraphs_dir, start_pattern = samplesheet_dict[sampleID][methyl_ID], end_pattern = bedgraph_pattern)[0]
+                    # set up the output file naming scheme
+                    output_file_base = '{}_{}_{}'.format(
+                    samplesheet_dict[sampleID][region_ID],
+                    region_expression,
+                    samplesheet_dict[sampleID][methyl_ID]
+                    )
+                    output_file_basename = '{}.matrix'.format(output_file_base)
+                    #
+                    output_file = os.path.join(proj_locs.matrix_dir, output_file_basename)
+                    # the command to run gtools
+                    gtools_command = '''
+set -x
+head "{}"
+head "{}"
+gtools-threaded matrix -v -i -o {} -i -nbins 51 --overlap-op value -rpkm -profile sum {} {}
+head "{}"
+                    '''.format(bedgraph_file,
+                    regions_file,
+                    output_file,
+                    bedgraph_file,
+                    regions_file,
+                    output_file)
+                    # the command to submit gtools to the cluster; REQUIRES BASH !
+                    qsub_command = '''
+mkdir -p "{}" # make sure the log dir exists
+qsub -wd "{}" -o :{}/ -e :{}/ -pe threaded {} -N "{}" {} <<E0F
+{}
+E0F
+                    '''.format(
+                    proj_locs.matrix_logdir,
+                    proj_locs.project_dir,
+                    proj_locs.matrix_logdir, proj_locs.matrix_logdir,
+                    job_threads,
+                    output_file_base,
+                    job_options,
+                    gtools_command)
+                    #
+                    # print(qsub_command)
+                    # tb.my_debugger(globals().copy())
+                    tb.subprocess_cmd(qsub_command)
+
+# run the gtools qsub functions
+qsub_gtools_matrix(samplesheet_dict, proj_locs, region_IDs, region_expressions, methyl_IDs, bedgraph_pattern)
+
+sys.exit()
+
+```
+
+plot the matricies in ggplot2
+
+```{r plotmatrix, eval=FALSE}
+project_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes"
+analysis_dir <- file.path(project_dir, "methylation_profiles")
+matrix_dir <- file.path(analysis_dir, "matrices") #"/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/methylation_profiles/"
+
+matrix_files <- dir(path = matrix_dir, pattern = ".matrix", full.names = TRUE)
+
+matrix_df <- data.frame()
+for(i in seq_along(matrix_files)){
+    print(matrix_files[i])
+    df2 <- read.delim(file = matrix_files[i], header = FALSE, sep = '\t') # read the matrix file into a df
+    df2 <- cbind(matrix_file = basename(matrix_files[i]), df2) # add the matrix file name
+    df2[["V1"]] <- basename(as.character(df2[["V1"]]))
+    matrix_df <- rbind(matrix_df, df2) # add the new df row to the full df
+}
+# split the matrix file name into separate columns
+matrix_df <- cbind(as.data.frame(do.call(rbind, 
+                                      strsplit(as.character(matrix_df[[1]]), '_'))), matrix_df[-1])
+# split the sample name
+matrix_df <- cbind(as.data.frame(do.call(rbind, 
+                                      strsplit(as.character(matrix_df[[1]]), '-'))), matrix_df[-1])
+matrix_df <- matrix_df[,c(-4,-5)] # remove some cols
+matrix_df[[4]] <- gsub(pattern = '.matrix', replacement = '', x = matrix_df[[4]]) # fix col values
+new_colnames <- c("sample", "status", "gene_expression", "methyl_sample_status", "bedgraph_file")
+dist_seq <- seq(-5000, 5000, 200) # [! seq(-5000, 5000, 200) %in% 0]
+length(dist_seq)
+head(matrix_df)
+colnames(matrix_df) <- c(new_colnames ,dist_seq) #  seq(1,ncol(matrix_df) - length(new_colnames))
+
+# write out the full matrix
+write.table(x = matrix_df, quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE, 
+            file = file.path(analysis_dir, "methylation_wide_matrix.tsv"))
+
+# need to melt the df into long format
+library("reshape2")
+library("ggplot2")
+
+colnames(matrix_df)
+matrix_df_long <- reshape2::melt(matrix_df,
+                                 id.vars=c("sample", "status", "gene_expression", "methyl_sample_status", "bedgraph_file"),
+                                 variable.name = "distance_from_TSS",
+                                 value.name = "methylation_profile")
+
+matrix_df_long[["distance_from_TSS"]] <- as.numeric(as.character(matrix_df_long[["distance_from_TSS"]]))
+
+colnames(matrix_df_long)
+
+# split the methyl name
+matrix_df_long <- cbind(as.data.frame(do.call(rbind, 
+                                      strsplit(as.character(matrix_df_long[["methyl_sample_status"]]), '.', fixed = TRUE))), matrix_df_long[-4])
+colnames(matrix_df_long)[1:2] <- c("methyl_sample", "methyl_status")
+# convert the methyl status to D and R
+matrix_df_long[["methyl_status"]] <- gsub(pattern = '(^.).*$', replacement = '\\1', x = as.character(matrix_df_long[["methyl_status"]]), perl = TRUE)
+
+# remove the rows where methyl status does not match gene expression status
+nrow(matrix_df_long)
+colnames(matrix_df_long)
+matrix_df_long <- matrix_df_long[matrix_df_long[["methyl_status"]] == matrix_df_long[["status"]],]
+
+# write out the full matrix
+write.table(x = matrix_df_long, quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE, 
+            file = file.path(analysis_dir, "methylation_long_matrix.tsv"))
+
+
+
+# generate a df with just the avg value for each profile region across samples
+aggr_df <- aggregate(methylation_profile ~ gene_expression + status + sample + distance_from_TSS, data = matrix_df_long, FUN = mean)
+
+# write out the aggr matrix
+write.table(x = aggr_df, quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE, 
+            file = file.path(analysis_dir, "methylation_aggregate_matrix.tsv"))
+
+
+profile_outdir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/methylation_profiles/profiles"
+plot_outfile <- file.path(profile_outdir, paste0("allsamples_methylation_profile.pdf"))
+pdf(file = plot_outfile, width = 14, height = 14)
+ggplot(data = aggr_df, aes(x=distance_from_TSS, 
+                           y=methylation_profile, 
+                           col=gene_expression)) + geom_line() + facet_wrap(~sample*status)
+
+
+for(i in seq_along(unique(aggr_df[["sample"]]))){
+    methyl_sample_status_i <- unique(aggr_df[["sample"]])[i]
+    print(methyl_sample_status_i)
+    sub_aggr_df <- subset(aggr_df, subset = (sample == methyl_sample_status_i))
+    
+    plot_outfile <- file.path(profile_outdir, sprintf("%s_profile.pdf", methyl_sample_status_i))
+    pdf(file = plot_outfile, width = 8, height = 8)
+    print(ggplot(data = sub_aggr_df, aes(x=distance_from_TSS, 
+                           y=methylation_profile, 
+                           col=gene_expression)) + geom_line() + facet_wrap(~status)) #  shape = sample
+    dev.off()
+}
+
+
+```
