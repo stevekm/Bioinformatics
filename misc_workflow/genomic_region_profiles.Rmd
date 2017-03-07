@@ -12,8 +12,6 @@ output:
     code_folding: hide
 ---
 
-deepTools_genomic_profiles
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -33,7 +31,7 @@ First, start a sample sheet with the paths to all of the bigwig files we will ne
 # deeptools/2.3.3 # computeMatrix 1.5.11
 
 
-project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
 region_dir="${project_dir}/project_notes/region_profiles"
 cd "$region_dir"
 
@@ -47,7 +45,7 @@ Set up a directory with symlinks to all of the bigwig files, for easy access.
 
 ```{r, engine='bash', eval=FALSE}
 # set up the bigwig links
-project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
 region_dir="${project_dir}/project_notes/region_profiles"
 cd "$region_dir"
 
@@ -88,7 +86,7 @@ We will need to install deepTools. A Python virtual environment will be set up f
 module unload python
 unset PYTHONPATH
 
-project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
 cd "$project_dir"
 
 virtualenv venv --no-site-packages
@@ -131,14 +129,14 @@ The DiffBind ChIP-Seq datasets for differentially bound regions between samples 
 
 
 ```{r, engine='bash', eval=FALSE}
-project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
 region_dir="${project_dir}/project_notes/region_profiles"
 cd "$region_dir"
 
 diffbind_dir="${region_dir}/diffbind_sheets"
 mkdir -p "$diffbind_dir"
 
-diffbind_data_location="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/results_dir/diffbind_DESeq2/"
+diffbind_data_location="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10/project_notes/results_dir/diffbind_DESeq2/"
 
 diffbind_files="$(find "$diffbind_data_location" -type f -name "diff_bind.*" -name "*.csv" -exec readlink -f {} \;)"
 
@@ -163,7 +161,7 @@ done
 A sample sheet will be made to match each BigWig sample file with the corresponding DiffBind sheet
 
 ```{r, engine='bash', eval=FALSE}
-project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
 region_dir="${project_dir}/project_notes/region_profiles"
 cd "$region_dir"
 
@@ -208,92 +206,31 @@ Gene expression data from a microarray for each sample will be used to determine
 Additionally, the list of genes used will be filtered to only include genes that overlap peaks which were differentially bound by the H3K27AC histone mark in the ChIP-Seq data produced by DiffBind. 
 
 ```{r, eval=FALSE}
-# project_dir <- "/Users/kellys04/projects/tmp_Teena"
+# project_dir <- "/Users/kellys04/projects/tmp_smithlab"
 # region_dir <- file.path(project_dir,"region_profiles")
 
-project_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+project_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
 region_dir <- file.path(project_dir,"project_notes/region_profiles")
 setwd(region_dir)
 
 # output location for gene lists
 top_bottom_gene_list_dir <- file.path(region_dir,"top_bottom_expressed_genes/gene_lists")
-up_down_regulated_gene_list_dir <- file.path(region_dir, "up_down_regulated_genes/gene_lists")
-
-diffbind_sheet_dir <- file.path(region_dir, "diffbind_sheets")
-diffbind_sheet_files <- dir(path = diffbind_sheet_dir, pattern = ".csv", full.names = TRUE)
-diffbind_sheet_files <- setNames(object = diffbind_sheet_files, nm = basename(diffbind_sheet_files))
-
-# read all the DiffBind sheets into a list of df's
-diffbind_df_list <- lapply(diffbind_sheet_files, function(x) read.csv(file = x, header = TRUE, stringsAsFactors = FALSE))
-
-bigwig_diffbind_samplesheet_file <- file.path(region_dir, "bigwig_diffbind_samplesheet.tsv")
-bigwig_diffbind_samplesheet_df <- read.table(file = bigwig_diffbind_samplesheet_file, header = FALSE, sep = '\t')
-
-# don't do Input files; remove from df
-bigwig_diffbind_samplesheet_df <- subset(x = bigwig_diffbind_samplesheet_df, subset=(V5 != "INPUT"))
 
 # load the gene expression data
 gene_expr_file <-"gene_expression_microarray/GeneExpression18Patients_includes_SRR.sheet_1.tsv"
 gene_expr_df <- read.table(gene_expr_file,sep = '\t',header = TRUE, 
                            row.names = 1, quote = "")
+gene_expr_samples <- setNames(object = colnames(gene_expr_df), nm = gsub(pattern = '.', replacement = '-', x = gsub(pattern = 'Exp.', replacement = '', x = colnames(gene_expr_df)), fixed = TRUE))
 
-
-# function for getting the diffbind genes
-get_unique_diffbind_genes <- function(diffbind_df){
-    # get the DiffBind genes that match our criteria
-    diffbind_genes <- unique(diffbind_df[which(diffbind_df[["insideFeature"]] %in% c("overlapStart", "overlapEnd")), "external_gene_name"])
-    return(diffbind_genes)
+# get the top and bottom genes for each sample
+for(i in seq_along(gene_expr_samples)){
+    gene_sample <- gene_expr_samples[i]
+    print(gene_sample)
+    top_genes <- rownames(head(gene_expr_df[order(gene_expr_df[[gene_sample]], decreasing = TRUE),], 5000))
+    bottom_genes <- rownames(tail(gene_expr_df[order(gene_expr_df[[gene_sample]], decreasing = TRUE),], 5000))
     
-}
-
-# iterate over every entry in the samplesheet
-for(i in seq(nrow(bigwig_diffbind_samplesheet_df))){
-    # parse entry
-    df_row <- bigwig_diffbind_samplesheet_df[i,]
-    diffbind_file <- as.character(df_row[["V2"]])
-    diffbind_file_basename <- basename(diffbind_file)
-    sampleID <- as.character(df_row[["V3"]])
-    statusID <- as.character(df_row[["V4"]])
-    markID <- as.character(df_row[["V5"]])
-    
-    full_sampleID <- paste(sampleID, statusID, markID, sep = '-')
-    
-    # get the DiffBind genes that match our criteria
-    diffbind_genes <- get_unique_diffbind_genes(diffbind_df_list[[diffbind_file_basename]])
-    
-    # subset the gene expression df for the desired DiffBind genes
-    gene_expr_df_copy <- gene_expr_df
-    gene_expr_df_copy <- gene_expr_df_copy[which(rownames(gene_expr_df_copy) %in% diffbind_genes), ]
-    
-    
-    # UP AND DOWN REGULATED GENES
-    # get the genes that were differntially up or down regulated by at least 1.5x
-    # e.g. Log Ratio D vs. R >log2(1.5) or <log2(-1.5)
-    # get the log ratio columns from the table
-    sample_LR_colname <- paste(sampleID, "Exp", "LR", sep = ".")
-    up_genes <- rownames(gene_expr_df_copy[gene_expr_df_copy[sample_LR_colname] > 0.58,])
-    dn_genes <- rownames(gene_expr_df_copy[gene_expr_df_copy[sample_LR_colname] < -0.58,])
-    
-    up_file <- file.path(up_down_regulated_gene_list_dir, paste0(full_sampleID, '_Up_regulated_genes_list.txt'))
-    dn_file <- file.path(up_down_regulated_gene_list_dir, paste0(full_sampleID, '_Down_regulated_genes_list.txt'))
-    
-    writeLines(text = sapply(X = up_genes, FUN = function(x) paste0('gene_name "', x, '"')), con = up_file)
-    writeLines(text = sapply(X = dn_genes, FUN = function(x) paste0('gene_name "', x, '"')), con = dn_file)
-    
-    
-    
-    # TOP AND BOTTOM EXPRESSED GENES
-    # get the genes per each D and R sample that were the most and lest expressed
-    # e.g. the top 3000 expressed genes, and bottom 3000 expressed genes, for every sample
-    sample_gene_expr_colname <- paste(sampleID, 'Exp', statusID, sep = '.')
-    # re-ordered df on the sample col
-    gene_expr_df_copy <- gene_expr_df_copy[order(gene_expr_df_copy[[sample_gene_expr_colname]], decreasing = TRUE), ]
-    
-    top_genes <- rownames(head(gene_expr_df_copy, 3000))
-    bottom_genes <- rownames(tail(gene_expr_df_copy, 3000))
-
-    top_file <- file.path(top_bottom_gene_list_dir, paste0(full_sampleID, '_Top_expressed_genes_list.txt'))
-    bottom_file <- file.path(top_bottom_gene_list_dir, paste0(full_sampleID, '_Bottom_expressed_genes_list.txt'))
+    top_file <- file.path(top_bottom_gene_list_dir, paste0(names(gene_sample), '_Top_expressed_genes_list.txt'))
+    bottom_file <- file.path(top_bottom_gene_list_dir, paste0(names(gene_sample), '_Bottom_expressed_genes_list.txt'))
 
     writeLines(text = sapply(X = top_genes, FUN = function(x) paste0('gene_name "', x, '"')), con = top_file)
     writeLines(text = sapply(X = bottom_genes, FUN = function(x) paste0('gene_name "', x, '"')), con = bottom_file)
@@ -305,7 +242,7 @@ for(i in seq(nrow(bigwig_diffbind_samplesheet_df))){
 In bash, we will use the text files generated to create subsets of the Gencode BED file which only contain the gene ID's that match the genes from the microarray data which had increased or decreased expression. Since this operation takes a decent amount of compute power, we will submit each one to a job on the HPC cluster
 
 ```{r, engine='bash', eval=FALSE}
-project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
 region_dir="${project_dir}/project_notes/region_profiles"
 log_dir="${region_dir}/logs"; mkdir -p "$log_dir"
 cd "$region_dir"
@@ -315,42 +252,15 @@ gen_bed="${region_dir}/gencode.v19.annotation.genes_only.bed"
 
 # dir with the gene list patterns to search with
 top_bottom_gene_listdir="${region_dir}/top_bottom_expressed_genes/gene_lists"
-up_down_regulated_gene_listdir="${region_dir}/up_down_regulated_genes/gene_lists"
 
 # dir to put the output filtered beds
 top_bottom_gene_bed_dir="${region_dir}/top_bottom_expressed_genes/beds"
-up_down_regulated_gene_bed_dir="${region_dir}/up_down_regulated_genes/beds"
 
-
-# diff_gene_listdir="${region_dir}/diff_gene_lists"
-# diff_bed_dir="${region_dir}/diff_gene_beds"
 mkdir -p "$top_bottom_gene_bed_dir"
-mkdir -p "$up_down_regulated_gene_bed_dir"
 
 
 job_threads="1"
 job_mem="5G"
-
-
-# filter the up down genes
-for patternfile in ${up_down_regulated_gene_listdir}/*.txt; do
-echo "$patternfile"
-sampleID="$(basename "$patternfile")"
-sampleID="${sampleID%%_list.txt}"
-job_name="$sampleID"
-echo "$sampleID"
-
-outfile="${up_down_regulated_gene_bed_dir}/${sampleID}.bed"
-echo "$outfile"
-
-qsub -wd "$region_dir" -o :${log_dir}/ -e :${log_dir}/ -pe threaded "$job_threads" -l mem_free="$job_mem" -l h_vmem="$job_mem" -l mem_token="$job_mem" -N "$job_name" <<E0F
-set -x
-grep -f "$patternfile" "$gen_bed" | cut -f 1-3 > "$outfile"
-E0F
-
-
-echo ""
-done
 
 # filter the top and bottom genes
 for patternfile in ${top_bottom_gene_listdir}/*.txt; do
@@ -375,6 +285,8 @@ done
 
 ```
 
+```
+
 ### deepTools: Compute Matrix
 
 #### Make deepTools sample sheet
@@ -382,13 +294,12 @@ done
 Need to make a sample sheet that links each sample with its corresponding Up, Down, and Top, Bottom BED region files to be run. 
 
 ```{r, engine='bash', eval=FALSE}
-project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
 region_dir="${project_dir}/project_notes/region_profiles"
 cd "$region_dir"
 
 # dir with the filtered beds to be matched
 top_bottom_gene_bed_dir="${region_dir}/top_bottom_expressed_genes/beds"
-up_down_regulated_gene_bed_dir="${region_dir}/up_down_regulated_genes/beds"
 
 # dir with our bigwig files
 bigwig_dir="${region_dir}/bigwigs"; bigwig_dir="$(readlink -f "$bigwig_dir")"
@@ -418,7 +329,11 @@ echo "$status_ID"
 mark_ID="$(echo "$bigwig_basename" | cut -d '-' -f3 | cut -d '.' -f1)"
 echo "$mark_ID"
 
+sample_status_ID="${sample_ID}-${status_ID}"
+
 echo "$full_sampleID"
+echo "$sample_status_ID"
+
 
 # !! DONT PROCESS INPUT SAMPLES
 # set -x
@@ -431,22 +346,15 @@ esac
 # set +x
 
 # get the top_bottom_gene_bed_dir file
-top_gene_bed_file="$(find "$top_bottom_gene_bed_dir" -name "*${full_sampleID}_Top_expressed_genes.bed")"
-bottom_gene_bed_file="$(find "$top_bottom_gene_bed_dir" -name "*${full_sampleID}_Bottom_expressed_genes.bed")"
+top_gene_bed_file="$(find "$top_bottom_gene_bed_dir" -name "*${sample_status_ID}_Top_expressed_genes.bed")"
+bottom_gene_bed_file="$(find "$top_bottom_gene_bed_dir" -name "*${sample_status_ID}_Bottom_expressed_genes.bed")"
 
-# get the up_down_regulated_gene_bed_dir file
-up_gene_bed_file="$(find "$up_down_regulated_gene_bed_dir" -name "*${full_sampleID}_Up_regulated_genes.bed")"
-down_gene_bed_file="$(find "$up_down_regulated_gene_bed_dir" -name "*${full_sampleID}_Down_regulated_genes.bed")"
 # ex:
-# ZNK-D-H3K27AC_Up_regulated_genes.bed
-# SRR-R-H3K4ME3_Down_regulated_genes.bed
-# ZNK-D-H3K27AC_Top_expressed_genes.bed
-# ZNK-D-H3K27AC_Bottom_expressed_genes.bed
+# SRR-R_Down_regulated_genes.bed
+# ZNK-D_Bottom_expressed_genes.bed
 
 echo "$top_gene_bed_file"
 echo "$bottom_gene_bed_file"
-echo "$up_gene_bed_file"
-echo "$down_gene_bed_file"
 
 
 # write to the sample sheet
@@ -466,7 +374,7 @@ Run each D and R sample against its own up & down regulated genes, and top and b
 
 ```{r, engine='bash', eval=FALSE}
 # run DeepTools make matricies
-project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
 region_dir="${project_dir}/project_notes/region_profiles"
 cd "$region_dir"
 
@@ -493,6 +401,7 @@ compute_settings='--referencePoint TSS  --averageTypeBins sum '
 
 # iterate over lines in the sample sheet
 while read line; do
+set -x
 if [ ! -z "$line" ]; then
 
 # parse line
@@ -507,47 +416,18 @@ full_sampleID="$(echo "$line" | cut -f9)"
 job_name="$full_sampleID"
 
 # make a list of the BED files to use
-sample_Up_Down_bed_files="$(echo "$line" | cut -f4-5 | tr '\t' ' ')"
+# sample_Up_Down_bed_files="$(echo "$line" | cut -f4-5 | tr '\t' ' ')"
 sample_Top_Bottom_bed_files="$(echo "$line" | cut -f2-3 | tr '\t' ' ')"
 echo "$sample_Up_Down_bed_files"
 echo "$sample_Top_Bottom_bed_files"
 
 # make the output labels to use for each
-sample_Up_Down_label="${full_sampleID}_Up_Down_regulated_genes"
 sample_Top_Bottom_label="${full_sampleID}_Top_Bottom_expressed_genes"
-
-sample_Up_Down_matrix_file="${matrix_dir}/${sample_Up_Down_label}_matrix.gz"
-sample_Up_Down_heatmap_file="${matrix_dir}/${sample_Up_Down_label}_heatmap.png"
-sample_Up_Down_profile_file="${matrix_dir}/${sample_Up_Down_label}_profile.png"
-sample_Up_Down_logdir="${matrix_dir}/${sample_Up_Down_label}_logs"; mkdir -p "$sample_Up_Down_logdir"
 
 sample_Top_Bottom_matrix_file="${matrix_dir}/${sample_Top_Bottom_label}_matrix.gz"
 sample_Top_Bottom_heatmap_file="${matrix_dir}/${sample_Top_Bottom_label}_heatmap.png"
 sample_Top_Bottom_profile_file="${matrix_dir}/${sample_Top_Bottom_label}_profile.png"
 sample_Top_Bottom_logdir="${matrix_dir}/${sample_Top_Bottom_label}_logs"; mkdir -p "$sample_Top_Bottom_logdir"
-
-## # # # ## ## # 
-# submit the Up Down job
-## # # # ## ## # 
-qsub -wd "$matrix_dir" -o :${sample_Up_Down_logdir}/ -e :${sample_Up_Down_logdir}/ -pe threaded "$job_threads" -N "$job_name" $job_options <<E0F
-module unload python
-unset PYTHONPATH
-set -x
-
-cd "$region_dir"
-source venv/bin/activate
-
-cd "$matrix_dir"
-
-# make the profile matrix
-computeMatrix reference-point --scoreFileName $sample_bigwig --regionsFileName $sample_Up_Down_bed_files  -a $region_size -b $region_size --outFileName "$sample_Up_Down_matrix_file" --numberOfProcessors "$job_threads" --binSize $bin_size $compute_settings
-
-plotProfile -m "$sample_Up_Down_matrix_file" -out "$sample_Up_Down_profile_file" --plotTitle "${full_sampleID}"  --perGroup # --numPlotsPerRow 2 # --regionsLabel sample_beds_labels --samplesLabel $bigwig_files_labels
-
-plotProfile -m "$sample_Up_Down_matrix_file" --kmeans 2 --plotType heatmap -out "$sample_Up_Down_heatmap_file" --perGroup 
-
-E0F
-
 
 ## # # # ## ## # 
 # submit the Top Bottom job
@@ -576,7 +456,9 @@ E0F
 
 echo ""
 fi
+set +x
 done < "$bigwig_BED_samplesheet"
+
 
 ```
 
@@ -584,17 +466,19 @@ done < "$bigwig_BED_samplesheet"
 
 Use R to create custom profile plots for each matrix
 
-
+```
 
 ```{r, engine='bash', eval=FALSE}
-project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
 region_dir="${project_dir}/project_notes/region_profiles"
 cd "$region_dir"
 
-matrix_dir="${region_dir}/deepTools_profiles_per_group-bin${bin_size}bp"
+# matrix_dir="${region_dir}/deepTools_profiles_per_group-bin${bin_size}bp"
+matrix_dir="${region_dir}/deepTools_profiles_per_group-bin50bp"
 plot_output_dir="${region_dir}/ggplot_profiles"
 
-matrix_files="$(find "$matrix_dir" -name "*matrix.gz")"
+matrix_files="$(find "$matrix_dir" -name "*matrix.gz" -name "*Top_Bottom*")"
+
 for mat_file in $matrix_files; do
 echo "$mat_file"
 file_basename="$(basename "$mat_file")"
@@ -690,10 +574,16 @@ region_profile_plot <- function(matrix_file_gz, plot_pdf_output_file){
             # normalize profile values by number of genes
             profile_vec <- profile_vec /(group_end - group_start)
             
+            # bin regions for the plot
+            bin_regions <- seq(from = (0 - param_list[["downstream"]]), to = param_list[["upstream"]], by = param_list[["bin size"]]) # seq_along(profile_vec)
+            # remove '0' bin because we're off by 1... ???
+            bin_regions <- bin_regions[! bin_regions %in% 0]
+            
             sample_profile_df <- data.frame(profile=profile_vec,
                                             sample=rep(x = sampleID, times = length(profile_vec)),
                                             group=rep(x = groupID, times = length(profile_vec)),
-                                            region=seq_along(profile_vec))
+                                            distance_from_TSS= bin_regions 
+                                            )
             
             profile_df <- rbind(profile_df, sample_profile_df)
             print(head(sample_profile_df))
@@ -710,20 +600,34 @@ region_profile_plot <- function(matrix_file_gz, plot_pdf_output_file){
     # separate per sample D R
     pdf(file = plot_pdf_output_file, width = 8, height = 8)
     theme_set(theme_bw())
-    print(ggplot(data = profile_df, aes(x=region, y=profile, col=group)) + geom_line() + facet_wrap(~sample))
+    print(ggplot(data = profile_df, aes(x=distance_from_TSS, y=profile, col=group)) + geom_line() + facet_wrap(~sample))
     dev.off()
     
-}
+    # make the data global
+    profile_df <<- profile_df
+    param_list <<- param_list
+    seq()
+} # end of function
+
+
 # test
-# project_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/region_profiles"
+# project_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10/project_notes/region_profiles"
 # outdir <- file.path(project_dir, "ggplot_profiles")
 # matrix_dir <- file.path(project_dir, "deepTools_profiles_per_group-bin50bp")
 # matrix_files <- dir(matrix_dir, pattern = "matrix.gz", full.names = TRUE)
 # matrix_files <- setNames(object = matrix_files, nm = file.path(outdir, paste0(gsub(pattern = '_matrix.gz', replacement = '', x = basename(matrix_files)), '_ggplot_profile.pdf')))
 # region_profile_plot(matrix_file_gz = matrix_files[1], plot_pdf_output_file = names(matrix_files[1]))
 
-region_profile_plot
+
+save.image(file = file.path(dirname(output_file), "start_session.Rdata"), compress = TRUE, safe = FALSE)
+save.image(file = "start_session.Rdata", compress = TRUE, safe = FALSE)
+
+# make region_profile_plot
 region_profile_plot(matrix_file_gz = input_file, plot_pdf_output_file = output_file)
+
+save.image(file = "final_start_session.Rdata", compress = TRUE, safe = FALSE)
+save.image(file = file.path(dirname(output_file), "final_start_session.Rdata"), compress = TRUE, safe = FALSE)
+
 E0F2
 E0F
 
@@ -739,14 +643,604 @@ done
 convert all the individual PDFs to a multipage PDF
 
 ```{r, engine='bash', eval=FALSE}
-project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31"
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
 region_dir="${project_dir}/project_notes/region_profiles"
 cd "$region_dir"
 
 plot_output_dir="${region_dir}/ggplot_profiles"
-merged_plot_file="${region_dir}/ggplot_region_profiles_merged.pdf"
+merged_plot_file="${region_dir}/ggplot_region_profiles_merged-2.pdf"
 FILES="$(find "$plot_output_dir" -type f -name "*profile.pdf" | sort)"
 gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile="$merged_plot_file" $FILES
+```
+
+#### Averaged Profile Plots
+
+Now use the matricies to create a single plot with the average D vs. R values for the Top/Bottom genes
+
+```
+
+```{r, eval=FALSE}
+# # # # # # # # # # # # # # 
+# workflow functions
+# # # # # # # # # # # # # # 
+get_matrix_files <- function(status_mark, profile_matrix_dir, ...){
+    # get the matrix gz files from the dir with the correct mark in the name
+    file_names <- grep(pattern = status_mark, 
+                       x = grep(pattern = "Top_Bottom", 
+                                x = dir(path = profile_matrix_dir, 
+                                        pattern = ".gz", ...), 
+                                fixed = TRUE, 
+                                value = TRUE), 
+                       value = TRUE)
+    return(file_names)
+}
+
+# make a list of all D and R per mark
+make_DR_matrix_files_vec <- function(status_mark, profile_matrix_dir){
+    files_vec <- setNames(object = get_matrix_files(status_mark = status_mark, 
+                                                    profile_matrix_dir = profile_matrix_dir, 
+                                                    full.names = TRUE),
+                          nm = get_matrix_files(status_mark = status_mark, 
+                                                profile_matrix_dir = profile_matrix_dir))
+    return(files_vec)
+}
+
+make_DR_matrix_files_list <- function(status_marks_vec, profile_matrix_dir){
+    # make a files vec for all entries in the vect
+    DR_matrix_files_list <- sapply(status_marks_vec, simplify = FALSE, USE.NAMES = TRUE, function(x) make_DR_matrix_files_vec(status_mark = x, profile_matrix_dir))
+    return(DR_matrix_files_list)
+}
+
+
+samples_profile_df <- function(matrix_file_gz){
+    # make the dataframe for a sample
+    region_df <- read.table(gzfile(matrix_file_gz), header=FALSE, na.strings = "nan", comment.char = "@")
+    # groups = BED region sets = rows
+    # samples = BigWig sample files = columns
+    
+    gz <- gzfile(matrix_file_gz, open = "rt"); sample_JSON <- readLines(gz, 1); close(gz)
+    sample_JSON <- gsub(pattern = '^@', replacement = '', x = sample_JSON)
+    
+    # install.packages("RJSONIO")
+    library("RJSONIO")
+    param_list <- fromJSON(content = sample_JSON, asText = TRUE)
+    
+    # remove the chom cols
+    chrom_df <- region_df[1:6]
+    region_df <- region_df[7:ncol(region_df)]
+    
+    # sample1_df <- region_df[1:param_list[["sample_boundaries"]][2]]
+    # sample1_profile <- colSums(region_df[1:param_list[["sample_boundaries"]][2]], na.rm=TRUE)
+    
+    library("ggplot2")
+    
+    # empty df to hold the data
+    profile_df <- data.frame()
+    profile_vec_df <- data.frame()
+    
+    # iterate over samples 
+    for(i in seq_along(param_list[["sample_labels"]])){ 
+        print("i is:")
+        print(i)
+        
+        print("Sample is:")
+        sampleID <- param_list[["sample_labels"]][i]
+        print(sampleID)
+        
+        print("Sample Start:")
+        sample_start <- param_list[["sample_boundaries"]][i]
+        sample_start <- as.numeric(sample_start) + 1
+        print(sample_start)
+        
+        print("Sample End:")
+        sample_end <- param_list[["sample_boundaries"]][i + 1]
+        print(sample_end)
+        
+        # iterate over groups 
+        for(q in seq_along(param_list[["group_labels"]])){
+            print("q is:")
+            print(q)
+            
+            print("Group is:")
+            groupID <- param_list[["group_labels"]][q]
+            print(groupID)
+            
+            print("Group start:")
+            group_start <- param_list[["group_boundaries"]][q]
+            group_start <- as.numeric(group_start) + 1
+            print(group_start)
+            
+            print("Group End:")
+            group_end <- param_list[["group_boundaries"]][q + 1]
+            print(group_end)
+            
+            # samples = columns = BigWigs, groups = rows = BEDs
+            
+            profile_vec <- colSums(region_df[group_start:group_end, sample_start:sample_end], na.rm=TRUE)
+            
+            # normalize profile values by number of genes
+            profile_vec <- profile_vec /(group_end - group_start)
+            
+            # bin regions for the plot
+            bin_regions <- seq(from = (0 - param_list[["downstream"]]),
+                               to = param_list[["upstream"]],
+                               by = param_list[["bin size"]]) # seq_along(profile_vec)
+            # remove '0' bin because we're off by 1... ???
+            bin_regions <- bin_regions[! bin_regions %in% 0]
+            
+            sample_profile_df <- data.frame(profile=profile_vec,
+                                            sample=rep(x = sampleID, times = length(profile_vec)),
+                                            group=rep(x = groupID, times = length(profile_vec)),
+                                            distance_from_TSS= bin_regions)
+            
+            profile_df <- rbind(profile_df, sample_profile_df)
+            # profile_vec_df
+            profile_vec_df <- rbind(profile_vec_df, profile_vec)
+            # print(head(sample_profile_df))
+            
+            cat("\n")
+        }# iterate over groups 
+    } # iterate over samples 
+    return(profile_df)
+} 
+
+
+plot_profiles <- function(profile_df, plot_pdf_output_file = FALSE, width = 8, height = 8){
+    # separate per sample D R
+    if(plot_pdf_output_file != FALSE) pdf(file = plot_pdf_output_file, 
+                                          width = width, 
+                                          height = height)
+    theme_set(theme_bw())
+    print(ggplot(data = profile_df, 
+                 aes(x=distance_from_TSS, 
+                     y=profile, 
+                     col=group)) + geom_line() + facet_wrap(~sample))
+    if(plot_pdf_output_file != FALSE) dev.off()
+    
+    # all four on one graph
+    # ggplot(data = profile_df, 
+    #        aes(x=entry, 
+    #            y=profile, 
+    #            shape=group, 
+    #            col=interaction(sample,group))) + geom_line(aes(group=interaction(sample,group)))
+}
+
+
+make_df_per_mark <- function(matrix_files_vec){
+    # make a list of sample df's for all entries 
+    mark_df_list <- sapply(matrix_files_vec, samples_profile_df, simplify = FALSE, USE.NAMES = TRUE)
+    return(mark_df_list)
+}
+
+
+make_full_df <- function(status_mark_list, outdir){
+    # start an empty dataframe to hold concatenated df's from each sample
+    full_df <- data.frame()
+    for(i in seq_along(status_mark_list)){
+        # iterate over D and R lists
+        group_name <- names(status_mark_list)[i]
+        print(group_name)
+        # start an empty df to hold the concatenated df's for the group
+        group_df <- data.frame()
+        for(q in seq_along(status_mark_list[[group_name]])){
+            # iterate over the samples in the group
+            item_df_name <- names(status_mark_list[[group_name]][q])
+            # add the sample's df to the group df
+            group_df <- rbind(group_df, status_mark_list[[group_name]][[item_df_name]])
+        }
+        # add the group df to the full df across all groups
+        full_df <- rbind(full_df, group_df)
+    }
+    
+    # output dir
+    
+    
+    
+    # make plot of all individual samples
+    plot_profiles(profile_df = full_df, plot_pdf_output_file = file.path(outdir, paste0(group_name, "_region_plot_per_sample.pdf")), width = 18, height = 18)
+    
+    
+    
+    # split the group column into D and R, Top and Bottom
+    groupings_df <- as.data.frame(do.call(rbind, strsplit(x = as.character(full_df[["group"]]), split = '_', perl = TRUE)))
+    groupings_df <- cbind(groupings_df, 
+                          as.data.frame(do.call(rbind, 
+                                                strsplit(as.character(groupings_df$V1), '-'))))
+    colnames(groupings_df) <- c("sample_status", "gene_expression", 
+                                "expressed", "genes_bed", "sample", 
+                                "status")
+    groupings_df <- groupings_df[, colnames(groupings_df)[! colnames(groupings_df) %in% c("expressed", "genes_bed")] ]
+    
+    # add the grouping information to the full df and remove the old cols
+    full_df <- full_df[, colnames(full_df)[! colnames(full_df) %in% c("sample", "group")]]
+    full_df <- cbind(full_df, groupings_df)
+    
+    # generate a df with just the avg value for each profile region across samples
+    aggr_df <- aggregate(profile ~ gene_expression + status + distance_from_TSS, data = full_df, FUN = mean)
+    head(aggr_df)
+    
+    
+    
+    # plot average value profiles
+    pdf(file = file.path(outdir, paste0(group_name, "_region_plot.pdf")), width = 8, height = 8)
+    print(ggplot(data = aggr_df, aes(x=distance_from_TSS, 
+                                     y=profile, 
+                                     col=gene_expression)) + geom_line() + facet_wrap(~status))
+    dev.off()
+    
+    return(aggr_df)
+}
+
+custom_profile_workflow <- function(project_dir, profile_matrix_dir, status_mark_key_df, outdir){
+    
+    # make a list out of the samplesheet
+    mark_list <- setNames(split(t(status_mark_key_df), seq(nrow(t(status_mark_key_df)))), 
+                          rownames(t(status_mark_key_df)))
+    names(mark_list)
+    str(mark_list)
+    
+    # make a list of all the matrix files
+    mark_files_list <- sapply(mark_list, function(x) make_DR_matrix_files_list(status_marks_vec = x, profile_matrix_dir = profile_matrix_dir), simplify = FALSE, USE.NAMES = TRUE)
+    
+    str(mark_files_list)
+    str(mark_files_list[[1]])
+    names(mark_files_list)
+    names(mark_files_list[[1]][[1]])
+    mark_files_list[[1]][[1]]
+    
+    
+    # make a list to hold all the sample df's for all marks
+    tmp3 <- sapply(mark_files_list, simplify = FALSE, USE.NAMES = TRUE, function(x) sapply(x, make_df_per_mark, simplify = FALSE, USE.NAMES = TRUE))
+    str(tmp3)
+    
+    # run the full df thing for all samples
+    end_list <- sapply(tmp3, simplify = FALSE, USE.NAMES = TRUE, function(x) make_full_df(x, outdir))
+    return(end_list)
+}
+
+# # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # 
+
+# # # # # # # # # # # # # # 
+# workflow
+# # # # # # # # # # # # # # 
+
+
+
+# locations of the files
+project_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10/project_notes/region_profiles"
+profile_matrix_dir <- file.path(project_dir, "deepTools_profiles_per_group-bin50bp")
+outdir <- file.path(project_dir, "ggplot_custom_profiles")
+# sample sheet
+status_mark_key <- "H3K27AC\tH3K27ME3\tH3K4ME3\tH3K9AC\tH3K9ME3
+D-H3K27AC\tD-H3K27ME3\tD-H3K4ME3\tD-H3K9AC\tD-H3K9ME3
+R-H3K27AC\tR-H3K27ME3\tR-H3K4ME3\tR-H3K9AC\tR-H3K9ME3"
+status_mark_key_df <- read.table(textConnection(status_mark_key), header = TRUE, sep = '\t')
+
+
+# run full workflow
+end_list <- custom_profile_workflow(project_dir, profile_matrix_dir, status_mark_key_df, outdir)
+
+# make a single plot with all aggregated data
+str(end_list)
+head(end_list[[1]])
+full_aggr_df <- data.frame()
+for(i in seq_along(end_list)){
+    list_df <- end_list[[i]]
+    mark <- names(end_list[i])
+    list_df['mark'] <- mark
+    full_aggr_df <- rbind(full_aggr_df, list_df)
+}
+
+head(full_aggr_df)
+# plot average value profiles
+pdf(file = file.path(outdir, "all_marks_region_plot.pdf"), width = 12, height = 12)
+print(ggplot(data = full_aggr_df, aes(x=distance_from_TSS, 
+                                 y=profile, 
+                                 col=gene_expression)) + geom_line() + facet_wrap(~mark*status))
+dev.off()
+
+```
+
+#### Aris' Averaged Profile Plots
+
+Try re-generating the profile data with Aris' gtools method; code:
+
+```
+# tcsh
+set genes = diff_gene_beds/AGK_up_genes_Gencode.bed
+set ref = ref.bed
+cat $genes | gtools-regions pos -op 5p | gtools-regions shiftp -5p -5000 -3p +5000 >! $ref            # flank TSS by 5kb
+set bams = alignments/AGK-D-H3K27AC/alignments.bam
+set out = test.tsv
+
+gtools-threaded matrix -v -i -o $out -i -nbins 100 -rpkm -profile sum $bams $ref
+```
+
+Need to use BAMs for this; make a samplesheet that includes them...
+
+```{r, engine='bash', eval=FALSE}
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
+region_dir="${project_dir}/project_notes/region_profiles"
+cd "$region_dir"
+
+# matrix_dir="${region_dir}/deepTools_profiles_per_group-bin${bin_size}bp"
+gtools_matrix_dir="${region_dir}/gtools-matrix-ouptut"
+plot_output_dir="${gtools_matrix_dir}/ggplot_profiles"
+mkdir -p "$plot_output_dir"
+
+# path to the pipeline outputs
+align_results_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10/pipeline/align/results" # match full sampleID
+diffbind_results_dir="/ifs/data/sequence/results/carrolllab/2016-01-04/ChIP-Seq/diffbind_DESeq2/" # match sample mark
+top_bottom_genes_dir="${region_dir}/top_bottom_expressed_genes/beds"
+up_down_genes_dir="${region_dir}/up_down_regulated_genes/beds"
+samplesheet_in="${region_dir}/samples_samplesheet.tsv"
+samplesheet_out="${region_dir}/BAM_bigwig_BED_samplesheet.tsv"
+
+# iterate over the sample IDs in the sheet
+echo -n '' > "$samplesheet_out"
+while read line; do
+if [ ! -z "$line" ]; then
+echo "$line"
+sample_patient_status_mark="$(echo "$line" | cut -f1)" # ZGR-D-INPUT
+sample_mark="$(echo "$line" | cut -f2)"  # INPUT
+sample_patient="$(echo "$line" | cut -f3)" # ZGR
+sample_patient_mark="$(echo "$line" | cut -f4)" # ZGR-INPUT
+sample_status="$(echo "$line" | cut -f5)" # D
+
+sample_bam="$(find "${align_results_dir}" -name "*.bam" -path "*${sample_patient_status_mark}*" )"
+sample_bigwig="$(find "${align_results_dir}" -name "*.bw" -path "*${sample_patient_status_mark}*" )"
+sample_diffbind="$(find "${diffbind_results_dir}" -name "*.csv" -name "diff_bind.*" -path "*${sample_mark}*")"
+sample_top_genes="$(find "${top_bottom_genes_dir}" -name "*${sample_patient_status_mark}*" -name "*Top_expressed_genes.bed" )"
+sample_bottom_genes="$(find "${top_bottom_genes_dir}" -name "*${sample_patient_status_mark}*" -name "*Bottom_expressed_genes.bed" )"
+sample_up_genes="$(find "${up_down_genes_dir}" -name "*${sample_patient_status_mark}*" -name "*Up_regulated_genes.bed" )"
+sample_down_genes="$(find "${up_down_genes_dir}" -name "*${sample_patient_status_mark}*" -name "*Down_regulated_genes.bed" )"
+
+
+echo "$sample_status"
+echo "$sample_bam"
+echo "$sample_bigwig"
+echo "$sample_diffbind"
+
+echo "$sample_top_genes"
+echo "$sample_bottom_genes"
+echo "$sample_up_genes"
+echo "$sample_down_genes"
+
+# write it to the samplesheet
+echo -e "${sample_bam}\t${sample_bigwig}\t${sample_diffbind}\t${sample_top_genes}\t${sample_bottom_genes}\t${sample_up_genes}\t${sample_down_genes}\t${sample_patient_status_mark}\t${sample_mark}\t${sample_patient}\t${sample_patient_mark}\t${sample_status}" >> "$samplesheet_out"
+echo ""
+fi
+done < "$samplesheet_in"
+
+
+
+```
+
+run gtools profile command for the items in the sample sheet
+
+```{r, engine='bash', eval=FALSE}
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
+region_dir="${project_dir}/project_notes/region_profiles"
+cd "$region_dir"
+
+# matrix_dir="${region_dir}/deepTools_profiles_per_group-bin${bin_size}bp"
+gtools_matrix_dir="${region_dir}/gtools-matrix-ouptut"
+gtools_extended_regions="${gtools_matrix_dir}/extended_regions"
+plot_output_dir="${gtools_matrix_dir}/ggplot_profiles"
+
+mkdir -p "$gtools_extended_regions"
+mkdir -p "$plot_output_dir"
+
+samplesheet="${region_dir}/BAM_bigwig_BED_samplesheet.tsv"
+
+# set genes = diff_gene_beds/AGK_up_genes_Gencode.bed
+# set ref = ref.bed
+# cat $genes | gtools-regions pos -op 5p | gtools-regions shiftp -5p -5000 -3p +5000 >! $ref            # flank TSS by 5kb
+# set bams = alignments/AGK-D-H3K27AC/alignments.bam
+# set out = test.tsv
+# gtools-threaded matrix -v -i -o $out -i -nbins 100 -rpkm -profile sum $bams $ref
+
+# bamfile="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10/pipeline/align/results/align.by_sample.bowtie2/AGK-D-H3K27AC/alignments.bam"
+# top_genes="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10/project_notes/region_profiles/top_bottom_expressed_genes/beds/AGK-D-H3K27AC_Top_expressed_genes.bed"
+# top_extended_regions="${gtools_extended_regions}/$(basename "$top_genes")_extended.bed"
+# top_profile_output="${plot_output_dir}/$(basename "$top_genes")_profile.tsv"
+
+# cat "$top_genes" | gtools-regions pos -op 5p | gtools-regions shiftp -5p -5000 -3p +5000 > "$top_extended_regions"
+# gtools-threaded matrix -v -i -o "$top_profile_output" -i -nbins 100 -rpkm -profile sum "$bamfile" "$top_extended_regions"
+
+
+job_threads="4"
+job_mem="10G"
+
+while read line; do
+if [ ! -z "$line" ]; then
+(
+sample_bam="$(echo "$line" | cut -f1)"
+sample_top_genes="$(echo "$line" | cut -f4)"
+sample_bottom_genes="$(echo "$line" | cut -f5)"
+
+sample_patient_status_mark="$(echo "$line" | cut -f8)" # ZGR-D-INPUT
+sample_mark="$(echo "$line" | cut -f9)"  # INPUT
+sample_patient="$(echo "$line" | cut -f10)" # ZGR
+sample_patient_mark="$(echo "$line" | cut -f11)" # ZGR-INPUT
+sample_status="$(echo "$line" | cut -f12)" # D
+
+sample_top_extended_regions="${gtools_extended_regions}/${sample_patient_status_mark}_Top_regions_extended.bed"
+sample_bottom_extended_regions="${gtools_extended_regions}/${sample_patient_status_mark}_Bottom_regions_extended.bed"
+
+sample_top_profile_output="${plot_output_dir}/${sample_patient_status_mark}_Top_profile.tsv"
+sample_bottom_profile_output="${plot_output_dir}/${sample_patient_status_mark}_Bottom_profile.tsv"
+
+sample_logdir="${gtools_matrix_dir}/logs/${sample_patient_status_mark}"
+mkdir -p "$sample_logdir"
+
+echo "$sample_patient_status_mark"
+echo "$sample_mark"
+echo "$sample_patient"
+echo "$sample_patient_mark"
+echo "$sample_status"
+
+echo "$sample_bam"
+echo "$sample_top_genes"
+echo "$sample_bottom_genes"
+
+
+
+if [ "INPUT" != "$sample_mark" ]; then
+
+# submit to qsub to run
+qsub -wd "$region_dir" -o :${sample_logdir}/ -e :${sample_logdir}/ -j y -pe threaded "$job_threads" -l mem_free="$job_mem" -l h_vmem="$job_mem" -l mem_token="$job_mem" -N "$sample_patient_status_mark" <<E0F
+set -x
+
+cat "$sample_top_genes" | gtools-regions pos -op 5p | gtools-regions shiftp -5p -5000 -3p +5000 > "$sample_top_extended_regions"
+gtools-threaded matrix -v -i -o "$sample_top_profile_output" -i -nbins 100 -rpkm -profile sum "$sample_bam" "$sample_top_extended_regions"
+
+cat "$sample_bottom_genes" | gtools-regions pos -op 5p | gtools-regions shiftp -5p -5000 -3p +5000 > "$sample_bottom_extended_regions"
+gtools-threaded matrix -v -i -o "$sample_bottom_profile_output" -i -nbins 100 -rpkm -profile sum "$sample_bam" "$sample_bottom_extended_regions"
+
+E0F
+
+fi
+
+)
+
+
+fi
+done < "$samplesheet"
+
+
+
+```
+
+```
+
+Now plot the profile in R
+
+```{r, eval=FALSE}
+library("ggplot2")
+profile_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10/project_notes/region_profiles/gtools-matrix-ouptut/ggplot_profiles"
+
+# sample sheet
+status_mark_key <- "H3K27AC\tH3K27ME3\tH3K4ME3\tH3K9AC\tH3K9ME3
+D-H3K27AC\tD-H3K27ME3\tD-H3K4ME3\tD-H3K9AC\tD-H3K9ME3
+R-H3K27AC\tR-H3K27ME3\tR-H3K4ME3\tR-H3K9AC\tR-H3K9ME3"
+status_mark_key_df <- read.table(textConnection(status_mark_key), header = TRUE, sep = '\t')
+
+
+
+# profile_files <- grep(pattern = as.character(status_mark_key_df[1,1]), x = dir(profile_dir, pattern = "profile.tsv", full.names = TRUE), value = TRUE)
+# profile_file <- profile_files[1]
+
+profile_files <- dir(profile_dir, pattern = "profile.tsv", full.names = TRUE)
+
+make_region_df <- function(profile_file){
+    # parse the profile file into a dataframe for the sample
+    profile_sample_status_mark <- unlist(strsplit(basename(profile_file), '_'))[1]
+    profile_sample_ID_vec <- unlist(strsplit(profile_sample_status_mark, '-'))
+    profile_status <- profile_sample_ID_vec[2]
+    profile_mark <- profile_sample_ID_vec[3]
+    profile_sample <- profile_sample_ID_vec[1]
+    profile_sample_mark <- sprintf(fmt = '%s-%s', profile_sample_ID_vec[2], profile_sample_ID_vec[3])
+    profile_status_mark <- sprintf(fmt = '%s-%s', profile_sample_ID_vec[2], profile_sample_ID_vec[3])
+    profile_sample_status <- sprintf(fmt = '%s-%s', profile_sample_ID_vec[1], profile_sample_ID_vec[2])
+    profile_genes_type <- unlist(strsplit(basename(profile_file), '_'))[2]
+    
+    region_df <- read.table(file = profile_file, row.names = 1)
+    # rownames(region_df) <- basename(dirname(rownames(region_df)))
+    
+    region_df <- as.data.frame(t(region_df))
+    region_df['sample_status_mark'] <- profile_sample_status_mark
+    region_df['status_mark'] <- profile_status_mark
+    region_df['genes_type'] <- profile_genes_type
+    region_df['status'] <- profile_status
+    region_df['mark'] <- profile_mark
+    region_df['sample'] <- profile_sample
+    region_df['sample_status'] <- profile_sample_status
+    colnames(region_df)[1] <- 'profile'
+    
+    distance_from_TSS <- seq(-5000, 5000, nrow(region_df))
+    distance_from_TSS <- distance_from_TSS[! distance_from_TSS %in% 0] 
+    
+    region_df['distance_from_TSS'] <- distance_from_TSS
+    return(region_df)
+}
+
+# start empty dataframe to hold all the output.. there's gonna be a lot...
+profiles_df <- data.frame()
+for(i in seq_along(profile_files)){
+    sample_file <- profile_files[i]
+    print(sample_file)
+    # print(head(make_region_df(sample_file)))
+    profiles_df <- rbind(profiles_df, make_region_df(sample_file))
+}
+
+colnames(profiles_df)
+colnames(status_mark_key_df)
+
+
+# make plots for each histone mark
+for(i in seq(ncol(status_mark_key_df))){
+    hist_mark <- colnames(status_mark_key_df)[i]
+    D_mark <- status_mark_key_df[1,i]
+    R_mark <- status_mark_key_df[2,i]
+    print(sprintf("%s %s %s", hist_mark, D_mark, R_mark))
+    
+    profile_subset <- subset(profiles_df, subset=(mark == hist_mark))
+    
+    pdf(file = file.path(profile_dir, sprintf("%s_gtools_profile_per_sample.pdf", hist_mark)), width = 12, height = 12)
+    print(ggplot(data = profile_subset, aes(x=distance_from_TSS, y=profile, col=genes_type)) + geom_line() + facet_wrap(~sample_status))
+    dev.off()
+    
+    head(profiles_df)
+    aggr_df <- aggregate(profile ~ genes_type + distance_from_TSS + mark + status, data = profile_subset, FUN = mean)
+    head(aggr_df)
+    
+    pdf(file = file.path(profile_dir, sprintf("%s_gtools_profile_avg.pdf", hist_mark)), width = 12, height = 12)
+    print(ggplot(data = aggr_df, aes(x=distance_from_TSS, y=profile, col=genes_type)) + geom_line() + facet_wrap(~status))
+    dev.off()
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+    # theme_set(theme_bw())
+    # print(ggplot(data = profile_df, 
+    #              aes(x=distance_from_TSS, 
+    #                  y=profile, 
+    #                  col=group)) + geom_line() + facet_wrap(~sample))
+    # if(plot_pdf_output_file != FALSE) dev.off()
+    # 
+    # # all four on one graph
+    # # ggplot(data = profile_df, 
+    # #        aes(x=entry, 
+    # #            y=profile, 
+    # #            shape=group, 
+    # #            col=interaction(sample,group))) + geom_line(aes(group=interaction(sample,group)))
+
+```
+
+convert all the individual PDFs to a multipage PDF
+
+```{r, engine='bash', eval=FALSE}
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
+region_dir="${project_dir}/project_notes/region_profiles"
+cd "$region_dir"
+
+plot_output_dir="${region_dir}/gtools-matrix-ouptut/ggplot_profiles"
+merged_plot_file="${region_dir}/gtools-matrix-ouptut/ggplot_profiles/ggplot_region_profiles_merged-2.pdf"
+# FILES="$(find "$plot_output_dir" -type f -name "*profile.pdf" | sort)"
+# gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile="$merged_plot_file" $FILES
 ```
 
 
@@ -755,7 +1249,7 @@ gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile="$merged_plot_file" $FILE
 DeepTools profile plots created using the set of all Gencode genes
 
 ```{r, results='asis', eval=TRUE}
-profiles_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/region_profiles/profiles_per_group-UPDNHILO-bin50bp"
+profiles_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10/project_notes/region_profiles/ggplot_profiles"
 
 profile_plots <- sort(dir(path = profiles_dir, pattern = "profile.png", recursive = TRUE, full.names = TRUE))
 profile_plots <- setNames(object = profile_plots, nm = gsub(pattern = '_profile.png', replacement = '', x = basename(profile_plots)))
