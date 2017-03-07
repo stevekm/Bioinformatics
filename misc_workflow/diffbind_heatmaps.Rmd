@@ -1,0 +1,235 @@
+---
+title: "DiffBind Heatmaps"
+author: "Stephen Kelly"
+date: "1/20/2017"
+output: 
+  html_document: 
+    keep_md: yes
+    toc: true
+    toc_float: true
+    toc_depth: 3    
+    number_sections: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup & Workflow {.tabset .tabset-pills}
+
+## Hide
+
+## Show
+
+### Get DiffBind Files
+
+The DiffBind ChIP-Seq datasets for differentially bound regions between samples per histone marks will be found and linked
+
+
+```{r, engine='bash', eval=FALSE, cache=TRUE}
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
+diffheatmap_dir="${project_dir}/project_notes/diffbind_heatmaps"
+cd "$diffheatmap_dir"
+
+diffbind_dir="${diffheatmap_dir}/diffbind_sheets"
+mkdir -p "$diffbind_dir"
+
+diffbind_data_location="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10/project_notes/results_dir/diffbind_DESeq2/"
+
+diffbind_files="$(find "$diffbind_data_location" -type f -name "diff_bind.*" -name "*.csv" -exec readlink -f {} \;)"
+
+for diff_file in $diffbind_files; do
+(
+echo "$diff_file"
+hist_mark="$(basename "$(dirname "$diff_file")")"
+echo "$hist_mark"
+out_name="$(echo "$(basename "$diff_file")" | sed "s/diff_bind/$hist_mark/")"
+echo "$out_name"
+
+cd "$diffbind_dir"
+ln -fs "$diff_file" "$out_name"
+)
+done
+```
+
+Create the heatmaps; this needs to be submitted to the HPC cluster since the diffbind sheets are quite large
+
+```{r, engine='bash', eval=FALSE, cache=TRUE}
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10"
+diffheatmap_dir="${project_dir}/project_notes/diffbind_heatmaps"
+cd "$diffheatmap_dir"
+
+heatmap_output_dir="${diffheatmap_dir}/heatmaps"
+mkdir -p "$heatmap_output_dir"
+
+diffbind_dir="${diffheatmap_dir}/diffbind_sheets"
+diffbind_files="$(find "$diffbind_dir" -name "*.csv" | sort)"
+
+# iterate over the DiffBind files
+for diff_file in $diffbind_files; do
+# parse file name for items
+echo "$diff_file"
+diff_file_basename="$(basename "$diff_file")"
+mark_ID="${diff_file_basename%%.*}"
+echo "$mark_ID"
+output_plot_file="${heatmap_output_dir}/${diff_file_basename%%.p100*}_heatmap.png"
+echo "$output_plot_file"
+
+output_plot_logdir="${heatmap_output_dir}/${diff_file_basename%%.p100*}_logs"
+mkdir -p "$output_plot_logdir"
+
+# regex to use in R for the status labels, since they don't pass well to the heredoc
+D_regex='.*\\.D\\..*'
+R_regex='.*\\.R\\..*'
+
+
+# submit bash heredoc qsub job
+    qsub -wd $PWD -o :${output_plot_logdir}/ -e :${output_plot_logdir}/ -j y <<E0F
+set -x
+# start R heredoc
+Rscript - "${diff_file}" "${output_plot_file}" "$D_regex" "$R_regex" "${output_plot_logdir}" <<'E0F2'
+
+args <- commandArgs(TRUE)
+
+cat("R is running...\n")
+cat("Script args are:\n")
+print(args)
+
+cat("\n---------------\n")
+cat("Script contents:")
+cat("\n---------------\n")
+# cat( readLines( args ) , sep = "\n" ) 
+
+diff_sheet_file <- args[1]
+plot_output <- args[2]
+d_label_regex <- args[3]
+r_label_regex <- args[4]
+log_dir <- args[5]
+
+cat("R session data file:\n")
+cat(file.path(log_dir, "session.Rdata"))
+
+save.image(file = file.path(log_dir, "session.Rdata"), compress = TRUE, safe = FALSE)
+
+# load the DiffBind sheet
+diff_df <- read.csv(file = diff_sheet_file, check.names = FALSE, stringsAsFactors = FALSE)
+
+# filter for FDR adjusted p value < 0.02
+diff_df <- diff_df[which(diff_df[["p.value"]] <= 0.02), ]
+
+# only run if there are enough entries..
+if(nrow(diff_df) >= 2){
+    # keep only the columns with the sample values
+    # remove_cols <- c("seqnames", "start", "end", "width", "strand", "Conc", "Conc_D", 
+    #                  "Conc_R", "Fold", "p.value", "FDR", "feature", "external_gene_name", 
+    #                  "gene_biotype", "start_position", "end_position", "insideFeature", 
+    #                  "distancetoFeature", "shortestDistance", "fromOverlappingOrNearest")
+    
+    # cols_to_keep <- colnames(diff_df)[ ! colnames(diff_df) %in% remove_cols]
+    
+    # subset for only cols we want
+    # diff_df <- diff_df[,cols_to_keep]
+    
+    # re order the cols
+    # diff_df <- diff_df[order(colnames(diff_df))]
+    
+    d_cols <- sort(colnames(diff_df)[grep(pattern = '^([[:alpha:]]*[[:punct:]]D)[[:punct:]][[:alpha:]].*$', perl = TRUE, x = colnames(diff_df))])
+    r_cols <- sort(colnames(diff_df)[grep(pattern = '^([[:alpha:]]*[[:punct:]]R)[[:punct:]][[:alpha:]].*$', perl = TRUE, x = colnames(diff_df))])
+    # diff_df <- diff_df[c(d_cols, r_cols)]
+    
+    # log2 the whole thing
+    # diff_df <- log2(diff_df)
+    
+    # colors: blue-white-red
+    colors <- colorRampPalette( c("#010F57", "#010F57", "#FAFAFA", "#B21212", "#B21212") )(50)
+    
+    # column labels
+    annotation_col <- data.frame(status=colnames(diff_df[c(d_cols, r_cols)]), stringsAsFactors=F)
+    rownames(annotation_col) <- colnames(diff_df[c(d_cols, r_cols)])
+    annotation_col['status'] <- gsub(d_label_regex, "D", x=annotation_col[["status"]])
+    annotation_col['status'] <- gsub(r_label_regex, "R", x=annotation_col[["status"]])
+    
+    # column labels colors
+    ann_colors <- list(status = c("seagreen4", "orchid4"))
+    names(ann_colors[["status"]]) <- unique(annotation_col[["status"]])
+    
+    
+    library(pheatmap)
+    
+    # heatmap with clustering
+    heatmap_with_clustering <- pheatmap(log2(diff_df[c(d_cols, r_cols)]), 
+             color=colors, 
+             border_color=NA, 
+             scale="row", 
+             cluster_rows=T, 
+             cluster_cols=T, 
+             clustering_distance_rows="euclidean", 
+             clustering_distance_cols="euclidean", 
+             clustering_method="complete", 
+             fontsize_row=4, 
+             fontsize_col=10, 
+             show_rownames=F, 
+             annotation_col=annotation_col, 
+             annotation_colors=ann_colors, 
+             width=12, height=8,
+             filename=file.path(plot_output))
+             
+             write.table(x = cbind(clustering_order = heatmap_with_clustering[['tree_row']][['order']], diff_df), 
+            file = paste0(plot_output, ".tsv"), 
+            quote = FALSE, sep = '\t', col.names = TRUE, row.names = FALSE)
+             
+    # without columns clustering
+    heatmap_without_col_clustering <- pheatmap(log2(diff_df[c(d_cols, r_cols)]), 
+             color=colors, 
+             border_color=NA, 
+             cluster_cols = FALSE,
+             cluster_rows=TRUE, 
+             clustering_distance_rows="euclidean", 
+             scale="row", 
+             fontsize_row=4, 
+             fontsize_col=10, 
+             show_rownames=F, 
+             annotation_col=annotation_col, 
+             annotation_colors=ann_colors, 
+             width=12, height=8,
+             filename=paste0(plot_output, "_no-col_clust.png"))
+             
+             write.table(x = cbind(clustering_order = heatmap_without_col_clustering[['tree_row']][['order']], diff_df), 
+            file = paste0(plot_output, "_no-col_clust.tsv"), 
+            quote = FALSE, sep = '\t', col.names = TRUE, row.names = FALSE)
+
+
+
+} else {
+    print("ERROR: NOT ENOUGH ENTRIES IN THE FILE")
+}
+
+save.image(file = file.path(log_dir, "session.Rdata"), compress = TRUE, safe = FALSE)
+
+E0F2
+E0F
+done
+
+```
+
+```
+
+# Heatmaps 
+
+```{r, results='asis'}
+# {.tabset .tabset-pills}
+
+heatmap_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10/project_notes/diffbind_heatmaps/heatmaps/"
+heatmap_files <- dir(path = heatmap_dir, pattern = "*.png", full.names = TRUE)
+
+for(hfile in heatmap_files){
+    cat(sprintf('## %s \n \n', basename(hfile)))
+    cat(sprintf("![](%s) \n \n", hfile))
+}
+
+```
+
+
+
+
