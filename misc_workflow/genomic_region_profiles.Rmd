@@ -12,6 +12,8 @@ output:
     code_folding: hide
 ---
 
+deepTools_genomic_profiles
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
