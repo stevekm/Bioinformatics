@@ -1,0 +1,99 @@
+---
+title: "Super Enhancer vs. Enhancer Overlap"
+author: "Stephen Kelly"
+date: "1/27/2017"
+output: 
+  html_document: 
+    keep_md: yes
+    toc: true
+    toc_float: true
+    toc_depth: 3    
+    number_sections: true
+    code_folding: hide
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup & Workflow {.tabset .tabset-pills}
+
+## Hide
+
+## Show
+
+The Excel xlsx format sheets have already been dumped and parsed to TSV format. Need to format the output to a BED format. 
+
+```{r, eval=FALSE}
+peak_sheets <- c("./source_data_from_SmithLab/Enhancers_gains_and_losses.R_enhancers.tsv",
+                 "./source_data_from_SmithLab/Enhancers_gains_and_losses.D_enhancers.tsv")
+for(sheet in peak_sheets){
+    peak_df <- read.table(file = sheet, header = TRUE, sep = '\t', comment.char = '')
+    BED_df <- as.data.frame(do.call(rbind, strsplit(x = as.character(peak_df[["X.chr.start.end"]]), split = ':',fixed = TRUE)))
+    BED_df <- cbind(BED_df, as.data.frame(do.call(rbind, strsplit(x = as.character(BED_df[["V2"]]), split = '-',fixed = TRUE))))
+    BED_df <- BED_df[c(1,3,4)]
+    
+    write.table(x = BED_df, file = file.path(dirname(sheet), 
+                                             gsub(pattern = '.tsv', 
+                                                  replacement = '.bed', 
+                                                  x = basename(sheet))), 
+                quote = FALSE, sep = '\t', 
+                row.names = FALSE, col.names = FALSE)
+    
+}
+
+
+peak_sheets <- c("./SuperEnhancers/Diagnosis_SE.tsv",
+                 "./SuperEnhancers/Relapse_SE.tsv")
+for(sheet in peak_sheets){
+    peak_df <- read.table(file = sheet, header = TRUE, sep = '\t', comment.char = '')
+    
+    write.table(x = peak_df, file = file.path(dirname(sheet),
+                                             gsub(pattern = '.tsv',
+                                                  replacement = '.bed',
+                                                  x = basename(sheet))),
+                quote = FALSE, sep = '\t',
+                row.names = FALSE, col.names = FALSE)
+    
+}
+
+```
+
+Next, overlap the BED files against each other. 
+
+```{r, engine='bash', eval=FALSE}
+# http://bedtools.readthedocs.io/en/latest/content/tools/intersect.html
+module unload gcc
+module load bedtools/2.22.0
+
+function sort_bed {
+    local bed_file="$1"
+    sort -k1,1 -k2,2n "$bed_file" > tmp && mv tmp "$bed_file"
+}
+
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-03-10/project_notes/SE_vs_Enhancer_overlap"
+overlap_dir="${project_dir}/overlaps"
+mkdir -p "$overlap_dir"
+cd "$project_dir"
+
+SE_D_bedfile="${project_dir}/SuperEnhancers/Diagnosis_SE.bed"
+SE_R_bedfile="${project_dir}/SuperEnhancers/Relapse_SE.bed"
+
+Enhancer_D_bedfile="${project_dir}/source_data_from_SmithLab/Enhancers_gains_and_losses.D_enhancers.bed"
+Enhancer_R_bedfile="${project_dir}/source_data_from_SmithLab/Enhancers_gains_and_losses.R_enhancers.bed"
+
+
+# sort the BED files
+for i in $SE_D_bedfile $SE_R_bedfile $Enhancer_D_bedfile $Enhancer_R_bedfile; do sort_bed "$i"; done
+
+# overlap the regions
+bedtools intersect -a "$Enhancer_D_bedfile" -b "$SE_D_bedfile" "$SE_R_bedfile" -loj -names "D_SuperEnhancers" "R_SuperEnhancers" > "${overlap_dir}/Enhancer_D_vs_SE_DR_overlap.txt"
+
+bedtools intersect -a "$Enhancer_R_bedfile" -b "$SE_D_bedfile" "$SE_R_bedfile" -loj -names "D_SuperEnhancers" "R_SuperEnhancers" > "${overlap_dir}/Enhancer_R_vs_SE_DR_overlap.txt"
+
+
+```
+
+
+
