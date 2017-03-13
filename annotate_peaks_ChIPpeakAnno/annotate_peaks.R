@@ -42,6 +42,8 @@ peaks_granges <- annotatePeakInBatch(peaks_granges, AnnotationData = martEnsTSS,
 cat("\nMerging annotations...\n")
 peaks_granges_df <- merge(as.data.frame(peaks_granges) , martEnsDF , by.x=c("feature"), by.y=c("ensembl_gene_id") , all.x=TRUE)
 
+# !! NOTE: Need to subtract 1 from the 'start' to get the original coordinate !!
+
 # save the output
 cat("\nSaving the output...\n")
 write.table(peaks_granges_df, row.names = FALSE, sep = '\t', quote = FALSE, 
