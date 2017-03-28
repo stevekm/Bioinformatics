@@ -12,7 +12,7 @@ BaseMount Help Page:
 https://help.basespace.illumina.com/articles/descriptive/introduction-to-basemount/
 
 Before you start:
-- log into your Basespace account in a web browser
+- log into your Basespace account in a web browser: https://basespace.illumina.com/home/index
 - make sure your account has loaded the associated group that has your desired projects
 - - e.g. if your project is under your Personal account, then switch to your Personal account in BaseSpace before you start
 
