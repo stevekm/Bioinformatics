@@ -23,8 +23,14 @@ annotate_peaks.R
 
 # get script args
 args <- commandArgs(TRUE)
+
+message("\nScript args are:\n")
+print(args)
+
 input_peaks_file <- args[1]
 output_annotated_peaks_file <- args[2]
+
+message("\nLoading packages...\n")
 
 # source("https://bioconductor.org/biocLite.R")
 # biocLite("ChIPpeakAnno")
@@ -32,24 +38,43 @@ library(ChIPpeakAnno)
 library(biomaRt)
 
 # read in the BED file
+message("\nReading in the BED file...\n")
 peaks_granges <- toGRanges(input_peaks_file, format="BED", header=FALSE) 
 
 # for hg19
 # get biomart reference genome information
-martEns <- useMart(host="grch37.ensembl.org", biomart="ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl", verbose=F)
-martEnsTSS <- getAnnotation(mart=martEns, featureType="TSS")
-martEnsDF <- getBM(attributes=c("ensembl_gene_id", "external_gene_name", "gene_biotype"), mart=martEns)
+# check for a saved copy first..
+biomart_data_file <- file.path(getwd(), "biomart_data.RData")
+if(file.exists(biomart_data_file)){
+    message(sprintf("Found biomaRt data file:\n%s\nLoading data from file...", biomart_data_file))
+    load(biomart_data_file)
+} else {
+    message("Saved biomaRt data file not found!")
+    message("Retreiving reference information for hg19 from biomaRt, this might take a few minutes...")
+    martEns <- useMart(host="grch37.ensembl.org", biomart="ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl", verbose=F)
+    martEnsTSS <- getAnnotation(mart=martEns, featureType="TSS")
+    martEnsDF <- getBM(attributes=c("ensembl_gene_id", "external_gene_name", "gene_biotype"), mart=martEns)
+    message(sprintf("Saving biomaRt data to file:\n%s\n", biomart_data_file))
+    save(martEns, martEnsTSS, martEnsDF, file = biomart_data_file)
+}
 
 
 # get the annotations
+message("\nGetting annotations...\n")
 peaks_granges <- annotatePeakInBatch(peaks_granges, AnnotationData = martEnsTSS, PeakLocForDistance = "middle", FeatureLocForDistance = "TSS", output = "shortestDistance", multiple = TRUE)
 
 # merge the annotations with the peaks
+message("\nMerging annotations...\n")
 peaks_granges_df <- merge(as.data.frame(peaks_granges) , martEnsDF , by.x=c("feature"), by.y=c("ensembl_gene_id") , all.x=TRUE)
 
 # save the output
+message("\nSaving the output...\n")
 write.table(peaks_granges_df, row.names = FALSE, sep = '\t', quote = FALSE, 
             file = output_annotated_peaks_file)
+
+
+message("Session Information:\n")
+sessionInfo()
 
 ```
 
@@ -71,7 +96,7 @@ annotation_script="${project_dir}/annotate_peaks.R"
 
 # find all the peaks files to be annotated
 find "$input_dir" -name "$peaks_file_basename" | while read item; do
-set -x
+# set -x
 echo "$item"
 
 input_name="$(echo "$item" | sed -e "s|${input_dir}/||g")"
@@ -88,8 +113,9 @@ echo "$output_filepath"
 echo ""
 qsub -b y -wd "$project_dir" -o :${log_dir}/ -e :${log_dir}/ -N "$sample_ID" Rscript "$annotation_script" "$item" "$output_filepath" # -pe threaded "$job_threads" -l mem_free="$job_mem" -l h_vmem="$job_mem" -l mem_token="$job_mem"
 
-set +x
+# set +x
 done
+
 ```
 
 # Create ChIPSeeker Plots
@@ -179,9 +205,6 @@ annotation_script="${project_dir}/peaks_annotations_summary.R"
 
 # find all the peaks files to be annotated
 find "$input_dir" -name "$peaks_file_basename" | while read item; do
-set -x
-echo "$item"
-
 input_name="$(echo "$item" | sed -e "s|${input_dir}/||g")"
 sample_ID="$(basename $(dirname "$input_name"))"
 sample_path="$(dirname "$input_name")"
@@ -190,14 +213,17 @@ output_path="${output_dir}/${sample_path}"
 log_dir="${output_path}/logs"
 mkdir -p "$log_dir"
 
-echo "$output_filepath"
+echo "$item"
+echo "$output_path"
+echo "$sample_ID"
+
 
 echo ""
 qsub -b y -wd "$project_dir" -o :${log_dir}/ -e :${log_dir}/ -N "$sample_ID" Rscript "$annotation_script" "$item" "$output_path" "$sample_ID" # -pe threaded "$job_threads" -l mem_free="$job_mem" -l h_vmem="$job_mem" -l mem_token="$job_mem"
 # Rscript "$annotation_script" "$item" "$output_path" "$sample_ID"
 
-set +x
 done
+
 ```
 
 ## Aggregate Plots
