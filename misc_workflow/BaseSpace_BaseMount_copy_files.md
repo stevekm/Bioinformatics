@@ -91,7 +91,14 @@ rsync --progress -vRt --files-from="$project_files_list" "$basepace_projects" "$
 )
 
 
+```
 
+# Unmount BaseSpace
+
+When you are done copying, you need to unmount the BaseSpace directory. Use this command
+
+```
+basemount --unmount /ifs/home/kellys04/projects/sequencing/BaseSpace
 ```
 
 # Notes
