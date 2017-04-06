@@ -10,25 +10,29 @@
 # https://github.com/hms-dbmi/UpSetR
  
 # ~~~~~ LOAD PACKAGES ~~~~~~~ #
-library("UpSetR"); library("ggplot2"); library("grid"); library("plyr")
+library("UpSetR")
+library("ggplot2")
+library("grid")
+library("plyr")
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
 
 
 # ~~~~~ GET SCRIPT ARGS ~~~~~~~ #
-args <- commandArgs(TRUE); cat("Script args are:\n"); args
+args <- commandArgs(TRUE)
+cat("Script args are:\n")
+args
+
 SampleID<-args[1]
 venn_table_file<-args[2]
-# SampleID<-"AGK"
-# venn_table_file<-"/ifs/home/kellys04/projects/CarrollLab_Teena_ChIpSeq_2016-03-10/project_notes/peak_overlap/peaks_per_patient_per_mark-default-cutoff/AGK/venn.txt"
 
 plot_outdir<-dirname(venn_table_file)
-plot_filepath<-paste0(plot_outdir,"/",SampleID,"_UpSetR_plot.pdf") 
+plot_filepath<-file.path(plot_outdir, paste0(SampleID,"_UpSetR_plot.pdf"))
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
 
 
 # ~~~~~ PARSE THE VENN TABLE ~~~~~~~ #
 # read in the venn text
-venn_table_df<-read.table(venn_table_file,header = TRUE,sep = "\t",stringsAsFactors = FALSE,check.names = FALSE)
+venn_table_df <- read.table(venn_table_file,header = TRUE,sep = "\t",stringsAsFactors = FALSE,check.names = FALSE)
 # > venn_table_df
 # AGK-D-H3K27AC.bed AGK-R-H3K27AC.bed Total                                Name
 # 1                                   X 29005                   AGK-R-H3K27AC.bed
@@ -38,15 +42,17 @@ venn_table_df<-read.table(venn_table_file,header = TRUE,sep = "\t",stringsAsFact
 
 # get the venn categories
 venn_categories<-colnames(venn_table_df)[!colnames(venn_table_df) %in% c("Total","Name")] 
-cat("Venn categories are:\n"); venn_categories
+cat("Venn categories are:\n")
+venn_categories
 # > cat("Venn categories are:\n"); venn_categories
 # Venn categories are:
 #   [1] "AGK-D-H3K27AC.bed" "AGK-R-H3K27AC.bed"
 
 
 # venn_categories
-num_categories<-length(venn_categories)
-cat("Num categories are:\n"); num_categories
+num_categories <- length(venn_categories)
+cat("Num categories are:\n")
+num_categories
 # > num_categories<-length(venn_categories)
 # > cat("Num categories are:\n"); num_categories
 # Num categories are:
@@ -55,7 +61,8 @@ cat("Num categories are:\n"); num_categories
 
 # make a summary table
 venn_summary<-venn_table_df[!colnames(venn_table_df) %in% venn_categories]
-cat("Venn summary table is categories are:\n"); venn_summary
+cat("Venn summary table is categories are:\n")
+venn_summary
 # > venn_summary<-venn_table_df[!colnames(venn_table_df) %in% venn_categories]
 # > cat("Venn summary table is categories are:\n"); venn_summary
 # Venn summary table is categories are:
@@ -74,7 +81,7 @@ cat("Venn summary table is categories are:\n"); venn_summary
 # ~~~~~ SET UP THE PLOT ~~~~~~~ #
 # convert the summary table to a numeric/int vector, with element names as the combination names
 # # swap the | character with &; for passing to UpSet fromExpression
-upset_expression<-setNames(venn_summary[['Total']],gsub("|","&",venn_summary[['Name']],fixed = TRUE))
+upset_expression <- setNames(venn_summary[['Total']], gsub("|","&",venn_summary[['Name']], fixed = TRUE))
 # > upset_expression
 # AGK-R-H3K27AC.bed                   AGK-D-H3K27AC.bed
 # 29005                               19523
@@ -82,9 +89,23 @@ upset_expression<-setNames(venn_summary[['Total']],gsub("|","&",venn_summary[['N
 # 35344
 
 # save the plot into a PDF
-cat("Plot output file is:\n"); plot_filepath
+cat("Plot output file is:\n")
+plot_filepath
 
-pdf(plot_filepath,width = 8,height = 8)
-upset(fromExpression(upset_expression),order.by = "degree", decreasing = F,mainbar.y.label = "Overlapping Peaks", sets.x.label = "Peaks per Category") # , group.by = "sets"
+upset_df <- fromExpression(upset_expression)
+upset_sets <- sort(colnames(upset_df))
+
+pdf(plot_filepath, width = 8, height = 8, onefile=FALSE)
+upset(upset_df, 
+      sets = upset_sets,
+      keep.order = TRUE,
+      nsets = num_categories, 
+      order.by = "freq", 
+      decreasing = T, 
+      nintersects = 10, # default is 40
+      mainbar.y.label = "Overlapping Peaks", 
+      sets.x.label = "Peaks per Category") # , group.by = "sets"
+grid.text(SampleID, vp = viewport(layout.pos.row = 2, layout.pos.col = 1), just = c("left", "top"))
 dev.off()
 
+save.image(file = file.path(plot_outdir,"UpSet_data.Rdata"), compress = TRUE)

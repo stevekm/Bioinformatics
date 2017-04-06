@@ -1,0 +1,254 @@
+---
+title: "Peak Annotation & Types"
+author: "Stephen Kelly"
+date: "3/6/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Run the ChIP Peak Anno and ChipSeeker pipelines on the peaks etc
+
+# Annotate the peaks
+
+annotate_peaks.R
+
+```{r annotatedBED, eval=FALSE}
+#!/usr/bin/env Rscript
+
+## USAGE: annotate_peaks.R /path/to/peaks.bed /path/to/output/annotated_peaks.tsv
+## DESCRIPTION: This script will run annotate peaks with ChIPpeakAnno, using hg19
+
+# get script args
+args <- commandArgs(TRUE)
+
+message("\nScript args are:\n")
+print(args)
+
+input_peaks_file <- args[1]
+output_annotated_peaks_file <- args[2]
+
+message("\nLoading packages...\n")
+
+# source("https://bioconductor.org/biocLite.R")
+# biocLite("ChIPpeakAnno")
+library(ChIPpeakAnno)
+library(biomaRt)
+
+# read in the BED file
+message("\nReading in the BED file...\n")
+peaks_granges <- toGRanges(input_peaks_file, format="BED", header=FALSE) 
+
+# for hg19
+# get biomart reference genome information
+# check for a saved copy first..
+biomart_data_file <- file.path(getwd(), "biomart_data.RData")
+if(file.exists(biomart_data_file)){
+    message(sprintf("Found biomaRt data file:\n%s\nLoading data from file...", biomart_data_file))
+    load(biomart_data_file)
+} else {
+    message("Saved biomaRt data file not found!")
+    message("Retreiving reference information for hg19 from biomaRt, this might take a few minutes...")
+    martEns <- useMart(host="grch37.ensembl.org", biomart="ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl", verbose=F)
+    martEnsTSS <- getAnnotation(mart=martEns, featureType="TSS")
+    martEnsDF <- getBM(attributes=c("ensembl_gene_id", "external_gene_name", "gene_biotype"), mart=martEns)
+    message(sprintf("Saving biomaRt data to file:\n%s\n", biomart_data_file))
+    save(martEns, martEnsTSS, martEnsDF, file = biomart_data_file)
+}
+
+
+# get the annotations
+message("\nGetting annotations...\n")
+peaks_granges <- annotatePeakInBatch(peaks_granges, AnnotationData = martEnsTSS, PeakLocForDistance = "middle", FeatureLocForDistance = "TSS", output = "shortestDistance", multiple = TRUE)
+
+# merge the annotations with the peaks
+message("\nMerging annotations...\n")
+peaks_granges_df <- merge(as.data.frame(peaks_granges) , martEnsDF , by.x=c("feature"), by.y=c("ensembl_gene_id") , all.x=TRUE)
+
+# save the output
+message("\nSaving the output...\n")
+write.table(peaks_granges_df, row.names = FALSE, sep = '\t', quote = FALSE, 
+            file = output_annotated_peaks_file)
+
+
+message("Session Information:\n")
+sessionInfo()
+
+```
+
+run the script on the files
+```{r, engine='bash', eval=FALSE}
+#!/bin/bash
+
+# this script will find the peaks files in the input directory
+# and run the annotation script on them
+
+project_dir="/ifs/home/kellys04/projects/ChIpSeq_2017-12-31/project_notes/peak_annotation_stats"
+input_dir="/ifs/home/kellys04/projects/ChIpSeq_2017-12-31/pipeline/peaks/results"
+peaks_file_basename="peaks.bed"
+
+output_dir="${project_dir}/annotated_peaks"
+mkdir -p "$output_dir"
+
+annotation_script="${project_dir}/annotate_peaks.R"
+
+# find all the peaks files to be annotated
+find "$input_dir" -name "$peaks_file_basename" | while read item; do
+# set -x
+echo "$item"
+
+input_name="$(echo "$item" | sed -e "s|${input_dir}/||g")"
+sample_ID="$(basename $(dirname "$input_name"))"
+sample_path="$(dirname "$input_name")"
+
+output_path="${output_dir}/${sample_path}"
+log_dir="${output_path}/logs"
+mkdir -p "$log_dir"
+
+output_filepath="${output_path}/${sample_ID}_annotated_peaks.tsv"
+echo "$output_filepath"
+
+echo ""
+qsub -b y -wd "$project_dir" -o :${log_dir}/ -e :${log_dir}/ -N "$sample_ID" Rscript "$annotation_script" "$item" "$output_filepath" # -pe threaded "$job_threads" -l mem_free="$job_mem" -l h_vmem="$job_mem" -l mem_token="$job_mem"
+
+# set +x
+done
+
+```
+
+# Create ChIPSeeker Plots
+
+peaks_annotations_summary.R
+
+```{r, eval=FALSE}
+#!/usr/bin/env Rscript
+
+## USAGE: ....R /path/to/peaks.bed /path/to/outdir my_sample_ID
+## DESCRIPTION:
+
+# get script args
+args <- commandArgs(TRUE)
+
+cat("\nScript args are:\n")
+print(args)
+input_peaks_file <- args[1]
+output_directory <- args[2]
+sampleID <- args[3]
+
+# promoter_proximal = 3000 # Extending promoter upstream and downstream by nt
+# Rscript --vanilla code/chipseq-peakanno.r -g $genome -d $promoter_proximal -o $outdir $peaks
+cat("\nLoading packages...\n")
+library("ChIPseeker")
+library("clusterProfiler")
+library("TxDb.Hsapiens.UCSC.hg19.knownGene")
+
+cat("\nLoading hg19 database...\n")
+txdb <- get("TxDb.Hsapiens.UCSC.hg19.knownGene")
+promoter_dist <- 3000
+
+cat("\nReading peaks file...\n")
+peak <- readPeakFile(input_peaks_file)
+
+cat("\nMaking Chrom Coverages plot...\n")
+peaks_coverage_plot_file <- file.path(output_directory, "peaks-coverage.pdf")
+sample_title <- paste0(sampleID, " ChIP Peaks over Chromosomes")
+pdf(file = peaks_coverage_plot_file)
+covplot(peak, weightCol="V5", title = sample_title) # title = "ChIP Peaks over Chromosomes"
+dev.off()
+
+cat("\nGetting peak annotations...\n")
+peakAnno <- annotatePeak(peak, tssRegion=c(-promoter_dist, promoter_dist), 
+                         TxDb=txdb, 
+                         annoDb="org.Hs.eg.db")
+
+cat("\nMaking Peak Anno pie chart...\n")
+anno_piechart_plot_file <- file.path(output_directory, "anno-piechart.pdf")
+sample_title <- paste0("\n\n", sampleID, " Peak Types")
+pdf(file = anno_piechart_plot_file, height = 8, width = 8)
+plotAnnoPie(peakAnno, main = sample_title)
+dev.off()
+
+cat("\nMaking Upset plot...\n")
+upset_plot_file <- file.path(output_directory, "upsetplot.pdf")
+sample_title <- paste0(sampleID, " Peak Overlaps")
+pdf(file = upset_plot_file, width = 9, height = 4.5, onefile = F)
+upsetplot(peakAnno,vennpie=TRUE) 
+text(x = 0, y = 1, sample_title) # add a title
+dev.off()
+
+cat("\nSaving table...\n")
+peak_anno_table_file <- file.path(output_directory, "peak_anno.tsv")
+write.table(peakAnno, quote=FALSE, sep="\t", row.names =FALSE, file=peak_anno_table_file)
+
+sessionInfo()
+
+```
+
+run_annotate_peaks.sh
+
+```{r, engine='bash', eval=FALSE}
+#!/bin/bash
+
+# this script will find the peaks files in the input directory
+# and run the annotation script on them
+
+project_dir="/ifs/home/kellys04/projects/ChIpSeq_2017-12-31/project_notes/peak_annotation_stats"
+input_dir="/ifs/home/kellys04/projects/ChIpSeq_2017-12-31/pipeline/peaks/results"
+peaks_file_basename="peaks.bed"
+
+output_dir="${project_dir}/peaks_summaries"
+mkdir -p "$output_dir"
+
+annotation_script="${project_dir}/peaks_annotations_summary.R"
+
+# find all the peaks files to be annotated
+find "$input_dir" -name "$peaks_file_basename" | while read item; do
+input_name="$(echo "$item" | sed -e "s|${input_dir}/||g")"
+sample_ID="$(basename $(dirname "$input_name"))"
+sample_path="$(dirname "$input_name")"
+
+output_path="${output_dir}/${sample_path}"
+log_dir="${output_path}/logs"
+mkdir -p "$log_dir"
+
+echo "$item"
+echo "$output_path"
+echo "$sample_ID"
+
+
+echo ""
+qsub -b y -wd "$project_dir" -o :${log_dir}/ -e :${log_dir}/ -N "$sample_ID" Rscript "$annotation_script" "$item" "$output_path" "$sample_ID" # -pe threaded "$job_threads" -l mem_free="$job_mem" -l h_vmem="$job_mem" -l mem_token="$job_mem"
+# Rscript "$annotation_script" "$item" "$output_path" "$sample_ID"
+
+done
+
+```
+
+## Aggregate Plots
+
+```{r, engine='bash', eval=FALSE}
+project_dir="/ifs/home/kellys04/projects/ChIpSeq_2017-12-31/project_notes/peak_annotation_stats"
+peak_summary_dir="${project_dir}/peaks_summaries"
+
+ls -1 "$peak_summary_dir" | while read summary_dir; do
+(
+echo "$summary_dir"
+echo "${peak_summary_dir}/${summary_dir}"
+
+upset_pdfs="$(find "${peak_summary_dir}/${summary_dir}" -name "upsetplot.pdf")"
+# echo $upset_pdfs
+anno_piechart_pdfs="$(find "${peak_summary_dir}/${summary_dir}" -name "anno-piechart.pdf")"
+peaks_coverage_pdfs="$(find "${peak_summary_dir}/${summary_dir}" -name "peaks-coverage.pdf")"
+
+
+gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile=${project_dir}/${summary_dir}_upsetplot.pdf $upset_pdfs
+gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile=${project_dir}/${summary_dir}_anno_piechart.pdf $anno_piechart_pdfs
+gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile=${project_dir}/${summary_dir}_peaks_coverage.pdf $peaks_coverage_pdfs
+) & 
+done
+
+# FILES="$(find /path/to/dir/ -type f -name "*.pdf" | sort)"
+# gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile=merged_output.pdf $FILES
+```
