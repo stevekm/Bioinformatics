@@ -38,7 +38,7 @@ copy_with_parents () {
         parent_dir="${parent_dir%%/*}"
         output_path="${destination_dir}/${parent_dir}" 
         printf "Copying to:\n%s\n\n" "${output_path}"
-        rsync  --dry-run -vctrPh "$item" "${output_path}/"  #
+        rsync  -vctrPh "$item" "${output_path}/"  #
     done
 }
 
