@@ -12,16 +12,25 @@ print(args)
 input_peaks_file <- args[1]
 output_annotated_peaks_file <- args[2]
 
+# check number of lines > 0
+if(length(readLines(input_peaks_file)) < 1){
+    message(sprintf("ERROR: No lines present in input BED file:\n%s\n", input_peaks_file))
+    message(sprintf("No regions present, making empty file: %s", output_annotated_peaks_file))
+    file.create(output_annotated_peaks_file)
+    quit()
+}
+
 message("\nLoading packages...\n")
 
 # source("https://bioconductor.org/biocLite.R")
 # biocLite("ChIPpeakAnno")
-library(ChIPpeakAnno)
-library(biomaRt)
+library("ChIPpeakAnno")
+library("biomaRt")
 
 # read in the BED file
 message("\nReading in the BED file...\n")
-peaks_granges <- toGRanges(input_peaks_file, format="BED", header=FALSE) 
+
+peaks_granges <- toGRanges(input_peaks_file, format="BED", header=FALSE)
 
 # for hg19
 # get biomart reference genome information
@@ -51,7 +60,7 @@ peaks_granges_df <- merge(as.data.frame(peaks_granges) , martEnsDF , by.x=c("fea
 
 # save the output
 message("\nSaving the output...\n")
-write.table(peaks_granges_df, row.names = FALSE, sep = '\t', quote = FALSE, 
+write.table(peaks_granges_df, row.names = FALSE, sep = '\t', quote = FALSE,
             file = output_annotated_peaks_file)
 
 
