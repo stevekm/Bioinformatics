@@ -65,52 +65,72 @@ run_rose () {
     local sample_outdir="${se_outdir}/${sampleID}"
     local rose_outdir="${sample_outdir}/SuperEnhancers"; mkdir -p "$rose_outdir"
     local log_dir="${sample_outdir}/logs"; mkdir -p "$log_dir"
-
+    
     # files needed for ROSE
-    local control_bam_file="$(find_bam "$control_sample")"
-    local control_bai_file="$(find_bai "$control_sample")"
     local bam_file="$(find_bam "$sampleID")"
     local bai_file="$(find_bai "$sampleID")"
     local bed_file="$(find_bed "$sampleID")"
-
+    
     # symlink filenames to use
-    local control_bam_linkname="${control_sample}_$(basename "$control_bam_file")"
-    local control_bai_linkname="${control_sample}_$(basename "$control_bai_file")"
     local bam_link_name="${sampleID}_$(basename "$bam_file")"
     local bai_link_name="${sampleID}_$(basename "$bai_file")"
     local bed_link_name="${sampleID}_$(basename "$bed_file")"
-
+    
     # name for the GFF file
     local gff_file="${bed_link_name%%.bed}.gff"
+    
+    # default argument for ROSE; assume no control supplied
+    local ROSE_control_arg=""
+    
+    # setup sample files
+    (
+    cd "$sample_outdir"
+    ln -fs ${rose_dir}/* ./
+    ln -fs "$bam_file" "$bam_link_name"
+    ln -fs "$bai_file" "$bai_link_name"
+    ln -fs "$bed_file" "$bed_link_name"
+    
+    # need to convert the BED to GFF format
+    convert_bed_to_gff "$bed_link_name" "$gff_file"
+    )
+    
+    # check for a control sample; default value is NA for no control
+    if [ "$control_sample" != "NA" ]; then
+        echo "Finding control sample files..."
+        local control_bam_file="$(find_bam "$control_sample")"
+        local control_bai_file="$(find_bai "$control_sample")"
+        local control_bam_linkname="${control_sample}_$(basename "$control_bam_file")"
+        local control_bai_linkname="${control_sample}_$(basename "$control_bai_file")"
+        local ROSE_control_arg="-c $control_bam_linkname"
+        # setup control files
+        (
+        cd "$sample_outdir"
+        ln -fs "$control_bam_file" "$control_bam_linkname"
+        ln -fs "$control_bai_file" "$control_bai_linkname"
+        )
+    fi
+    
     printf "%s\n%s\n%s\n%s\n%s\n%s\n\n" "$bam_file" "$bai_file" "$bed_file" "$sample_outdir" "$control_bam_file" "$control_bai_file"
     printf "%s\n%s\n%s\n%s\n\n\n" "$bam_link_name" "$bai_link_name" "$bed_link_name" "$gff_file"
     (
     cd "$sample_outdir"
-    ln -fs ${rose_dir}/* ./
     ls -l
     pwd
-    ln -fs "$bam_file" "$bam_link_name"
-    ln -fs "$bai_file" "$bai_link_name"
-    ln -fs "$bed_file" "$bed_link_name"
-    ln -fs "$control_bam_file" "$control_bam_linkname"
-    ln -fs "$control_bai_file" "$control_bai_linkname"
-    # need to convert the BED to GFF for ROSE
-    convert_bed_to_gff "$bed_link_name" "$gff_file"
+    printf "\nLog dir will be:\n%s\n\n" "$log_dir"
     # submit qsub cluster job to run ROSE
      qsub -wd $PWD -o :${log_dir}/ -e :${log_dir}/ -j y -N "$sampleID" <<E0F
 set -x
-python ./ROSE_main.py -g HG19 -i "$gff_file" -r "$bam_link_name" -c "$control_bam_linkname" -o "$rose_outdir" -t 2500
+python ./ROSE_main.py -g HG19 -i "$gff_file" -r "$bam_link_name" $ROSE_control_arg -o "$rose_outdir" -t 2500
 E0F
     )
 }
 
 # ~~~~~~~~~~ RUN ~~~~~~~~~~ #
-# run ROSE for every sample listed in the Sample sheet
 tail -n +2 "$samplesheet" | while read line; do
-    if [ ! -z "$line" ]; then # skip empty lines
-        sampleID="$(echo "$line" | cut -f1)"
-        case "$sampleID" in
-            *K27Ac*) # only run if sample ID includes K27Ac
+    if [ ! -z "$line" ]; then # no empty lines
+        sampleID="$(echo "$line" | cut -f1)" 
+        case "$sampleID" in 
+            *K27Ac*) # sample ID includes K27Ac
             printf "\n%s\n\n" "$div"
             control_sample="$(echo "$line" | cut -f2)"
             echo "$sampleID $control_sample"
