@@ -1,0 +1,453 @@
+A section of the main code used for integrating methylation, ChIP-Seq Diffbind, and microarray gene expression data
+
+- Find the methylation and Diffbind regions that pass cutoff criteria
+- Find the genes that match those criteria
+- save all region sets as BED files, get the number of overlapping regions with HOMER mergePeaks, then create UpSet plots in R, merge all PDFs
+
+In R:
+```{r, eval=FALSE}
+# ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ #
+# dir locations
+proj_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/integrated_analysis"
+
+setwd(proj_dir)
+# load the external function package I made
+source("analysis_functions.R")
+
+# output_dir <- file.path(proj_dir, "output_per-patient_TSSflank500bp")
+data_dir <- file.path(proj_dir, "source_data")
+
+microarray_dir <- file.path(data_dir, "gene_expression_microarray")
+
+methylation_data_dir <- file.path(data_dir, "methylation_data")
+
+# use this one instead
+methylation_regionTSS_dir <- file.path(data_dir, "methylation_promoters_only")
+
+diffbind_sheet_dir <- file.path(data_dir, "diffbind_sheets") # multiple files, on per ChIP mark
+diffbind_regions_dir <- file.path(data_dir, "diffbind_methlyation_region_overlaps") # multiple files, on per ChIP mark
+
+
+# ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ #
+# file locations
+# # gene expression microarray data
+gene_expression_file <- file.path(microarray_dir, "gene_expression_log_ratios.tsv")
+# # Methylation Values
+methylation_data_file <- file.path(methylation_data_dir, "differential_methylation_data-R_minus_D.tsv")
+
+# # methylation regions with gene IDs
+# methylation_region_file <- file.path(methylation_region_dir, "methylation_regions_annotated-start_minus1.bed")
+methylation_region_file <- file.path(methylation_regionTSS_dir, "methylation_regions_annotated-overlap_TSS500.bed")
+
+# files for the diffbind data
+diffbind_data_files <- dir(path = diffbind_sheet_dir, full.names = TRUE, pattern = ".csv")
+
+# files for the diffbind methylation overlaps
+diffbind_region_files <- dir(path = diffbind_regions_dir, full.names = TRUE, pattern = ".bed")
+
+# all the sample IDs in each dataset
+sample_data_key_file <- file.path(proj_dir, "sample_data_key.tsv")
+
+# ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ #
+# load data
+gene_expression_df <- read_microarray_sheet(gene_expression_file)
+methylation_data_df <- read_methylation_sheet_fix_chromLocs(methylation_data_file)
+methylation_regions_genes_df <- read_methylation_regions_sheet(methylation_region_file)
+diffbind_data_list <- make_diffbind_data_regions_list(diffbind_region_files, diffbind_data_files)
+
+
+
+sample_data_key_df <- read.delim(sample_data_key_file, sep = '\t')
+
+
+chrom_cols <- c("chrom", "start", "stop")
+diffbind_chrom_cols <- c("seqnames", "start", "end")
+diffbind_meta_cols <- c("seqnames", "start", "end", "width", "strand", "Conc", "Conc_D", "Conc_R", "Fold", "p.value", "FDR", "feature", "external_gene_name", "gene_biotype", "start_position", "end_position", "insideFeature", "distancetoFeature", "shortestDistance", "fromOverlappingOrNearest")
+sample_ratio_diffbind_newcolname <- "ratio"
+common_samples <- c("AGK", "BVI", "CBK", "DKJ", "FLV", "IDY", "PRW", "SPN", "ZGR", "ZNK")
+
+
+write_BED_file <- function(df, output_file, verbose = TRUE){
+    # output the first 3 columns of the dataframe as a BED formatted file; chrom start stop
+    if(verbose == TRUE) message(sprintf("Writing output to file:\n%s", output_file))
+    # make the parent dir if doesn't exist
+    if(! dir.exists(dirname(output_file))) dir.create(path = dirname(output_file), recursive = TRUE)
+    write.table(x = df[1:3], file = output_file, quote = FALSE, sep = '\t', row.names = FALSE, col.names = FALSE)
+}
+
+
+filter_diffbind_df <- function(df, TSS_peak_abs_distance_lessthaneq, ratio_cols = FALSE,
+                               p_value_lessthan = 0.2, #
+                               ratio_base = 1.5){
+    # custom filter criteria for the DiffBind peaks dataframe
+    diffbind_chrom_cols <- c("seqnames", "start", "end")
+    ratio_greaterthan <- log2(ratio_base)
+    ratio_lessthan <- -log2(ratio_base)
+
+    # subset for loci that pass upper/lower cutoffs
+    if(ratio_cols != FALSE){
+        for(ratio_col in ratio_cols){
+            df <- df[ df[[ratio_col]] > ratio_greaterthan | df[[ratio_col]] < ratio_lessthan , ]
+        }
+    }
+
+    # subset for peaks with significant p value
+    df <- df[ df[["p.value"]] < p_value_lessthan , ]
+
+    # subset for peaks closest to gene TSS
+    df <- subset(df, abs(distancetoFeature) <= TSS_peak_abs_distance_lessthaneq )
+    return(df)
+}
+
+
+# ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ #
+
+# ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ #
+
+# ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ # # ~~~~~~~ #
+manual_debug <- FALSE
+# gene_expression_diffbind_differential_cutoffs <- c(2) # dont use <1 value
+gene_expression_cutoffs <- c(2) # dont use <1 value
+diffbind_differential_cutoffs <- c(1.5) # dont use <1 value
+methylation_cutoffs <- c(1.5)
+gene_expression_directions <- c("UP", "DOWN") # c("TOP", "BOTTOM", "UP", "DOWN")
+gene_expression_number_topbottom_genes <- 5000
+flanking_sizes <- c(500, 1000)
+
+# subset the methylation data for only regions that are in the TSS gene regions
+methylation_data_df <- merge(methylation_data_df, methylation_regions_genes_df, by = chrom_cols)
+
+# for(cutoff in gene_expression_diffbind_differential_cutoffs){ # iterate over the ratio cutoff base values
+for(flanking_size in flanking_sizes){ # iterate over flanking_sizes
+    for(gene_expression_cutoff in gene_expression_cutoffs){ # iterate over the ratio gene_expression_cutoff base values
+        for(diffbind_differential_cutoff in diffbind_differential_cutoffs){ # iterate over the ratio diffbind_differential_cutoff base values
+            
+            for(methylation_cutoff in methylation_cutoffs){ # iterate over methylation cutoffs
+                methylation_greaterthan <- methylation_cutoff
+                methylation_lessthan <- -methylation_cutoff
+                
+                for(gene_expression_direction in gene_expression_directions){ # iterate over UP or DOWN gene expression
+                    
+                    for(sampleID in common_samples){ # iterate over each sample
+                        
+                        # ~~~ PARAMETERS ~~~ #
+                        # output_dir <- file.path(proj_dir, "output_per-patient_TSSflank500bp")
+                        file.path(proj_dir, sprintf("output_per-patient_TSSflank%sbp", flanking_size))
+                        # gene expression cutoff values
+                        gene_expression_base <- gene_expression_cutoff
+                        gene_expression_greaterthan <-  gene_expression_base # positively increased gene expression; 1.58 = log2(2)
+                        gene_expression_lessthan <- -(gene_expression_base)
+                        
+                        # differential ratios for diffbind
+                        ratio_base <- diffbind_differential_cutoff 
+                        ratio_greaterthan <- log2(ratio_base)
+                        ratio_lessthan <- -log2(ratio_base)
+                        
+                        
+                        
+                        
+                        
+                        
+                        # set the parent output dir name
+                        if(gene_expression_direction == "UP" | gene_expression_direction == "DOWN"){
+                            sample_outdir <- file.path(output_dir, sprintf("geneExpr%s-%sx_diffRatio-%sx_methylRatio-%sx",
+                                                                           gene_expression_direction,
+                                                                           gene_expression_greaterthan,
+                                                                           round(x = ratio_base, 
+                                                                                 digits = 2),
+                                                                           round(x = methylation_cutoff, 
+                                                                                 digits = 2)),
+                                                       sampleID)
+                        }
+                        
+                        if(gene_expression_direction == "TOP" | gene_expression_direction == "BOTTOM"){
+                            sample_outdir <- file.path(output_dir, sprintf("geneExpr%s-%s_diffRatio-%sx_methylRatio-%sx",
+                                                                           gene_expression_direction,
+                                                                           gene_expression_number_topbottom_genes,
+                                                                           round(x = ratio_base, 
+                                                                                 digits = 2),
+                                                                           round(x = methylation_cutoff, 
+                                                                                 digits = 2)),
+                                                       sampleID)
+                        }
+                        
+                        # sampleID <- "BVI"
+                        # set the output directory for the sample
+                        # sample_outdir <- output_dir
+                        if(! dir.exists(sample_outdir)) dir.create(path = sample_outdir, recursive = TRUE)
+                        
+                        # ~~~ GENE EXPRESSION ~~~ #
+                        # get the up and down regulated genes for the sample
+                        # sort the gene expression table by the sample ID expression value order
+                        samplegene_expression_ordered <- gene_expression_df[order(gene_expression_df[sampleID], decreasing = TRUE),]
+                        
+                        
+                        sample_genes_expression_top <- rownames(head(samplegene_expression_ordered, n = gene_expression_number_topbottom_genes))
+                        sample_genes_expression_bottom <- rownames(tail(samplegene_expression_ordered, n = gene_expression_number_topbottom_genes))
+                        # gene_name "OR4G4P"
+                        
+                        # write the genes lists to files per sample
+                        # ONLY write the UP or DOWN entry
+                        if(gene_expression_direction == "TOP"){
+                            fileConn<-file(file.path(sample_outdir, "Genes_Top.txt"))
+                            writeLines(sprintf('gene_name "%s"', sample_genes_expression_top), fileConn)
+                            close(fileConn)
+                        }
+                        
+                        if(gene_expression_direction == "BOTTOM"){
+                            fileConn<-file(file.path(sample_outdir, "Genes_Bottom.txt"))
+                            writeLines(sprintf('gene_name "%s"', sample_genes_expression_bottom), fileConn)
+                            close(fileConn)
+                        }
+                        
+                        # get the up and down regulated genes for the sample
+                        sample_genes_expression_up <- rownames(gene_expression_df[gene_expression_df[sampleID] > gene_expression_greaterthan, ])
+                        sample_genes_expression_down <- rownames(gene_expression_df[gene_expression_df[sampleID] < gene_expression_lessthan, ])
+                        # gene_name "OR4G4P"
+                        
+                        # write the genes lists to files per sample
+                        # ONLY write the UP or DOWN entry
+                        if(gene_expression_direction == "UP"){
+                            fileConn<-file(file.path(sample_outdir, "Genes_Up.txt"))
+                            writeLines(sprintf('gene_name "%s"', sample_genes_expression_up), fileConn)
+                            close(fileConn)
+                        }
+                        
+                        if(gene_expression_direction == "DOWN"){
+                            fileConn<-file(file.path(sample_outdir, "Genes_Down.txt"))
+                            writeLines(sprintf('gene_name "%s"', sample_genes_expression_down), fileConn)
+                            close(fileConn)
+                        }
+                        
+                        # ~~~ METHYLATION ~~~ #
+                        # get all methylation loci for the sample that are differentially increased by methylation value only
+                        sample_methylation_up_loci <- methylation_data_df[which(methylation_data_df[[sampleID]] > methylation_greaterthan), chrom_cols]
+                        sample_methylation_down_loci <- methylation_data_df[which(methylation_data_df[[sampleID]] < methylation_lessthan), chrom_cols]
+                        
+                        write_BED_file(sample_methylation_up_loci,
+                                       output_file = file.path(sample_outdir,
+                                                               "Methylation_Up-Hypo.bed"))
+                        write_BED_file(sample_methylation_down_loci,
+                                       output_file = file.path(sample_outdir,
+                                                               "Methylation_Down-Hyper.bed"))
+                        # save the actualy methylation table
+                        # methylation_data_df[which(methylation_data_df[[sampleID]] > methylation_greaterthan), c(chrom_cols, sampleID)]
+                        write.table(x = methylation_data_df[which(methylation_data_df[[sampleID]] > methylation_greaterthan), c(chrom_cols, sampleID)], 
+                                    quote = FALSE, 
+                                    sep = '\t', 
+                                    row.names = FALSE, 
+                                    file = file.path(sample_outdir, "Methylation_Up-Hypo.tsv"))
+                        write.table(x = methylation_data_df[which(methylation_data_df[[sampleID]] < methylation_lessthan), c(chrom_cols, sampleID)], 
+                                    quote = FALSE, 
+                                    sep = '\t', 
+                                    row.names = FALSE, 
+                                    file = file.path(sample_outdir, "Methylation_Down-Hyper.tsv"))
+                        # iterate over each histone mark
+                        for(mark in names(diffbind_data_list)){
+                            print(c(cutoff, mark,sampleID))
+                            # ~~~ DIFFBIND ~~~ #
+                            # find the DiffBind sample IDs in the DiffBind sheet
+                            sample_diffbind_colnames <- grep(pattern = sampleID, x = colnames(diffbind_data_list[[mark]][["data"]]), fixed = TRUE, value = TRUE)
+                            
+                            # only do more DiffBind stuff if 2 samples matched
+                            if(length(sample_diffbind_colnames) == 2){ # only do more DiffBind stuff if 2 samples matched
+                                # find the D and R samples
+                                sample_diffbind_R_col <- grep(pattern = '.R.', x = sample_diffbind_colnames, value = TRUE, fixed = TRUE)
+                                sample_diffbind_D_col <- grep(pattern = '.D.', x = sample_diffbind_colnames, value = TRUE, fixed = TRUE)
+                                
+                                # make a DiffBind df for just the sample columns
+                                sample_diffbind_df <- diffbind_data_list[[mark]][["data"]][c(diffbind_meta_cols, sample_diffbind_R_col, sample_diffbind_D_col)]
+                                # add the differential ratio column
+                                sample_diffbind_df <- within(sample_diffbind_df, expr={ratio = log2(sample_diffbind_df[[sample_diffbind_R_col]] / sample_diffbind_df[[sample_diffbind_D_col]])} )
+                                
+                                # apply the filter criteria for all DiffBind peaks
+                                sample_diffbind_df <- filter_diffbind_df(sample_diffbind_df, TSS_peak_abs_distance_lessthaneq = flanking_size, ratio_cols = "ratio", ratio_base = ratio_base)
+                                
+                                # split the DiffBind df into up and down differentially bound loci
+                                sample_diffbind_up_df <- sample_diffbind_df[which(sample_diffbind_df[["ratio"]] > ratio_greaterthan), ]
+                                # sample_diffbind_up_df <- sample_diffbind_df[sample_diffbind_df["ratio"] > ratio_greaterthan, ]
+                                sample_diffbind_down_df <- sample_diffbind_df[which(sample_diffbind_df[["ratio"]] < ratio_lessthan), ]
+                                
+                                head(sample_diffbind_down_df)
+                                head(sample_diffbind_down_df)
+                                
+                                
+                                # save the full DiffBind tables
+                                write.table(x = sample_diffbind_up_df, quote = FALSE, sep = '\t', row.names = FALSE,
+                                            file = file.path(sample_outdir,
+                                                             # sprintf("%s_Diffbind_Up.bed", mark)
+                                                             sprintf("%s_Up.tsv", mark)
+                                            ))
+                                write.table(x = sample_diffbind_down_df, quote = FALSE, sep = '\t', row.names = FALSE, 
+                                            file = file.path(sample_outdir,
+                                                             # sprintf("%s_Diffbind_Up.bed", mark)
+                                                             sprintf("%s_Down.tsv", mark)
+                                            ))
+                                
+                                # save the loci to BED file
+                                write_BED_file(df = sample_diffbind_up_df[diffbind_chrom_cols],
+                                               output_file = file.path(sample_outdir,
+                                                                       sprintf("%s_Up.bed", mark)
+                                               ))
+                                write_BED_file(df = sample_diffbind_down_df[diffbind_chrom_cols],
+                                               output_file = file.path(sample_outdir,
+                                                                       sprintf("%s_Down.bed", mark)
+                                               ))
+                            } # only do more DiffBind stuff if 2 samples matched
+                            
+                            # do debug stuff here
+                            if(manual_debug == TRUE){
+                                # do things
+                            } # do debug stuff here
+                        } # iterate over each sample
+                    } # iterate over each histone mark
+                } # iterate over UP or DOWN gene expression
+            }  # iterate over methylation cutoffs
+        } # iterate over the ratio diffbind_differential_cutoff base values
+    } # iterate over the ratio gene_expression_cutoff base values
+} # iterate over flanking_sizes
+
+
+```
+
+in bash:
+```{r, engine='bash'}
+project_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/integrated_analysis/output_per-patient_TSSflank500bp"
+cd "$project_dir"
+
+output_dirs="geneExprDOWN-2x_diffRatio-1.5x_methylRatio-1.5x geneExprUP-2x_diffRatio-1.5x_methylRatio-1.5x geneExprDOWN-2x_diffRatio-2x_methylRatio-1.5x geneExprUP-2x_diffRatio-2x_methylRatio-1.5x"
+
+make_genes_bed () {
+    local gencode_file="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/integrated_analysis/source_data/gencode_genes/gencode.v19.annotation.gtf"
+    local input_genes_search_patterns="$(readlink -f $1)" # Genes_Up.txt; gene_name "HSPA6"
+    local output_genes_bed="${input_genes_search_patterns%%.txt}.bed"
+    echo -e "input file:\n${input_genes_search_patterns}\n"
+    echo "output file:\n${output_genes_bed}\n"
+    echo ""
+    set -x
+    # get just the gene entries
+    # convert the GTF to BED witht he BEDOPS converter
+    grep -F -f "$input_genes_search_patterns" "$gencode_file" | grep -E '[[:space:]]gene[[:space:]]' | convert2bed --input=gtf - > "$output_genes_bed"
+    set +x
+}
+
+
+# make all the gencode genes BEDs
+for output_dir in $output_dirs; do
+    (
+    echo "$output_dir"
+    # find all the genes UP/Down/Top/Bottom files, convery to BED
+    find "$output_dir" -name "Genes_Top.txt" | while read item; do
+        echo "$item"
+        make_genes_bed "$item"
+    done
+    find "$output_dir" -name "Genes_Bottom.txt" | while read item; do
+        echo "$item"
+        make_genes_bed "$item"
+    done
+    find "$output_dir" -name "Genes_Up.txt" | while read item; do
+        echo "$item"
+        make_genes_bed "$item"
+    done
+    find "$output_dir" -name "Genes_Down.txt" | while read item; do
+        echo "$item"
+        make_genes_bed "$item"
+    done # find all the genes DOWN files
+    ) # &
+done # make all the gencode genes BEDs
+
+
+sleep 10
+
+run_homer_mergepeaks () {
+    local input_dir="$(readlink -f "$1")"
+    local sampleID="$2"
+    local upset_script="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/integrated_analysis/multi_peaks_UpSet_plot.R"
+    local bed_barplot_script="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/integrated_analysis/bed_dir_barplot.R"
+    local venn_file="${sampleID}_venn.txt"
+    local genes_venn_file="${sampleID}_GenesOnly_venn.txt"
+    local matrix_file="${sampleID}_matrix.txt"
+    local sample_mark_ID="${sampleID}"
+    local homer_merged_prefix="mergepeaks"
+    
+    (
+    echo "$input_dir"
+    echo "$sampleID"
+    cd "$input_dir"
+    find . -type f -name "${homer_merged_prefix}*" -delete
+    module load homer/v4.6
+    pwd
+    echo ""
+    set -x
+    $bed_barplot_script -n "$sampleID" -d "$(readlink -f "$input_dir")" -x "merge"
+    ls *.bed
+    # [ ! -f "$venn_file" ] && 
+    mergePeaks *.bed -prefix "$homer_merged_prefix" -venn "$venn_file" -matrix "$matrix_file"
+    [ -f "$venn_file" ] && $upset_script "$sample_mark_ID" "$venn_file"
+    # Make a subset of overlaps just for the categories that overlap Genes
+    grep 'Genes' "$venn_file" > "$genes_venn_file"
+    [ -f "$genes_venn_file" ] && $upset_script "${sample_mark_ID}_Gene_Overlap" "$genes_venn_file"
+    set +x
+    )
+}
+
+
+# run the HOMER mergePeaks workflow on them all
+for output_dir in $output_dirs; do
+(
+# echo "$output_dir"
+output_params="$(basename "$output_dir")"
+# echo "$output_params"
+
+# find all the sample dirs per mark
+find "${output_dir}" -mindepth 1 -type d | while read sample_dir; do
+(
+# echo "$sample_dir"
+
+sampleID="$(basename "$sample_dir")"
+# echo "$sampleID"
+
+run_homer_mergepeaks "$sample_dir" "$sampleID"
+echo ""
+) # &
+done # loop over outdirs
+)
+done
+
+
+
+
+# merge the PDF outputs
+for output_dir in $output_dirs; do
+# (
+output_params="$(basename "$output_dir")"
+echo "$output_params"
+
+# convert all the per mark PDFs in to a single PDF
+pdf_outdir="${output_dir}_all_pdfs"
+mkdir -p "$pdf_outdir"
+# find all the sample dirs per mark
+find "${output_dir}" -maxdepth 1 -mindepth 1 -type d | while read sample_dir; do
+echo "$sample_dir"
+
+sampleID="$(basename "$sample_dir")"
+echo "$sampleID"
+
+mark_params="${sampleID}_${output_params}"
+
+FILES="$(find "$sample_dir" -type f -name "*.pdf" | sort)"
+output_pdf="${pdf_outdir}/${mark_params}.pdf"
+echo "$output_pdf"
+echo "$FILES"
+set -x
+gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile="${output_pdf}" $FILES
+set +x
+echo ""
+done # merge all pdfs
+
+# ) &
+done # loop over outdirs
+
+# copy results
+# kellys04@phoenix2:~/projects/SmithLab_ChIpSeq_2016-12-31/project_notes/integrated_analysis$ rsync --dry-run -vrhPl output_per-patient_TSSflank500bp results_dir/
+```
