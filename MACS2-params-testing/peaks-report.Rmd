@@ -1,0 +1,68 @@
+---
+title: "MACS2 Peaks Report"
+author: "Stephen Kelly"
+date: "7/26/2017"
+output:
+  html_document:
+    df_print: kable
+    code_folding: hide
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+
+# ~~~~~ LIBRARIES ~~~~~ # 
+library("ggplot2")
+library("DT")
+library("scales")
+library("tools")
+
+# ~~~~~ FUNCTIONS ~~~~~ # 
+find_MACS2_peaks_files <- function(peaks_dir, type = "broadPeak", name_pattern = FALSE){
+    # find all the MACS2 broadPeak or narrowPeak files in a directory
+    peak_files <- dir(peaks_dir, pattern = sprintf(".%s", type), full.names = TRUE, recursive = TRUE)
+    if(name_pattern != FALSE) peak_files <- peak_files[which(basename(peak_files) %in% as.character(name_pattern))]
+    return(peak_files)
+}
+
+get_numlines <- function(input_file) {
+    # count the number of lines in a file
+    return(length(readLines(input_file)))
+}
+
+mycat <- function(text){
+    # function for formatting text in the report
+    cat(gsub(pattern = "\n", replacement = "  \n", x = text))
+}
+
+```
+
+```{r data, cache=TRUE}
+peak_type = "broadPeak"
+peaks_files <- find_MACS2_peaks_files(peaks_dir = getwd(), type = peak_type)
+
+
+params_df <- as.data.frame(do.call(rbind, sapply(X = peaks_files, FUN = function(x){
+    name <- gsub(pattern = sprintf('.%s', file_ext(x)), replacement = '', x = basename(x))
+    return(strsplit(x = name, split = '_'))
+}, USE.NAMES = FALSE)))[c(1,2)]
+
+num_peaks <- sapply(X = peaks_files, FUN = get_numlines, USE.NAMES = FALSE)
+
+df <- cbind(peaks_files, num_peaks, params_df)
+
+colnames(df) <- c("file", "peaks", "sampleID", "params")
+
+peaks_plot <- ggplot(data = df, aes(x = sampleID, y = peaks, fill = params)) + geom_bar(stat = "identity", position = "dodge") + coord_flip() + scale_y_continuous(labels = comma) + ggtitle("MACS2 Peaks per Parameter Set")
+
+macs_params_df <- read.delim(file = "macs2_params.tsv", header = FALSE, sep = '\t')
+colnames(macs_params_df) <- c("params_name", "params")
+```
+
+```{r}
+macs_params_df
+```
+
+```{r, fig.height=18, fig.width=10}
+print(peaks_plot)
+```
