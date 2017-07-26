@@ -1,0 +1,8 @@
+default-200	--broad --nomodel --extsize=200 -g hs
+default-100	--broad --nomodel --extsize=100 -g hs
+default-300	--broad --nomodel --extsize=300 -g hs
+default-400	--broad --nomodel --extsize=400 -g hs
+default-200-nolambda	--broad --nomodel --extsize=200 -g hs --nolambda
+default-100-nolambda	--broad --nomodel --extsize=100 -g hs --nolambda
+default-300-nolambda	--broad --nomodel --extsize=300 -g hs --nolambda
+default-400-nolambda	--broad --nomodel --extsize=400 -g hs --nolambda
