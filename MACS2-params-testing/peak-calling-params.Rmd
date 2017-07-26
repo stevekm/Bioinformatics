@@ -1,0 +1,72 @@
+---
+title: "MACS2 Peak Calling Param Testing"
+author: "Stephen Kelly"
+date: "7/26/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Need to test different params to use with MACS2 for peak calling
+
+https://github.com/taoliu/MACS
+
+
+# Install
+
+Need to install my own version of MACS2. Use Python virtual environment
+
+```{r, engine='bash'}
+proj_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-07-19/project_notes/test-macs2-params"
+cd "$proj_dir"
+
+module unload python
+module load python/2.7.3
+unset PYTHONPATH
+
+virtualenv venv --no-site-packages 
+source venv/bin/activate
+# deactivate
+pip install --no-cache-dir numpy scipy 
+pip install --no-cache-dir MACS2
+
+macs2 --version
+# macs2 2.1.1.20160309
+```
+
+# Setup
+
+Need to get some samples to test it on
+
+Find the .bam files for the samples from the samplesheet
+
+```{r engine='bash'}
+proj_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-07-19/project_notes/test-macs2-params"
+cd "$proj_dir"
+
+samplesheet="sample-sheet.tsv"
+align_results_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-07-19/pipeline/align/results"
+
+bam_sheet="sample-bams.tsv"
+
+cut -f1-2 "$samplesheet" | while read line; do
+    sampleID="$(echo "$line" | cut -f1)"
+    controlID="$(echo "$line" | cut -f2)"
+    echo "$sampleID"
+    echo "$controlID"
+    if [ ! -z "$sampleID" ] && [ "$controlID" != "NA" ] && [ ! -z "$controlID" ]; then
+        bam_file="$(find "$align_results_dir" -type f -path "*/${sampleID}/*" -name "alignments.bam")"
+        control_bam_file="$(find "$align_results_dir" -type f -path "*/${controlID}/*" -name "alignments.bam")"
+        printf "%s\t%s\t%s\n" "$sampleID" "$bam_file" "$control_bam_file" >> "$bam_sheet"
+    fi
+done
+
+```
+
+Manually select which samples to run different peak calling on 
+
+# Run
+
+Use the `run.sh` script
