@@ -6,3 +6,5 @@ default-200-nolambda	--broad --nomodel --extsize=200 -g hs --nolambda
 default-100-nolambda	--broad --nomodel --extsize=100 -g hs --nolambda
 default-300-nolambda	--broad --nomodel --extsize=300 -g hs --nolambda
 default-400-nolambda	--broad --nomodel --extsize=400 -g hs --nolambda
+auto-shifting-model-nolambda	--broad -g hs --nolambda
+auto-shifting-model	--broad -g hs
