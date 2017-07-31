@@ -62,16 +62,22 @@ run_macs () {
     local sample_params_name="${sampleID}_${name}"
     # printf "%s %s %s %s %s %s\n" "$sampleID" "$sample_bam" "$control_bam" "$params" "$name" "$params"
     # macs2 callpeak -t inpdirs/align/results/align.by_sample.bowtie2/BVI-D-H3K27AC/alignments.bam -c inpdirs/align/results/align.by_sample.bowtie2/BVI-R-INPUT/alignments.bam --outdir=results/peaks.by_sample.macs_broad/align.by_sample.bowtie2/BVI-D-H3K27AC --name=macs --broad --nomodel --extsize=200 -g hs
-    (
-    qsub -wd $PWD -o :${log_dir}/ -e :${log_dir}/ -j y -N "$sample_params_name" <<E0F
-    source venv/bin/activate
-    set -x
-    macs2 --version
-    macs2 callpeak -t "$sample_bam" -c "$control_bam" --outdir="$sample_outdir" --name="$sample_params_name" $params
-E0F
 
+    # check if there are already output files
+    output_files="$(find "$sample_outdir" -name "*$sample_params_name*" )"
+
+    # Only run if none were found
+    if [ -z "${output_files}" ]; then
+        (
+        qsub -wd $PWD -o :${log_dir}/ -e :${log_dir}/ -j y -N "$sample_params_name" <<E0F
+        source venv/bin/activate
+        set -x
+        macs2 --version
+        macs2 callpeak -t "$sample_bam" -c "$control_bam" --outdir="$sample_outdir" --name="$sample_params_name" $params
+E0F
     sleep 2 # to avoid file locks, etc.
     )
+    fi
 }
 
 # ~~~~~ RUN ~~~~~ #
