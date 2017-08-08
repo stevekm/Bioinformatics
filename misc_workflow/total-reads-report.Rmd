@@ -1,0 +1,511 @@
+---
+title: "Total Reads Report"
+author: "Stephen Kelly"
+date: "6/28/2017"
+output:
+  html_document:
+    fig_caption: yes
+    keep_md: yes
+    number_sections: yes
+    toc: yes
+    toc_depth: 2
+    df_print: paged
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+# http://rmarkdown.rstudio.com/html_document_format.html
+# {.tabset .tabset-fade .tabset-pills}
+knitr::opts_chunk$set(echo = TRUE)
+# install.packages(c("ggplot2", "reshape2", "data.table", "knitr", "DT"))
+library("knitr")
+library("ggplot2")
+library("reshape2")
+library("data.table")
+library("DT")
+# ~~~~~ CUSTOM FUNCTIONS ~~~~~ #
+mycat <- function(text){
+    # function for formatting text in the report
+    cat(gsub(pattern = "\n", replacement = "  \n", x = text))
+}
+```
+
+```{r load_summary_tables}
+results_dirs <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/results_dirs"
+
+# there are symlink loops that are going to mess up R file search; 
+# need to use this:
+# 
+# /ifs/data/molecpathlab/NGS580_WES-development/validation_plots$ find -L results_dirs/ -name "summary-combined.wes.csv" 2>/dev/null
+# summary_combined_files <- dir(results_dirs, recursive = TRUE, pattern = "summary-combined.wes.csv", full.names = TRUE)
+# summary_combined_files <- system("find -L /ifs/data/molecpathlab/NGS580_WES-development/validation_plots/results_dirs -name 'summary-combined.wes.csv' 2>/dev/null", intern = TRUE)
+# find -L /ifs/data/molecpathlab/NGS580_WES-development/validation_plots/results_dirs -name 'summary-combined.wes.csv' -exec readlink -f {} \; 2>/dev/null | sort -u | xargs | sed 's| |",\n"|g'
+
+# files to load data from
+summary_combined_files <- c("/ifs/data/molecpathlab/NGS580_WES/170512_NB501073_0009_AHF5H2BGX2/results_2017-05-14_14-43-33/summary-combined.wes.csv",
+"/ifs/data/molecpathlab/NGS580_WES/170519_NB501073_0010_AHCLLMBGX2/results_2017-05-24_14-15-19/summary-combined.wes.csv",
+"/ifs/data/molecpathlab/NGS580_WES/170526_NB501073_0011_AHCJTYBGX2/results_2017-05-31_11-18-08/summary-combined.wes.csv",
+"/ifs/data/molecpathlab/NGS580_WES/170602_NB501073_0012_AHCKYCBGX2/results_2017-06-05_09-51-00/summary-combined.wes.csv",
+"/ifs/data/molecpathlab/NGS580_WES/170609_NB501073_0013_AHF7K3BGX2/results_2017-06-12_18-23-30/summary-combined.wes.csv",
+"/ifs/data/molecpathlab/NGS580_WES/170616_NB501073_0014_AH2VVMBGX3/results_2017-06-19_10-05-42/summary-combined.wes.csv",
+"/ifs/data/molecpathlab/NGS580_WES/170623_NB501073_0015_AHY5Y3BGX2/results_2017-06-26_20-11-26/summary-combined.wes.csv",
+"/ifs/data/molecpathlab/NGS580_WES/NS17-01-35154137/results_2017-05-23_17-20-30/summary-combined.wes.csv",
+"/ifs/data/molecpathlab/NGS580_WES/NS17-02/results_2017-05-23_17-38-30/summary-combined.wes.csv",
+"/ifs/data/molecpathlab/NGS580_WES/NS17-03/results_2017-05-23_16-58-16/summary-combined.wes.csv",
+"/ifs/data/molecpathlab/NGS580_WES/NS17-05/results_2017-05-24_13-24-30/summary-combined.wes.csv"
+)
+
+# load all of them into a single dataframe
+summary_combined_table <- data.frame()
+
+for(i in summary_combined_files){
+    run_ID <- basename(dirname(dirname(i)))
+    df <- read.delim(file = i, sep = ',')
+    df[["run"]] <- run_ID
+    
+    if(nrow(summary_combined_table) < 1){
+        summary_combined_table <- df
+    } else {
+        summary_combined_table <- rbind(summary_combined_table, df)
+    }
+    
+} 
+
+# fix colname
+setnames(x = summary_combined_table, old = c("X.SAMPLE", "MEAN.COVERAGE", "MEDIAN.COVERAGE", "X._bases_above_10", "X._bases_above_50", "X._bases_above_100", "X._bases_above_500"), new = c("sample", "mean coverage", "median coverage", "pcnt bases above 10", "pcnt bases above 50", "pcnt bases above 100", "pcnt bases above 500"))
+
+
+write.table(x = summary_combined_table[, c("run", "sample")], file = "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/SampleSummary.tsv", quote = FALSE, sep = '\t', row.names = FALSE)
+
+```
+
+
+# Read Mapping
+
+Number of DNA reads per run
+
+```{r read_mapping}
+# make a smaller table just for read mapping stats
+mapping_table <- summary_combined_table[, c("sample", "run")]
+
+mapping_table["mapped"] <- summary_combined_table[["MAPPED.READS"]]
+mapping_table["deduplicated"] <- summary_combined_table[["DEDUPLICATED.READS"]]
+
+mapping_table <- reshape2::melt(mapping_table, id.vars=c("sample", "run"), variable.name="type", value.name="reads")
+
+# convert to millions
+mapping_table[["reads"]] <- as.numeric(mapping_table[["reads"]]) / 1e6
+
+mapping_table[["type"]] <- factor(x = mapping_table[["type"]], levels = sort(unique(as.character(mapping_table[["type"]]), decreasing = TRUE)))
+
+
+mapping_per_sample_plot <- ggplot(data = mapping_table, aes(x = sample, y = reads, fill = type)) + geom_bar(stat="identity", position = "dodge") + ggtitle("Sample Read Mapping") + coord_flip() + ylab("reads (millions)")
+
+
+mapping_per_run_plot <- ggplot(data = mapping_table, aes(x = run, y = reads, fill = type)) + geom_boxplot() + coord_flip() + ggtitle("Mapped Reads per Run Across Samples") + ylab("reads (millions)")
+
+```
+
+```{r, fig.height=24, fig.width=12}
+# mapping_per_sample_plot
+```
+
+```{r, fig.height=12, fig.width=12}
+mapping_per_run_plot
+```
+
+# Target Coverage
+
+Coverage of target regions
+
+```{r mean_median_read_coverage}
+# make a smaller table of just read coverages
+coverage_table <- summary_combined_table[, c("sample", "run", "mean coverage", "median coverage")]
+setnames(x = coverage_table, old = c("mean coverage", "median coverage"), new = c("mean", "median"))
+coverage_table <- reshape2::melt(coverage_table, id.vars=c("sample", "run"), variable.name="type", value.name="coverage")
+
+coverage_plot <- ggplot(data = coverage_table, aes(x = run, y = coverage, fill = type)) + geom_boxplot() + coord_flip() + ggtitle("Coverage of Target Regions per Run Across Samples") 
+```
+
+
+```{r coverage_cutoffs}
+# make a smaller table with the percent of samples at given cutoffs
+coverage_cutoff_table <- summary_combined_table[, c("sample", "run", "pcnt bases above 10", "pcnt bases above 50", "pcnt bases above 100", "pcnt bases above 500")]
+setnames(x = coverage_cutoff_table, old = c("pcnt bases above 10", "pcnt bases above 50", "pcnt bases above 100", "pcnt bases above 500"), new = c("10", "50", "100", "500"))
+coverage_cutoff_table <- reshape2::melt(coverage_cutoff_table, id.vars=c("sample", "run"), variable.name="cutoff", value.name="pcnt")
+
+coverage_cutoff_plot <- ggplot(data = coverage_cutoff_table[which(coverage_cutoff_table[["cutoff"]] %in% c("100", "500")), ], aes(x = run, y = pcnt, fill = cutoff)) + geom_boxplot() + coord_flip() + ggtitle("Percent of Bases Above Coverage Cutoff per Run Across Samples")
+
+```
+
+```{r low_coverage_regions}
+# find the number of regions with <50 and 0 coverage per sample
+
+NGS580_targets_file <- "/ifs/data/molecpathlab/NGS580_WES/NGS580_targets.bed"
+NGS580_targets <- read.delim(NGS580_targets_file, header = FALSE)
+num_target_regions <- nrow(NGS580_targets)
+
+# find the files with the annotations if the low regions; do this in the terminal and get the file list here
+# /ifs/data/molecpathlab/NGS580_WES-development/validation_plots
+# $ find -L results_dirs/ -path "*/sns-wes-downstream-analysis/sns-wes-coverage-analysis/*" -name "regions_coverage_below_50_annotation.tsv" -exec readlink -f {} \; 2>/dev/null | sort -u | xargs | sed 's| |",\n"|g'
+# $ find -L results_dirs/ -path "*/sns-wes-downstream-analysis/sns-wes-coverage-analysis/*" -name "regions_with_coverage_0_annotation.tsv" -exec readlink -f {} \; 2>/dev/null | sort -u | xargs | sed 's| |",\n"|g'
+
+regions_coverage_below_50_files <- c("/ifs/data/molecpathlab/NGS580_WES/170512_NB501073_0009_AHF5H2BGX2/results_2017-05-14_14-43-33/sns-wes-coverage-analysis/170512_NB501073_0009_AHF5H2BGX2_results_2017-05-14_14-43-33_regions_coverage_below_50_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/170519_NB501073_0010_AHCLLMBGX2/results_2017-05-24_14-15-19/sns-wes-coverage-analysis/170519_NB501073_0010_AHCLLMBGX2_results_2017-05-24_14-15-19_regions_coverage_below_50_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/170526_NB501073_0011_AHCJTYBGX2/results_2017-05-31_11-18-08/sns-wes-coverage-analysis/170526_NB501073_0011_AHCJTYBGX2_results_2017-05-31_11-18-08_regions_coverage_below_50_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/170602_NB501073_0012_AHCKYCBGX2/results_2017-06-05_09-51-00/sns-wes-coverage-analysis/170602_NB501073_0012_AHCKYCBGX2_results_2017-06-05_09-51-00_regions_coverage_below_50_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/170609_NB501073_0013_AHF7K3BGX2/results_2017-06-12_18-23-30/sns-wes-coverage-analysis/170609_NB501073_0013_AHF7K3BGX2_results_2017-06-12_18-23-30_regions_coverage_below_50_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/170616_NB501073_0014_AH2VVMBGX3/results_2017-06-19_10-05-42/sns-wes-coverage-analysis/170616_NB501073_0014_AH2VVMBGX3_results_2017-06-19_10-05-42_regions_coverage_below_50_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/170623_NB501073_0015_AHY5Y3BGX2/results_2017-06-26_20-11-26/sns-wes-coverage-analysis/170623_NB501073_0015_AHY5Y3BGX2_results_2017-06-26_20-11-26_regions_coverage_below_50_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/NS17-01-35154137/results_2017-05-23_17-20-30/sns-wes-coverage-analysis/NS17-01-35154137_results_2017-05-23_17-20-30_regions_coverage_below_50_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/NS17-02/results_2017-05-23_17-38-30/sns-wes-coverage-analysis/NS17-02_results_2017-05-23_17-38-30_regions_coverage_below_50_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/NS17-03/results_2017-05-23_16-58-16/sns-wes-coverage-analysis/NS17-03_results_2017-05-23_16-58-16_regions_coverage_below_50_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/NS17-05/results_2017-05-24_13-24-30/sns-wes-coverage-analysis/NS17-05_results_2017-05-24_13-24-30_regions_coverage_below_50_annotation.tsv")
+
+
+regions_coverage_0_files <- c("/ifs/data/molecpathlab/NGS580_WES/170512_NB501073_0009_AHF5H2BGX2/results_2017-05-14_14-43-33/sns-wes-coverage-analysis/170512_NB501073_0009_AHF5H2BGX2_results_2017-05-14_14-43-33_regions_with_coverage_0_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/170519_NB501073_0010_AHCLLMBGX2/results_2017-05-24_14-15-19/sns-wes-coverage-analysis/170519_NB501073_0010_AHCLLMBGX2_results_2017-05-24_14-15-19_regions_with_coverage_0_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/170526_NB501073_0011_AHCJTYBGX2/results_2017-05-31_11-18-08/sns-wes-coverage-analysis/170526_NB501073_0011_AHCJTYBGX2_results_2017-05-31_11-18-08_regions_with_coverage_0_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/170602_NB501073_0012_AHCKYCBGX2/results_2017-06-05_09-51-00/sns-wes-coverage-analysis/170602_NB501073_0012_AHCKYCBGX2_results_2017-06-05_09-51-00_regions_with_coverage_0_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/170609_NB501073_0013_AHF7K3BGX2/results_2017-06-12_18-23-30/sns-wes-coverage-analysis/170609_NB501073_0013_AHF7K3BGX2_results_2017-06-12_18-23-30_regions_with_coverage_0_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/170616_NB501073_0014_AH2VVMBGX3/results_2017-06-19_10-05-42/sns-wes-coverage-analysis/170616_NB501073_0014_AH2VVMBGX3_results_2017-06-19_10-05-42_regions_with_coverage_0_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/170623_NB501073_0015_AHY5Y3BGX2/results_2017-06-26_20-11-26/sns-wes-coverage-analysis/170623_NB501073_0015_AHY5Y3BGX2_results_2017-06-26_20-11-26_regions_with_coverage_0_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/NS17-01-35154137/results_2017-05-23_17-20-30/sns-wes-coverage-analysis/NS17-01-35154137_results_2017-05-23_17-20-30_regions_with_coverage_0_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/NS17-02/results_2017-05-23_17-38-30/sns-wes-coverage-analysis/NS17-02_results_2017-05-23_17-38-30_regions_with_coverage_0_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/NS17-03/results_2017-05-23_16-58-16/sns-wes-coverage-analysis/NS17-03_results_2017-05-23_16-58-16_regions_with_coverage_0_annotation.tsv",
+"/ifs/data/molecpathlab/NGS580_WES/NS17-05/results_2017-05-24_13-24-30/sns-wes-coverage-analysis/NS17-05_results_2017-05-24_13-24-30_regions_with_coverage_0_annotation.tsv")
+
+run_names <- unique(c(basename(dirname(dirname(dirname(regions_coverage_below_50_files)))), basename(dirname(dirname(dirname(regions_coverage_0_files))))))
+
+regions_coverage_below_50_files <- setNames(object = regions_coverage_below_50_files, nm = c(basename(dirname(dirname(dirname(regions_coverage_below_50_files))))))
+regions_coverage_0_files <- setNames(object = regions_coverage_0_files, nm = basename(dirname(dirname(dirname(regions_coverage_0_files)))))
+
+# load all of them into a single dataframe
+summary_lowcoverage_table <- data.frame()
+
+for(i in seq_along(regions_coverage_below_50_files)){
+    run_ID <- names(regions_coverage_below_50_files[i])
+    run_file <- regions_coverage_below_50_files[i]
+    
+    df <- read.delim(file = run_file)
+    df[["run"]] <- run_ID
+    df[["cutoff"]] <- "50"
+    
+    if(nrow(summary_lowcoverage_table) < 1){
+        summary_lowcoverage_table <- df
+    } else {
+        summary_lowcoverage_table <- rbind(summary_lowcoverage_table, df)
+    }
+    
+} 
+
+for(i in seq_along(regions_coverage_0_files)){
+    run_ID <- names(regions_coverage_0_files[i])
+    run_file <- regions_coverage_0_files[i]
+    
+    df <- read.delim(file = run_file)
+    df[["run"]] <- run_ID
+    df[["cutoff"]] <- "0"
+    
+    if(nrow(summary_lowcoverage_table) < 1){
+        summary_lowcoverage_table <- df
+    } else {
+        summary_lowcoverage_table <- rbind(summary_lowcoverage_table, df)
+    }
+    
+} 
+
+# figure out the percentage of regions with <50, 0 coverage
+lowcoverage_aggre <- aggregate(feature ~ run + cutoff, data = summary_lowcoverage_table, FUN = length)
+lowcoverage_plot <- ggplot(data = lowcoverage_aggre, aes(x = run, y = (feature / num_target_regions) * 100, fill = cutoff)) + geom_bar(stat = "identity", position = "dodge") + coord_flip() + ggtitle("Percent of Target Features at or below Coverage Cutoff per Run Across Samples") + ylab("Percent of features")
+```
+
+
+```{r, fig.height=12, fig.width=12}
+coverage_plot
+coverage_cutoff_plot
+lowcoverage_plot
+```
+
+# Load worksheets
+
+Load the cleaned up worksheet table with the IDs from the runs
+
+```{r}
+library("ggplot2")
+library("reshape2")
+library("data.table")
+
+# validation_samples_table_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/Validation_Samples_Table.txt"
+validation_samples_table_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/samples_index.txt"
+validation_samples_table <- read.delim(file = validation_samples_table_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE)
+```
+
+
+```{r map_sample_files}
+# findthe path to the files per sample, add to the df
+validation_samples_table[["summary_combined_file"]] <- NA
+validation_samples_table[["regions_coverage_0_file"]] <- NA
+validation_samples_table[["regions_coverage_below_50_file"]] <- NA
+
+# average_coverage_per_sample_table <- read.delim(file.path(sns_wes_coverage_analysis_dir, "average_coverage_per_sample.tsv"))
+# average_coverage_per_region_table <- read.delim(file.path(sns_wes_coverage_analysis_dir, "average_coverage_per_region.tsv"), header = FALSE)
+
+for(i in seq(nrow(validation_samples_table))){
+    # get items
+    sample_id <- as.character(validation_samples_table[i, "sample"])
+    results_path <- as.character(validation_samples_table[i, "NGS580_results_path"])
+    coverage_dir <- file.path(results_path, "sns-wes-coverage-analysis")
+    summary_combined_file <- dir(path = results_path, pattern = "summary-combined.wes.csv", full.names = TRUE)
+    regions_coverage_0_file <- dir(path = coverage_dir, pattern = "_regions_with_coverage_0_annotation.tsv", full.names = TRUE)
+    regions_coverage_below_50_file <- dir(path = coverage_dir, pattern = "_regions_coverage_below_50_annotation.tsv", full.names = TRUE)
+    average_coverage_per_sample_file <- dir(path = coverage_dir, pattern = "_average_coverage_per_sample.tsv", full.names = TRUE)
+    average_coverage_per_region <- dir(path = coverage_dir, pattern = "_average_coverage_per_region.tsv", full.names = TRUE)
+    # sns-wes-coverage-analysis/NS17-05_results_2017-05-24_13-24-30_regions_with_coverage_0_annotation.tsv
+    
+    # add to df
+    validation_samples_table[i, "summary_combined_file"] <- summary_combined_file
+    validation_samples_table[i, "regions_coverage_0_file"] <- regions_coverage_0_file
+    validation_samples_table[i, "regions_coverage_below_50_file"] <- regions_coverage_below_50_file
+    validation_samples_table[i, "average_coverage_per_sample_file"] <- average_coverage_per_sample_file
+    validation_samples_table[i, "average_coverage_per_region"] <- average_coverage_per_region
+}
+
+```
+
+# Total reads by sample type
+
+```{r combine_tables}
+# get the files to pull data from
+summary_combined_files <- unique(as.character(validation_samples_table[["summary_combined_file"]]))
+
+# empty df to hold reformatted data
+summary_df <- data.frame()
+
+# get the data from each file, save it to df
+for(i in seq_along(summary_combined_files)){
+    
+    sample_summary_combined_file <- summary_combined_files[i]
+    run_ID <- basename(dirname(dirname(sample_summary_combined_file)))
+    
+    df <- read.delim(file = sample_summary_combined_file, sep = ',')
+    
+    df[["run"]] <- run_ID
+    
+    # fix the colnames
+    setnames(x = df, old = c("X.SAMPLE", "MEAN.COVERAGE", "MEDIAN.COVERAGE", "X._bases_above_10", "X._bases_above_50", "X._bases_above_100", "X._bases_above_500"), new = c("sample", "mean coverage", "median coverage", "pcnt bases above 10", "pcnt bases above 50", "pcnt bases above 100", "pcnt bases above 500"))
+
+    
+    # add it to the full df
+    if(nrow(summary_df) < 1){
+        summary_df <- df
+    } else {
+        summary_df <- rbind(summary_df, df)
+    }
+    
+} 
+
+
+# nrow(summary_df) # 264
+
+# merge the new data with the old data
+summary_df <- merge(x = summary_df, 
+                    y = validation_samples_table, 
+                    by.x = c("sample", "run"), 
+                    by.y = c("sample", "NGS580_RunID"))
+
+
+# fix the empty tissue type entries
+summary_df[which(summary_df[["tissue_type_IPMKB"]] == ""), "tissue_type_IPMKB"] <- "Unknown"
+summary_df[which(summary_df[["sample_type"]] == ""), "sample_type"] <- "Unknown"
+summary_df[which(summary_df[["is_cancer_normal"]] == ""), "is_cancer_normal"] <- "Unknown"
+summary_df[which(summary_df[["pair_tumor_normal"]] == ""), "pair_tumor_normal"] <- NA
+summary_df[which(summary_df[["pair_matched_sample"]] == ""), "pair_matched_sample"] <- NA
+
+write.table(x = summary_df, file = '/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/Validation_Sample_Summary_Table.tsv', quote = TRUE, sep = '\t', row.names = FALSE, col.names = TRUE)
+```
+
+
+Number of DNA reads per sample type
+
+
+```{r read_mapping_per_type}
+# make a smaller table just for read mapping stats
+
+# make a copy of the df and start filtering out stuff we dont want in the plot
+mapping_df <- data.frame()
+
+# only include certain runs in the plot
+# "NS17-03"  # Blood
+# "NS17-13" # FFPE
+# "NS17-09" # Fresh Frozen (only use NYU tumors)
+
+mapping_df <- summary_df[ which(summary_df[["worksheet_NGS580_RunID"]] %in% c("NS17-13", "NS17-03")), ]
+mapping_df <- rbind(mapping_df, subset(summary_df, subset = (sample_type == "Fresh_Frozen" & pair_tumor_normal == "Tumor") & grepl(pattern = '^NYU', x = sample) ))
+mapping_df[which(mapping_df[["run"]] == "NS17-03" & mapping_df[["sample_type"]] == "Other"), "sample_type"] <- "Blood"
+
+# reformat the data for plotting
+cols_to_keep <- c("sample", "run", "sample_type", "worksheet_samples_in_the_run", "worksheet_NGS580_RunID", "is_paired_sample", "worksheet_Tissue_type")
+# mapping_table <- mapping_df[, cols_to_keep]
+
+mapping_df["total_reads"] <- mapping_df[["INPUT.READS"]]
+# mapping_table["mapped"] <- mapping_df[["MAPPED.READS"]]
+# mapping_table["deduplicated"] <- mapping_df[["DEDUPLICATED.READS"]]
+
+# mapping_table <- reshape2::melt(mapping_table, id.vars = cols_to_keep, variable.name = "type", value.name = "reads")
+
+# convert to millions of reads
+mapping_df[["total_reads"]] <- as.numeric(mapping_df[["total_reads"]]) / 1e6
+
+# re order the factor levels for the plot
+# mapping_table[["type"]] <- factor(x = mapping_table[["type"]], levels = sort(unique(as.character(mapping_table[["type"]]), decreasing = TRUE)))
+# mapping_per_sample_plot <- ggplot(data = mapping_table, aes(x = sample, y = reads, fill = sample_type)) + geom_bar(stat="identity", position = "dodge") + ggtitle("Sample Read Mapping") + coord_flip() + ylab("reads (millions)")
+
+y_upper <- max(mapping_df[["total_reads"]]) * 1.05
+mapping_per_type_plot <- ggplot(data = mapping_df, aes(x = sample_type, y = total_reads)) + geom_boxplot() + ggtitle("Reads per Sample Type") + ylab("reads (millions)") + scale_y_continuous(expand = c(0, 0), limits = c(0,y_upper))# + coord_flip()
+
+```
+
+## Reads plot
+
+```{r, fig.height=8, fig.width=8}
+mapping_per_type_plot
+```
+
+## Reads plot table {.tabset .tabset-pills}
+
+### Hide
+
+### Show
+
+```{r}
+datatable(mapping_df, 
+          class = 'cell-border stripe', 
+          rownames = FALSE, 
+          caption = 'Runs and samples included in the plot',
+          options = list(
+              pageLength = 20
+          )
+)
+
+```
+
+-----
+
+# Paired Sample Reads
+
+Fresh Frozen samples from Paired Tumor/Normal runs:
+
+170602_NB501073_0012_AHCKYCBGX2
+
+
+```{r}
+# paired_summary_df <- summary_df[which(summary_df[["run"]] %in% c("170602_NB501073_0012_AHCKYCBGX2", "170623_NB501073_0015_AHY5Y3BGX2")), ]
+# paired_summary_df <- summary_df[which(summary_df[["sample_type"]] == "Fresh_Frozen"), ]
+paired_summary_df <- summary_df[summary_df[["is_paired_sample"]] == "yes", ]
+paired_summary_df <- subset(paired_summary_df,  grepl(pattern = '^NYU', x = sample) )
+
+# reformat the data for plotting
+# cols_to_keep <- c("sample", "run", "sample_type", "tissue_type_IPMKB","is_paired_sample", "pair_tumor_normal", "pair_matched_sample", "worksheet_samples_in_the_run", "worksheet_NGS580_RunID", "is_paired_sample", "worksheet_Tissue_type")
+# paired_mapping_table <- paired_summary_df[, cols_to_keep]
+# paired_mapping_table <- reshape2::melt(paired_mapping_table, id.vars = cols_to_keep, variable.name = "type", value.name = "reads")
+
+paired_summary_df["total_reads"] <- paired_summary_df[["INPUT.READS"]]
+# convert to millions of reads
+paired_summary_df[["total_reads"]] <- as.numeric(paired_summary_df[["total_reads"]]) / 1e6
+
+y_upper <- max(paired_summary_df[["total_reads"]]) + max(paired_summary_df[["total_reads"]])*0.05
+
+pairs_mapping_per_run_plot <- ggplot(data = paired_summary_df, aes(x = pair_tumor_normal, y = total_reads)) + geom_boxplot() + ggtitle("Reads per Sample Type - NYGC Samples") + ylab("reads (millions)") + scale_y_continuous(expand = c(0, 0), limits = c(0,y_upper))# + facet_grid(~pair_tumor_normal) # + coord_flip()
+
+```
+
+```{r, fig.height=8, fig.width=8}
+pairs_mapping_per_run_plot
+```
+
+## Paired Reads plot table {.tabset .tabset-pills}
+
+### Hide
+
+### Show
+
+```{r}
+datatable(paired_summary_df, 
+          class = 'cell-border stripe', 
+          rownames = FALSE, 
+          caption = 'Runs and samples included in the plot',
+          options = list(
+              pageLength = 20
+          )
+)
+
+```
+
+
+# Reads per Number of Samples in the Run
+
+Check the number of reads in runs that had 16 vs 24 samples
+
+
+# All Reads by Sample by Run
+
+```{r}
+
+summary_df[["total_reads"]] <- as.numeric(summary_df[["INPUT.READS"]]) / 1e6
+# summary_df$worksheet_NGS580_RunID
+all_read_plot <- ggplot(data = summary_df, aes(x = sample, y = total_reads, fill = worksheet_NGS580_RunID)) + geom_bar(stat = "identity", position = "dodge") + coord_flip() + ggtitle("Reads per Sample") + ylab("reads (millions)") # group=interaction(sample_type, tissue_type_IPMKB)
+
+pdf(file = "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/all_read.pdf", height = 50, width = 10)
+print(all_read_plot)
+dev.off()
+
+```
+
+
+```{r, fig.height=50, fig.width=10}
+all_read_plot
+```
+
+# Low Coverage Regions for all runs
+
+Check to make sure that the low coverage regions are the same across all runs
+
+```{r}
+
+
+```
+
+
+# System Information {.tabset .tabset-pills}
+
+## Hide
+
+## Show
+
+
+```{r}
+# {.tabset .tabset-pills}
+
+## Hide
+
+## Show
+# system info
+mycat(sprintf("System:\n%s\n%s", system("hostname", intern = TRUE), system("uname -srv", intern = TRUE)))
+mycat(sprintf("System user:\n%s", system("whoami", intern = TRUE)))
+# dir
+mycat(sprintf("System location:\n%s", system('pwd',intern=T)))
+
+# repo info
+mycat(sprintf("Git Remote:\n%s\n", system('git remote -v',intern=T)))
+mycat(sprintf("Git branch and commit\n%s", system('printf "%s: %s" "$(git rev-parse --abbrev-ref HEAD)" "$(git rev-parse HEAD)"',intern=T)))
+
+# date time
+mycat(sprintf("Time and Date of report creation:\n%s", system("date", intern = TRUE)))
+
+# R system info, packages, etc
+sessionInfo()
+
+# save current session
+save.image(file="final_report_data.Rdata",compress = TRUE)
+```
