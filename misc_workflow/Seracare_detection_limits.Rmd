@@ -1,0 +1,213 @@
+---
+title: "SeraSeq Dilution Variant Detection Limits"
+author: "Stephen Kelly"
+date: "8/7/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Overview
+
+Some positive control SeraCare samples were run on the NextSeq to determine the lower limit of detection for variants
+
+Docs about the samples:
+https://www.seracare.com/globalassets/resources/product-sheets/mkt-00335-rev-1-prod-sheet-seraseq-tri-level-tumor-mutation-dna-mix-v2-lc.pdf
+
+
+NextSeq NGS580 analysis results dir:
+```
+/ifs/data/molecpathlab/NGS580_WES/170721_NB501073_0018_AH5C7GBGX3/results_2017-07-28_21-02-00
+```
+
+Need to check the variant calling results to find the quality and frequency of the variants
+
+Also the samples were run at different
+- amount of total sample DNA used (ng)
+- dilution ratio of positive control sample SeraCare DNA with negative control HapMap DNA (to simulate mixed tumor cell samples)
+
+# Setup
+
+First, had to make a sample index in Excel for every sample and its dilution levels, and starting material amounts (`sample_index_file`)
+
+Also had to manually create a table of the known mutations we want to look for in the analysis output (`selected_mutations_file`)
+
+Load the data 
+```{r}
+sample_index_file <- "/ifs/data/molecpathlab/NGS580_WES-development/SeraSeq-dilution-detection-limit/sample-index.tsv"
+sample_index <- read.delim(file = sample_index_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE)
+# > nrow(sample_index)
+# [1] 24
+
+selected_mutations_file <- "/ifs/data/molecpathlab/NGS580_WES-development/SeraSeq-dilution-detection-limit/selected_mutations.tsv"
+selected_mutations <- read.delim(file = selected_mutations_file, header = FALSE, sep = '\t', stringsAsFactors = FALSE)
+colnames(selected_mutations) <- c("GeneIDs", "CosmicID", "Mutation_Type", "HGVS_Nomenclature", "AminoAcid", "TargetAF")
+
+# variant calling output for GATK and LoFreq variant callers; results for all samples in a single table each
+GATK_annotations_file <- "/ifs/data/molecpathlab/NGS580_WES/170721_NB501073_0018_AH5C7GBGX3/results_2017-07-28_21-02-00/sns-wes-downstream-analysis/170721_NB501073_0018_AH5C7GBGX3_results_2017-07-28_21-02-00_GATK_annotations.tsv"
+loFreq_annotations_file <- "/ifs/data/molecpathlab/NGS580_WES/170721_NB501073_0018_AH5C7GBGX3/results_2017-07-28_21-02-00/sns-wes-downstream-analysis/170721_NB501073_0018_AH5C7GBGX3_results_2017-07-28_21-02-00_LoFreq_annotations.tsv"
+
+
+GATK_annotations <- read.delim(file = GATK_annotations_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE)
+loFreq_annotations <- read.delim(file = loFreq_annotations_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE)
+
+
+# example data searches
+GATK_annotations[grep(pattern = '*p.E17K*', x = GATK_annotations[["AAChange.refGene"]]), ]
+GATK_annotations[grep(pattern = "*AKT1*", x = GATK_annotations[["Gene.refGene"]]), ]
+
+GATK_annotations[with(GATK_annotations, grepl(pattern = "*AKT1*", x = Gene.refGene) & grepl(pattern = "*p.E17K*", x = AAChange.refGene)), ]
+loFreq_annotations[with(loFreq_annotations, grepl(pattern = "*AKT1*", x = Gene.refGene) & grepl(pattern = "*p.E17K*", x = AAChange.refGene)), ]
+
+# loFreq_annotations[with(loFreq_annotations, grepl(pattern = sampleID, x = SAMPLE) ), ]
+```
+
+# Find the matches in the data
+
+Need to search for known mutations from the SeraCare samples in the variant calling output tables. 
+
+First need to create a cartesian product of the samples * mutations, so we have a dataframe with a row for every sample for every mutation to search for (`samples_per_mutation`).
+
+Then, we will iterate over the `samples_per_mutation` df and search the GATK and LoFreq variant calling output tables for:
+- exact matches on sample ID
+- glob matches on variant gene ID
+- glob matches on variant Amino Acid change ID
+
+If a match is found, it will be appended to a new dataframe (`mutation_matches`). If no match is found, a blank row with `0` entered for quality metrics will be entered instead. 
+
+```{r}
+# make matches df's
+samples_per_mutation <- merge(x = selected_mutations, y = sample_index)
+
+# empty df to hold the found matches
+mutation_matches <- data.frame()
+
+update_df <- function(df1, df2){
+    # either rbind new df to old, or assign new df to old
+    if(nrow(df1) == 0){
+        df3 <- df2
+    } else {
+        df3 <- rbind(df1, df2)
+    }
+    return(df3)
+}
+
+for(i in seq(nrow(samples_per_mutation))){
+    gene <- samples_per_mutation[i, "GeneIDs"]
+    AminoAcid <- samples_per_mutation[i, "AminoAcid"]
+    sampleID <- samples_per_mutation[i, "sample"]
+    
+    if( ! grepl(pattern = '-', x = gene) & ! is.na(AminoAcid) ){
+        gene_pattern <- paste0('*', gene, '*')
+        AminoAcid_pattern <- paste0('*', gsub(pattern = '*', replacement = '', x = AminoAcid, fixed = TRUE), '*')
+        
+        loFreq_search_match <- loFreq_annotations[with(loFreq_annotations, 
+                                         grepl(pattern = gene_pattern, x = Gene.refGene) & 
+                                             grepl(pattern = AminoAcid_pattern, x = AAChange.refGene) & 
+                                             grepl(pattern = sampleID, x = SAMPLE)), ]
+        
+        GATK_search_match <- GATK_annotations[with(GATK_annotations, 
+                                         grepl(pattern = gene_pattern, x = Gene.refGene) & 
+                                             grepl(pattern = AminoAcid_pattern, x = AAChange.refGene) & 
+                                             grepl(pattern = sampleID, x = SAMPLE)), ]
+        
+        message(sprintf("%s lofreq entries, %s GATK entries found for %s %s %s", nrow(loFreq_search_match), nrow(GATK_search_match), gene, AminoAcid, sampleID ) )
+        
+        if(nrow(loFreq_search_match) > 0 ){
+            loFreq_search_match_merge <- merge(x = samples_per_mutation[i,], y = loFreq_search_match)
+            loFreq_search_match_merge[["match_type"]] <- "LoFreq"
+            loFreq_search_match_merge[["total_matches_in_group"]] <- nrow(loFreq_search_match_merge)
+            
+            mutation_matches <- update_df(df1 = mutation_matches, df2 = loFreq_search_match_merge)
+            
+            # break
+        } else if(nrow(loFreq_search_match) == 0) {
+            loFreq_search_match[1,] <- NA
+            loFreq_search_match_merge <- merge(x = samples_per_mutation[i,], y = loFreq_search_match)
+            loFreq_search_match_merge[["QUAL"]] <- 0
+            loFreq_search_match_merge[["DEPTH"]] <- 0
+            loFreq_search_match_merge[["FREQ"]] <- 0
+            loFreq_search_match_merge[["match_type"]] <- "LoFreq"
+            loFreq_search_match_merge[["total_matches_in_group"]] <- nrow(loFreq_search_match_merge)
+            mutation_matches <- update_df(df1 = mutation_matches, df2 = loFreq_search_match_merge)
+            
+        }
+        
+        if(nrow(GATK_search_match) > 0){
+            GATK_search_match_merge <- merge(x = samples_per_mutation[i,], y = GATK_search_match)
+            GATK_search_match_merge[["match_type"]] <- "GATK"
+            GATK_search_match_merge[["total_matches_in_group"]] <- nrow(GATK_search_match_merge)
+            
+            mutation_matches <- update_df(df1 = mutation_matches, df2 = GATK_search_match_merge)
+            
+            # break
+        } else if(nrow(GATK_search_match) == 0) {
+            GATK_search_match[1,] <- NA
+            GATK_search_match_merge <- merge(x = samples_per_mutation[i,], y = GATK_search_match)
+            GATK_search_match_merge[["QUAL"]] <- 0
+            GATK_search_match_merge[["DEPTH"]] <- 0
+            GATK_search_match_merge[["FREQ"]] <- 0
+            GATK_search_match_merge[["match_type"]] <- "GATK"
+            GATK_search_match_merge[["total_matches_in_group"]] <- nrow(GATK_search_match_merge)
+            mutation_matches <- update_df(df1 = mutation_matches, df2 = GATK_search_match_merge)
+            
+        }
+    }
+}
+
+```
+
+Next we need to clean up the `mutation_matches` dataframe some more for plotting.
+- fix the "dilution" and "starting_material" column entries and convery them to ordered factors
+- remove the HapMap-only samples from the df (they did not match any variants, which is to be expected)
+- add a MutationID column
+- save a hard copy of the table to file
+
+```{r}
+# write.table(x = mutation_matches, file = "/ifs/data/molecpathlab/NGS580_WES-development/SeraSeq-dilution-detection-limit/mutation_matches.tsv", quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+# get rid of the HapMap samples for the plots
+mutation_matches <- mutation_matches[! grepl(pattern = "HapMap", x = mutation_matches[["sample"]] ), ]
+
+# need to clean up the table some more; 
+# - convert dilution, starting material to numerics
+
+mutation_matches[["dilution"]] <- gsub(pattern = "1|1", replacement = "1", x = mutation_matches[["dilution"]], fixed = TRUE)
+mutation_matches[["dilution"]] <- gsub(pattern = "1|2", replacement = "0.5", x = mutation_matches[["dilution"]], fixed = TRUE)
+mutation_matches[["dilution"]] <- gsub(pattern = "1|4", replacement = "0.25", x = mutation_matches[["dilution"]], fixed = TRUE)
+# reorder the factor levels
+mutation_matches[["dilution"]] <- factor(x = mutation_matches[["dilution"]], levels = sort(as.numeric(unique(mutation_matches[["dilution"]])), decreasing = TRUE) )
+
+mutation_matches[["starting_material"]] <- gsub(pattern = 'ng', replacement = '', x = mutation_matches[["starting_material"]])
+mutation_matches[["starting_material"]] <- factor(x = mutation_matches[["starting_material"]], levels = sort(as.numeric(unique(mutation_matches[["starting_material"]])), decreasing = TRUE) )
+
+# add unique ID columns for the mutations
+# colnames(mutation_matches)
+# mutation_matches[["GeneIDs"]]
+# mutation_matches[["AminoAcid"]]
+
+mutation_matches[["MutationID"]] <- paste(mutation_matches[["GeneIDs"]], mutation_matches[["AminoAcid"]], sep = ' ')
+
+write.table(x = mutation_matches, file = "/ifs/data/molecpathlab/NGS580_WES-development/SeraSeq-dilution-detection-limit/mutation_matches3.tsv", quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+```
+
+# Plots
+
+Now we will make some plots; we will start with `ggplot2` bar plots, then make them interactive to better explore the data with `plotly`. 
+
+```{r}
+library("ggplot2")
+library("plotly")
+mutation_plot <- ggplot(data = mutation_matches, aes(x = MutationID, y = DEPTH, fill = starting_material)) +  # text = paste("sample:", sample)
+    facet_grid(~dilution) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+    ggtitle("Variant Depth per Dilution Factor & Starting Material (ng)") +
+    # geom_point() + geom_line() 
+    geom_bar(position = "dodge", stat = "identity")
+
+mutation_plotly <- ggplotly(mutation_plot, tooltip = "all")
+
+htmlwidgets::saveWidget(as_widget(mutation_plotly), file = "/ifs/data/molecpathlab/NGS580_WES-development/SeraSeq-dilution-detection-limit/mutations_plot.html", selfcontained = TRUE)
+
+```
