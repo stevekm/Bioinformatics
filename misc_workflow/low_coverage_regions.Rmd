@@ -1,0 +1,513 @@
+---
+title: "Low Coverage Regions"
+author: "Stephen Kelly"
+date: "7/8/2017"
+output:
+  html_document:
+    fig_caption: yes
+    keep_md: yes
+    number_sections: yes
+    toc: yes
+    toc_depth: 2
+    df_print: paged
+    code_folding: hide
+---
+
+Make sure the low coverage regions are the same across all runs
+
+Find the files with the low coverage regions
+
+```
+[2017-07-08 17:27:05]
+kellys04@phoenix2:~/projects/Clinical_580_gene_panel/molecpathlab/NGS580_WES-development/validation_plots$ find -L results_dirs/ -path "*coverage*" -name "*_regions_coverage_below_50_annotation.tsv" -exec readlink -f {} \; | sort -u > 50_coverage_files.txt
+
+[2017-07-08 17:29:57]
+kellys04@phoenix2:~/projects/Clinical_580_gene_panel/molecpathlab/NGS580_WES-development/validation_plots$ find -L results_dirs/ -path "*coverage*" -name "regions_with_coverage_0_annotation.tsv" -exec readlink -f {} \; | sort -u > 0_coverage_files.txt
+
+```
+
+Load the files with paths to the low coverage regions file
+
+```{r, eval=FALSE}
+library("data.table")
+
+zero_coverage_files_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/0_coverage_files.txt"
+fifty_coverage_files_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/50_coverage_files.txt"
+
+NGS580_targets_files_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/NGS580_targets_files.txt"
+
+zero_coverage_files <- readLines(zero_coverage_files_file)
+fifty_coverage_files <- readLines(fifty_coverage_files_file)
+NGS580_targets_files <- readLines(NGS580_targets_files_file)
+
+# 50 coverage regions
+fifty_coverage_df <- data.frame()
+for(item in fifty_coverage_files){
+    df <- read.delim(file = item, header = TRUE, sep = "\t")
+    run_results <- gsub(pattern = '(.*)_regions_coverage_below_50_annotation.tsv', replacement = '\\1', x = basename(item))
+    run <- gsub(pattern = '^(.*)_results.*$', replacement = '\\1', x = run_results)
+    genes <- paste0("[", as.character(df[["external_gene_name"]]), "]")
+    target_starts <- do.call(paste, c(df[c("seqnames", "start")], sep = ":"))
+    targets_region <- paste(target_starts, df[["end"]], sep = "-")
+    targets <- paste(genes, targets_region, sep = ' ')
+    # targets <- do.call(paste, c(df[c("seqnames", "start", "end")], sep = "-"))
+    # paste(genes, target_starts, sep = " ")
+    df[["run"]] <- run
+    df[["run_results"]] <- run_results
+    df[["target"]] <- targets
+    if(nrow(fifty_coverage_df) < 1){
+        fifty_coverage_df <- df
+    } else {
+        fifty_coverage_df <- rbind(fifty_coverage_df, df)
+    }
+}
+# remove non protein coding entries
+fifty_coverage_df <- fifty_coverage_df[which(fifty_coverage_df[["gene_biotype"]] == "protein_coding"), ]
+
+fifty_coverage_aggr <- aggregate(run ~ target, data = fifty_coverage_df, FUN = length)
+fifty_coverage_run_aggr <- aggregate( target ~ run, data = fifty_coverage_df, FUN = length)
+setnames(x = fifty_coverage_run_aggr, old = c("target"), new = c("fifty_coverage"))
+
+
+# 0 coervage regions
+zero_coverage_df <- data.frame()
+for(item in zero_coverage_files){
+    df <- read.delim(file = item, header = TRUE, sep = "\t")
+    run_results <- gsub(pattern = '(.*)_regions_with_coverage_0_annotation.tsv', replacement = '\\1', x = basename(item))
+    run <- gsub(pattern = '^(.*)_results.*$', replacement = '\\1', x = run_results)
+    genes <- paste0("[", as.character(df[["external_gene_name"]]), "]")
+    target_starts <- do.call(paste, c(df[c("seqnames", "start")], sep = ":"))
+    targets_region <- paste(target_starts, df[["end"]], sep = "-")
+    targets <- paste(genes, targets_region, sep = ' ')
+    # targets <- do.call(paste, c(df[c("seqnames", "start", "end")], sep = "-"))
+    # paste(genes, target_starts, sep = " ")
+    df[["run"]] <- run
+    df[["run_results"]] <- run_results
+    df[["target"]] <- targets
+    if(nrow(zero_coverage_df) < 1){
+        zero_coverage_df <- df
+    } else {
+        zero_coverage_df <- rbind(zero_coverage_df, df)
+    }
+}
+
+# remove non protein coding entries
+zero_coverage_df <- zero_coverage_df[which(zero_coverage_df[["gene_biotype"]] == "protein_coding"), ]
+
+
+
+zero_coverage_aggr <- aggregate(run ~ target, data = zero_coverage_df, FUN = length)
+zero_coverage_run_aggr <- aggregate( target ~ run, data = zero_coverage_df, FUN = length)
+setnames(x = zero_coverage_run_aggr, old = c("target"), new = c("zero_coverage"))
+
+# number total target regions per run
+NGS580_targets_df <- data.frame()
+
+for(item in NGS580_targets_files){
+    num_targets <- length(readLines(item))
+    run <- basename(dirname(dirname(item)))
+    df <- data.frame(total = num_targets, run = run)
+    
+    if(nrow(NGS580_targets_df) < 1){
+        NGS580_targets_df <- df
+    } else {
+        NGS580_targets_df <- rbind(NGS580_targets_df, df)
+    }
+}
+
+
+all(unique(zero_coverage_df[["run"]]) %in% NGS580_targets_df[["run"]])
+all(NGS580_targets_df[["run"]] %in% unique(zero_coverage_df[["run"]]))
+
+all(unique(fifty_coverage_df[["run"]]) %in% NGS580_targets_df[["run"]])
+all(NGS580_targets_df[["run"]] %in% unique(fifty_coverage_df[["run"]]))
+
+all_targets_coverages_df <- merge(x = NGS580_targets_df, y = zero_coverage_run_aggr, by = "run")
+all_targets_coverages_df <- merge(x = all_targets_coverages_df, y = fifty_coverage_run_aggr, by = "run")
+
+all_targets_coverages_df[["pcnt_zero_coverage"]] <- (all_targets_coverages_df[["zero_coverage"]] / all_targets_coverages_df[["total"]]) * 100
+all_targets_coverages_df[["pcnt_fifty_coverage"]] <- (all_targets_coverages_df[["fifty_coverage"]] / all_targets_coverages_df[["total"]]) * 100
+
+# reformat table
+library("reshape2")
+all_targets_coverages_long <- reshape2::melt(all_targets_coverages_df, id.vars=c("run"), variable.name="type", value.name="targets")
+
+
+project_dir <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/low_coverage_regions"
+
+# save.image(file = "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/low_coverage_regions/loaded_data.Rdata", compress = TRUE)
+save.image(file =  file.path(project_dir, "loaded_data.Rdata"), compress = TRUE)
+
+```
+
+load saved loaded data (locally)
+
+```{r, eval=TRUE}
+project_dir <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/low_coverage_regions"
+# load("~/projects/clinical_genomic_reporting-remote/loaded_data.Rdata")
+load(file.path(project_dir, "loaded_data.Rdata"))
+
+# Validation_Sample_Summary_Table_file <- "/Users/steve/projects/clinical_genomic_reporting-remote/Validation_Sample_Summary_Table.tsv"
+Validation_Sample_Summary_Table_file <- file.path(project_dir,"Validation_Sample_Summary_Table.tsv")
+Validation_Sample_Summary_Table <- read.delim(file = Validation_Sample_Summary_Table_file, header = TRUE, sep = '\t')
+
+run_ID_df <- unique(Validation_Sample_Summary_Table[, c("run", "worksheet_NGS580_RunID")])
+
+all_targets_coverages_long <- merge(x = all_targets_coverages_long, y = run_ID_df, by = "run")
+all_targets_coverages_df <- merge(x = all_targets_coverages_df, y = run_ID_df, by = "run")
+
+
+# make table for heatmap
+coverage_cutoff_cols <- c("pcnt.bases.above.10", "pcnt.bases.above.50", "pcnt.bases.above.100", "pcnt.bases.above.500")
+meta_cols <- c("sample", "run", "worksheet_NGS580_RunID")
+
+heatmap_df <- Validation_Sample_Summary_Table[, c(meta_cols, coverage_cutoff_cols)]
+heatmap_df_long <- reshape2::melt(heatmap_df, id.vars = meta_cols, variable.name="cutoff", value.name="pcnt")
+heatmap_df_long[["cutoff"]] <- gsub(pattern = 'pcnt.bases.above.', replacement = '', x = as.character(heatmap_df_long[["cutoff"]]))
+
+heatmap_per_run_df <- aggregate(pcnt ~ worksheet_NGS580_RunID + cutoff, data = heatmap_df_long, FUN = mean)
+setnames(x = heatmap_per_run_df, old = "pcnt", new = "avg_pcnt")
+
+# fix the factor order
+heatmap_per_run_df[["cutoff"]] <- factor(x = heatmap_per_run_df[["cutoff"]], levels = sort(unique(as.numeric(heatmap_per_run_df[["cutoff"]]))))
+
+heatmap_df_long[["cutoff"]] <- factor(x = heatmap_df_long[["cutoff"]], levels = sort(unique(as.numeric(heatmap_df_long[["cutoff"]]))))
+```
+
+Start making plots
+
+```{r}
+library("ggplot2")
+library("data.table")
+
+# fix tables
+num_runs <- length(unique(fifty_coverage_df[["run"]]))
+fifty_coverage_aggr[which(fifty_coverage_aggr[["run"]] > num_runs), "run"] <- num_runs
+
+num_runs <- length(unique(zero_coverage_df[["run"]]))
+zero_coverage_aggr[which(zero_coverage_aggr[["run"]] > num_runs), "run"] <- num_runs
+
+# merge the tables for a heatmap
+low_coverage_targets <- merge(x = zero_coverage_aggr, y = fifty_coverage_aggr, by = "target", all.x = TRUE, all.y = TRUE)
+head(low_coverage_targets)
+setnames(x = low_coverage_targets, old = c("run.x", "run.y"), new = c("0", "50"))
+low_coverage_targets <- reshape2::melt(low_coverage_targets, id.vars = "target", variable.name="cutoff", value.name="occurences")
+low_coverage_targets[["occurences"]][is.na(low_coverage_targets[["occurences"]])] <- 0
+
+low_coverage_targets[["gene"]] <- gsub(pattern = '^\\[(.*)\\] .*$', replacement = '\\1', x = low_coverage_targets[["target"]])
+
+low_coverage_targets_gene_aggr <- aggregate(occurences ~ cutoff + gene, data = low_coverage_targets, FUN = mean)
+
+
+
+
+
+# make plots
+# barplots
+fifty_coverage_plot <- ggplot(data = fifty_coverage_aggr, aes(x = target, y = run)) + geom_bar(stat = "identity") + coord_flip() + ggtitle("Targets with <50 Coverage; Number of occurences across runs") + ylab("Number of occurences")
+
+zero_coverage_plot <- ggplot(data = zero_coverage_aggr, aes(x = target, y = run)) + geom_bar(stat = "identity") + coord_flip() + ggtitle("Targets with 0 Coverage; Number of occurences across runs") + ylab("Number of occurences")
+
+
+# boxplots
+all_targets_coverages_boxplot <- ggplot(data = all_targets_coverages_long[which(! all_targets_coverages_long[["type"]] %in% c("total", "zero_coverage", "fifty_coverage")), ], aes(x = type, y = targets)) + geom_boxplot() + ylab("% of targets") + ggtitle("Percent of Target regions below coverage cutoff")
+
+all_targets_coverages_line <- ggplot(data = all_targets_coverages_long[which(! all_targets_coverages_long[["type"]] %in% c("total", "zero_coverage", "fifty_coverage")), ], aes(x = worksheet_NGS580_RunID, y = targets, fill = type, group = type, color = type)) + geom_point() + geom_line() + ylab("% of targets") + ggtitle("Percent of Target regions below coverage cutoff") + theme(axis.text.x=element_text(angle=90, hjust=1)) + xlab("run")
+
+
+# heatmap
+samples_coverage_heatmap <- ggplot(data = heatmap_df_long, aes(x = cutoff, y = sample, group = run)) + geom_tile(aes(fill = pcnt)) + scale_fill_gradient(limits = c(0, 100), low = "white", high = "steelblue") + ggtitle("Percent of bases above coverage cutoff") + xlab("coverage cutoff")
+
+runs_coverage_heatmap <- ggplot(data = heatmap_per_run_df, aes(x = cutoff, y = worksheet_NGS580_RunID)) + geom_tile(aes(fill = avg_pcnt)) + scale_fill_gradient(limits = c(0, 100), low = "white", high = "steelblue") + ggtitle("Average Percent of bases above coverage cutoff") + xlab("coverage cutoff") + ylab("run") + labs(fill="pcnt")
+
+
+low_coverage_heatmap <- ggplot(data = low_coverage_targets, aes(x = cutoff, y = target)) + geom_tile(aes(fill = occurences)) + scale_fill_gradient(limits = c(0, max(low_coverage_targets[["occurences"]], na.rm = TRUE)), low = "white", high = "steelblue") + ggtitle("Low Coverage Targets Across Runs") + xlab("coverage cutoff") + ylab("target") + labs(fill="occurences") + theme(axis.text.y = element_text(size=6))
+
+ 
+low_coverage_targets_gene_heatmap <- ggplot(data = low_coverage_targets_gene_aggr, aes(x = cutoff, y = gene)) + geom_tile(aes(fill = occurences)) + scale_fill_gradient(limits = c(0, max(low_coverage_targets_gene_aggr[["occurences"]], na.rm = TRUE)), low = "white", high = "steelblue") + ggtitle("Low Coverage Targets per Gene Across Runs") + xlab("coverage cutoff") + ylab("target") + labs(fill="avg occurences") + theme(axis.text.y = element_text(size=6))
+
+
+# save plots
+pdf(file = file.path(project_dir, "50_coverage_targets.pdf"), width = 10, height = 15)
+print(fifty_coverage_plot)
+dev.off()
+
+pdf(file = file.path(project_dir, "0_coverage_targets.pdf"), width = 10, height = 10)
+print(zero_coverage_plot)
+dev.off()
+
+pdf(file = file.path(project_dir, "all_targets_coverages_boxplot.pdf"), width = 6, height = 6)
+print(all_targets_coverages_boxplot)
+dev.off()
+
+pdf(file = file.path(project_dir, "all_targets_coverages_line.pdf"), width = 6, height = 6)
+print(all_targets_coverages_line)
+dev.off()
+
+pdf(file = file.path(project_dir, "samples_coverage_heatmap.pdf"), width = 10, height = 30)
+print(samples_coverage_heatmap)
+dev.off()
+
+pdf(file = file.path(project_dir, "runs_coverage_heatmap.pdf"), width = 6, height = 6)
+print(runs_coverage_heatmap)
+dev.off()
+
+pdf(file = file.path(project_dir, "low_coverage_heatmap.pdf"), width = 6, height = 10)
+print(low_coverage_heatmap)
+dev.off()
+
+pdf(file = file.path(project_dir, "low_coverage_targets_gene_heatmap.pdf"), width = 6, height = 6)
+print(low_coverage_targets_gene_heatmap)
+dev.off()
+
+
+
+
+# save tables
+write.table(x = zero_coverage_df, file = file.path(project_dir, '0_coverage_targets.tsv'), quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+write.table(x = zero_coverage_aggr, file = file.path(project_dir, '0_coverage_targets_aggregate.tsv'), quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+write.table(x = fifty_coverage_df, file = file.path(project_dir, '50_coverage_targets.tsv'), quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+write.table(x = fifty_coverage_aggr, file = file.path(project_dir, '50_coverage_targets_aggregate.tsv'), quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+write.table(x = all_targets_coverages_df, file = file.path(project_dir, 'all_targets_coverages.tsv'), quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+write.table(x = heatmap_per_run_df, file = file.path(project_dir, 'heatmap_per_run_df.tsv'), quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+write.table(x = heatmap_df_long, file = file.path(project_dir, 'heatmap_df_long.tsv'), quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+write.table(x = low_coverage_targets_gene_aggr, file = file.path(project_dir, 'low_coverage_targets_gene_aggr.tsv'), quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+
+save.image(file =  file.path(project_dir, "final_data.Rdata"), compress = TRUE)
+
+```
+
+# Coverage across all targets per all samples
+```
+[2017-07-10 11:40:37]
+kellys04@phoenix2:~/projects/Clinical_580_gene_panel/molecpathlab/NGS580_WES-development/validation_plots$ find -L results_dirs/ -name "*_average_coverage_per_sample.tsv" -exec readlink -f {} \; | sort -u > average_coverage_per_sample.tsv_files.txt
+
+
+[2017-07-10 11:42:41]
+kellys04@phoenix2:~/projects/Clinical_580_gene_panel/molecpathlab/NGS580_WES-development/validation_plots$ readlink -f average_coverage_per_sample.tsv_files.txt
+/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/average_coverage_per_sample.tsv_files.txt
+
+```
+
+```{r}
+# get the lsit of the per sample per target coverage files
+average_coverage_per_sample_files_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/average_coverage_per_sample.tsv_files.txt"
+average_coverage_per_sample_files <- readLines(average_coverage_per_sample_files_file)
+
+# start df to load the data
+average_coverage_per_sample_df <- data.frame()
+
+for(item in average_coverage_per_sample_files){
+    cov_file <- item
+    run <- basename(dirname(dirname(dirname(cov_file))))
+    df <- read.delim(file = cov_file, header = TRUE, sep = '\t', check.names = FALSE)
+    
+    df[["run"]] <- run
+    colnames(df)[1] <- "target"
+    meta_cols <- c("target", "run")
+    df <- reshape2::melt(df, id.vars = meta_cols, variable.name="sample", value.name="coverage")
+    if(nrow(average_coverage_per_sample_df) < 1){
+        average_coverage_per_sample_df <- df
+    } else {
+        average_coverage_per_sample_df <- rbind(average_coverage_per_sample_df, df)
+    }
+}
+
+# avg coverage per target per run
+average_coverage_per_sample_aggr <- aggregate(coverage ~ target + run, data = average_coverage_per_sample_df, FUN = mean)
+# avg coverage per target
+average_coverage_per_target_aggr <- aggregate(coverage ~ target, data = average_coverage_per_sample_df, FUN = mean)
+
+# plot
+average_coverage_per_sample_boxplot <- ggplot(data = average_coverage_per_sample_df, aes(x = run, y = coverage)) + geom_boxplot() + coord_flip() + ggtitle("Coverage across all Targets and Samples per Run")
+pdf(file = file.path(project_dir, "average_coverage_per_sample_boxplot.pdf"), width = 8, height = 8)
+average_coverage_per_sample_boxplot
+dev.off()
+
+
+# convert the targets to chrom coordinates so we can annotate it
+target_df <- unique(as.character(average_coverage_per_sample_df[["target"]]))
+target_chrom <- as.data.frame(do.call(rbind, strsplit(target_df, ':')))
+target_chrom <- cbind(target_chrom[1], as.data.frame(do.call(rbind, strsplit(as.character(target_chrom[[2]]), '-'))))
+target_df <- cbind(target_df, target_chrom)
+nrow(target_df) # 9909
+colnames(target_df)[2:4] <- c("Chr", "Start", "End")
+
+
+# load annotations for the targets
+NGS580_targets_annotations_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/NGS580_targets_annotations.hg19_multianno.txt"
+NGS580_targets_annotations <- read.delim(file = NGS580_targets_annotations_file, header = TRUE, sep = '\t', fill = TRUE)
+
+dim(NGS580_targets_annotations) # [1] 10640    11
+head(NGS580_targets_annotations)
+NGS580_targets_annotations[["Start"]] <- NGS580_targets_annotations[["Start"]] + 1
+
+target_df[["Start"]] <- as.numeric(as.character(target_df[["Start"]]))
+target_df[["End"]] <- as.numeric(as.character(target_df[["End"]]))
+
+target_df <- merge(x = target_df, y = NGS580_targets_annotations, by = c("Chr", "Start", "End"), all.x = TRUE)
+head(target_df)
+setnames(x = target_df, old = 'target_df', new = 'target')
+
+# add the gene ID's to the average_coverage_per_sample_df
+
+nrow(average_coverage_per_sample_df) # 2853792
+average_coverage_per_sample_target_df <- merge(x = average_coverage_per_sample_df, y = target_df, by = 'target', all.x = TRUE)
+
+dim(average_coverage_per_sample_target_df) # [1] 2853792      15
+
+average_coverage_per_sample_target_df[["Gene.refGene"]] <-as.character(average_coverage_per_sample_target_df[["Gene.refGene"]])
+
+
+
+# get the ones that match IonTorrent 50 genes list
+IonTorrent_genes <- readLines("/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/IonTorrent_reporter_panel_genes.txt")
+IonTorrent_genes <- IonTorrent_genes[which(IonTorrent_genes != "")]
+# > IonTorrent_genes[which(IonTorrent_genes != "")]
+#  [1] "ABL1"    "AKT1"    "ALK"     "APC"     "ATM"     "BRAF"    "CDH1"    "CDKN2A"  "CSF1R"   "CTNNB1"  "EGFR"    "ERBB2"   "ERBB4"   "EZH2"    "FBXW7"  
+# [16] "FGFR1"   "FGFR2"   "FGFR3"   "FLT3"    "GNA 11"  "GNAS"    "GNAQ"    "HNF1A"   "HRAS"    "IDH1"    "JAK2"    "JAK3"    "IDH2"    "KDR"     "KIT"    
+# [31] "KRAS"    "MET"     "MLH1"    "MPL"     "NOTCH1"  "NPM1"    "NRAS"    "PDGFRA"  "PIK3CA"  "PTEN"    "PTPN11"  "RB1"     "RET"     "SMAD4"   "SMARCB1"
+# [46] "SMO"     "SRC"     "STK11"   "TP53"    "VHL"    
+
+length(IonTorrent_genes) # [1] 50
+
+coverage_genes <- unique(average_coverage_per_sample_target_df[["Gene.refGene"]])
+overlap_genes <- coverage_genes[which(coverage_genes %in% IonTorrent_genes)]
+length(overlap_genes) # [1] 49
+
+# there is an IonTorrent gene missing from NGS580
+IonTorrent_genes[!IonTorrent_genes %in% overlap_genes]
+# [1] "GNA 11"
+# probably written differenty
+# should be GNA11, add it manually
+IonTorrent_genes <- c(IonTorrent_genes, "GNA11")
+
+average_coverage_per_sample_target_50_gene_overlaps <- average_coverage_per_sample_target_df[which(average_coverage_per_sample_target_df[["Gene.refGene"]] %in% IonTorrent_genes), ]
+
+# average_coverage_per_sample_target_df[which(average_coverage_per_sample_target_df[["Gene.refGene"]] == "GNA11"), ]
+dim(average_coverage_per_sample_target_50_gene_overlaps) # [1] 246528     15
+
+average_coverage_per_sample_target_50_gene_overlaps_gene_aggr <- aggregate(coverage ~ Gene.refGene + sample + run, data = average_coverage_per_sample_target_50_gene_overlaps, FUN = mean)
+# aggregate(coverage ~ target, data = average_coverage_per_sample_df, FUN = mean)
+
+
+
+
+
+
+# make plots
+# boxplots of all 50 genes
+coverage_per_gene_boxplot <- ggplot(data = average_coverage_per_sample_target_50_gene_overlaps_gene_aggr, aes(x = Gene.refGene, y = coverage)) + geom_boxplot() + coord_flip() + xlab("gene") + ggtitle("Average Coverage of Clinically Relevant Genes")
+
+pdf(file = file.path(project_dir, "coverage_per_gene_boxplot.pdf"), width = 8, height = 8)
+coverage_per_gene_boxplot
+dev.off()
+
+
+
+
+
+# now make heatmap, of % of genes below coverage thresholds
+head(average_coverage_per_sample_target_50_gene_overlaps)
+nrow(average_coverage_per_sample_target_50_gene_overlaps[which(average_coverage_per_sample_target_50_gene_overlaps[["Gene.refGene"]] == "NRAS"), ])
+# 1152
+
+nrow(subset(average_coverage_per_sample_target_50_gene_overlaps, subset = (Gene.refGene == "NRAS" & coverage > 50)))
+
+average_coverage_per_sample_target_50_gene_overlaps_uniq <- unique(average_coverage_per_sample_target_50_gene_overlaps[c("target", "Gene.refGene")])
+coverage_50_gene_cutoffs <- average_coverage_per_sample_target_50_gene_overlaps_uniq
+setnames(x = coverage_50_gene_cutoffs, old = "Gene.refGene", new = "gene")
+
+
+
+# heatmap below cutoff
+cutoffs <- c("0", "50", "100", "500", "1000")
+genes <- unique(coverage_50_gene_cutoffs[["gene"]])
+
+coverage_50_gene_cutoffs_df_below <- data.frame(matrix(ncol = length(cutoffs) + 1, nrow = length(genes)))
+
+colnames(coverage_50_gene_cutoffs_df_below) <- c("gene", cutoffs)
+rownames(coverage_50_gene_cutoffs_df_below) <- genes
+coverage_50_gene_cutoffs_df_below[["gene"]] <- genes
+# df[[cutoffs[1]]]
+# df[genes[1], cutoffs[1]]
+
+
+for(cutoff in cutoffs){
+    cutoff_val <- as.numeric(cutoff)
+    print(cutoff_val)
+    
+    for(gene in genes){
+        num_total_gene_targets <- nrow(subset(x = average_coverage_per_sample_target_50_gene_overlaps, subset = (Gene.refGene == gene)))
+        num_above_cutoff <- nrow(subset(average_coverage_per_sample_target_50_gene_overlaps, subset = (Gene.refGene == gene & coverage <= cutoff_val)))
+        pcnt_above <- (num_above_cutoff / num_total_gene_targets) * 100
+        
+        coverage_50_gene_cutoffs_df_below[gene, cutoff] <- pcnt_above
+    }
+}
+
+coverage_50_gene_cutoffs_df_below <- reshape2::melt(coverage_50_gene_cutoffs_df_below, id.vars = "gene", variable.name="cutoff", value.name="pcnt")
+
+coverage_50_gene_cutoffs_df_below[["cutoff"]] <- factor(x = coverage_50_gene_cutoffs_df_below[["cutoff"]], levels = sort(unique(as.numeric(as.character(coverage_50_gene_cutoffs_df_below[["cutoff"]])))))
+
+
+ 
+coverage_50_gene_cutoffs_df_below_heatmap <- ggplot(data = coverage_50_gene_cutoffs_df_below, aes(x = cutoff, y = gene)) + geom_tile(aes(fill = pcnt)) + scale_fill_gradient(limits = c(0, 100), low = "white", high = "steelblue") + ggtitle("Percent of Targets per Gene Below Coverage Cutoff") + xlab("coverage cutoff") + ylab("target") + labs(fill="pcnt") + theme(axis.text.y = element_text(size=6))
+
+
+pdf(file = file.path(project_dir, "coverage_50_gene_cutoffs_df_below_heatmap.pdf"), width = 8, height = 8)
+coverage_50_gene_cutoffs_df_below_heatmap
+dev.off()
+
+
+
+
+
+
+## abvoer heatmap
+cutoffs <- c("0", "50", "100", "500", "1000")
+genes <- unique(coverage_50_gene_cutoffs[["gene"]])
+
+coverage_50_gene_cutoffs_df_above <- data.frame(matrix(ncol = length(cutoffs) + 1, nrow = length(genes)))
+
+colnames(coverage_50_gene_cutoffs_df_above) <- c("gene", cutoffs)
+rownames(coverage_50_gene_cutoffs_df_above) <- genes
+coverage_50_gene_cutoffs_df_above[["gene"]] <- genes
+# df[[cutoffs[1]]]
+# df[genes[1], cutoffs[1]]
+
+
+for(cutoff in cutoffs){
+    cutoff_val <- as.numeric(cutoff)
+    print(cutoff_val)
+    
+    for(gene in genes){
+        num_total_gene_targets <- nrow(subset(x = average_coverage_per_sample_target_50_gene_overlaps, subset = (Gene.refGene == gene)))
+        num_above_cutoff <- nrow(subset(average_coverage_per_sample_target_50_gene_overlaps, subset = (Gene.refGene == gene & coverage >= cutoff_val)))
+        pcnt_above <- (num_above_cutoff / num_total_gene_targets) * 100
+        
+        coverage_50_gene_cutoffs_df_above[gene, cutoff] <- pcnt_above
+    }
+}
+
+coverage_50_gene_cutoffs_df_above <- reshape2::melt(coverage_50_gene_cutoffs_df_above, id.vars = "gene", variable.name="cutoff", value.name="pcnt")
+
+coverage_50_gene_cutoffs_df_above[["cutoff"]] <- factor(x = coverage_50_gene_cutoffs_df_above[["cutoff"]], levels = sort(unique(as.numeric(as.character(coverage_50_gene_cutoffs_df_above[["cutoff"]])))))
+
+
+ 
+coverage_50_gene_cutoffs_df_above_heatmap <- ggplot(data = coverage_50_gene_cutoffs_df_above, aes(x = cutoff, y = gene)) + geom_tile(aes(fill = pcnt)) + scale_fill_gradient(limits = c(0, 100), low = "white", high = "steelblue") + ggtitle("Percent of Targets per Gene Above Coverage Cutoff") + xlab("coverage cutoff") + ylab("target") + labs(fill="pcnt") + theme(axis.text.y = element_text(size=6))
+
+
+pdf(file = file.path(project_dir, "coverage_50_gene_cutoffs_df_above_heatmap.pdf"), width = 8, height = 8)
+coverage_50_gene_cutoffs_df_above_heatmap
+dev.off()
+
+```
