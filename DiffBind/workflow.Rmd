@@ -1,0 +1,176 @@
+---
+title: "DiffBind"
+author: "Stephen Kelly"
+date: "8/1/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Need to set up a custom DiffBind for PI's
+
+Need to use peaks called from different params for different samples
+
+```
+[2017-08-01 12:35:36]
+kellys04@phoenix2:~/projects/SmithLab_ChIpSeq_2017-12-31/project_notes/diffbind-custom$ cat mark-index.tsv
+name	type	effect	peak_caller	peak_caller_params
+CTCF	transcription_factor	NA	MACS2	--nolambda --nomodel --extsize=$extsize -g hs
+H3K27AC	histone_mark	activating	MACS2	--nolambda --broad --nomodel --extsize=$extsize -g hs
+H3K4ME3	histone_mark	activating	MACS2	--nolambda --broad --nomodel --extsize=$extsize -g hs
+H3K9AC	histone_mark	activating	MACS2	--nolambda --broad --nomodel --extsize=$extsize -g hs
+H3K27ME3	histone_mark	repressive	SICER	NA
+H3K9ME3	histone_mark	repressive	SICER	NA
+```
+
+PI 1 peaks: use 200 fragementation size
+
+PI 2 peaks: use 400 fragmentation size
+
+(as per pipeline sample sheet)
+
+Need to get a list of all the .bam files per sample
+
+```{r, engine='bash'}
+proj_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-31/project_notes/diffbind-custom"
+cd "$proj_dir"
+
+align_dir="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-31/pipeline/align/results"
+
+bam_samplesheet="${proj_dir}/sample-bams.tsv"
+
+pipeline_samplesheet="/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-31/inputs/sample-sheet.tsv"
+
+
+
+find_sample_alignments () {
+    local sampleID="$1"
+    find "$align_dir" -path "*/${sampleID}/*" -name "alignments.bam" | head -1
+}
+
+get_control_sampleID () {
+    local sampleID="$1"
+    cat "$pipeline_samplesheet" | grep "^$sampleID" | cut -f2
+}
+
+write_bam () {
+    local bam_path="$1"
+    local sampleID="$(basename "$(dirname "$bam_path")")"
+    local control_sampleID="$(get_control_sampleID "$sampleID")"
+    if [ "$control_sampleID" != "NA" ]; then
+        local control_sample_bam="$(find_sample_alignments "$control_sampleID")"
+        printf "%s\t%s\t%s\t%s\n" "$sampleID" "$bam_path" "$control_sampleID" "$control_sample_bam"
+    fi
+}
+
+printf '' > "$bam_samplesheet"
+find "$align_dir" -name "alignments.bam" | while read item; do
+    write_bam "$item" >> "$bam_samplesheet"
+done
+
+```
+
+manually edit the spreadsheet some more in Excel to add more columns
+
+# Merge sheets
+
+```{r}
+project_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-31/project_notes/diffbind-custom"
+mark_index_file <- file.path(project_dir, "mark-index.tsv")
+sample_bams_file <- file.path(project_dir, "sample-bams.tsv")
+
+mark_index_df <- read.delim(file = mark_index_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE)
+sample_bams_df <- read.delim(file = sample_bams_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE)
+
+# merge the two sets
+sample_bams_index <- merge(x = sample_bams_df, y = mark_index_df, by.x = "mark", by.y = "name", all = TRUE)
+
+# add cols for DiffBind samplesheet
+sample_bams_index[["Peaks"]] <- NA
+sample_bams_index[["PeakCaller"]] <- NA
+
+# > colnames(sample_bams_index)
+#  [1] "mark"               "sample"             "patient"            "status"             "patient.status"     "status.mark"       
+#  [7] "patient.mark"       "alignments"         "control_sample"     "control_alignments" "type"               "effect"            
+# [13] "peak_caller"        "peak_caller_params" "peaks_dir"          "peaks"             
+
+# add the paths to the MACS2 peaks xls files
+for(i in seq(nrow(sample_bams_index))){
+    print(sample_bams_index[i, "peak_caller"])
+    peak_caller <- sample_bams_index[i, "peak_caller"]
+    peaks_dir <- sample_bams_index[i, "peaks_dir"]
+    sample <- sample_bams_index[i, "sample"]
+    
+    # find the peaks file path
+    if(peak_caller == "MACS2"){
+        peaks_path <- file.path(peaks_dir, sample, "macs_peaks.xls")
+        diffbind_peak_caller <- "macs"
+    } else if(peak_caller == "SICER"){
+        peaks_path <- dir(path = peaks_dir, pattern = sample, full.names = TRUE)
+        diffbind_peak_caller <- "sicer"
+    }
+    
+    sample_bams_index[i, "Peaks"] <- peaks_path
+    sample_bams_index[i, "PeakCaller"] <- diffbind_peak_caller
+}
+
+sample_bams_index_file <- file.path(project_dir, "sample_bams_index_file.tsv")
+write.table(x = sample_bams_index, file = sample_bams_index_file, quote = FALSE, sep = '\t', row.names = FALSE)
+
+# build the DiffBind samplesheet from the index
+diffbind_colnames <- c("SampleID", "Tissue", "Factor", "Condition", "Treatment", "Replicate", "bamReads", "bamControl", "Peaks", "PeakCaller")
+
+diffbind_df <- data.frame()
+for(colname in diffbind_colnames){
+    diffbind_df[[colname]] <- character(0)
+}
+
+
+for(i in seq(nrow(sample_bams_index))){
+    diffbind_df[i, "Tissue"] <- "?"
+    diffbind_df[i, "Factor"] <- "?"
+    diffbind_df[i, "Treatment"] <- "?"
+    
+    diffbind_df[i, "SampleID"] <- sample_bams_index[i, "sample"]
+    diffbind_df[i, "Condition"] <- sample_bams_index[i, "status"]
+    diffbind_df[i, "Replicate"] <- sample_bams_index[i, "patient"]
+    diffbind_df[i, "bamReads"] <- sample_bams_index[i, "alignments"]
+    diffbind_df[i, "bamControl"] <- sample_bams_index[i, "control_alignments"]
+    diffbind_df[i, "Peaks"] <- sample_bams_index[i, "Peaks"]
+    diffbind_df[i, "PeakCaller"] <- sample_bams_index[i, "PeakCaller"]
+    
+}
+
+# save the file
+diffbind_samplesheet_file <- file.path(project_dir, "diffbind-sample-sheet.csv")
+write.table(x = diffbind_df, file = diffbind_samplesheet_file, quote = FALSE, sep = ',', row.names = FALSE)
+```
+
+# Run the diffbind
+
+## Setup
+
+Need to gather verbose examples of how the diffbind from the pipeline is run
+
+getting copies of the pipeline diffbind script and args needed to run it
+
+here is the command that gets run by the pipeline:
+```
+Rscript --vanilla ./code/chipseq-diffbind.R results/diffbind.by_chip.status/peaks.by_sample.macs_narrow_nolambda/align.by_sample.bowtie2/IGG results/diffbind.by_chip.status/peaks.by_sample.macs_narrow_nolambda/align.by_sample.bowtie2/IGG/diffbind-sample-sheet.csv hg19 patient
+```
+
+Need to install the Bioconductor packages to HPCF to test..
+
+```{r}
+source("http://bioconductor.org/biocLite.R")
+biocLite(pkgs = c("DiffBind", "ChIPpeakAnno"))
+
+```
+
+... didnt work oh well
+
+## Try to run
+
+running everything from the run.sh script
