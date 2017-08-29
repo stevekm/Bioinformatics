@@ -1,0 +1,175 @@
+---
+title: "SeraSeq Dilution Variant Detection Limits"
+author: "Stephen Kelly"
+date: "8/29/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Overview
+
+Some positive control SeraCare samples were run on the NextSeq to determine the lower limit of detection for variants
+
+Docs about the samples:
+https://www.seracare.com/globalassets/resources/product-sheets/mkt-00335-rev-1-prod-sheet-seraseq-tri-level-tumor-mutation-dna-mix-v2-lc.pdf
+
+
+NextSeq NGS580 analysis results dir:
+```
+/ifs/data/molecpathlab/NGS580_WES/170721_NB501073_0018_AH5C7GBGX3/results_2017-07-28_21-02-00
+```
+
+Need to check the variant calling results to find the quality and frequency of the variants
+
+Also the samples were run at different
+- amount of total sample DNA used (ng)
+- dilution ratio of positive control sample SeraCare DNA with negative control HapMap DNA (to simulate mixed tumor cell samples)
+
+# Setup
+
+First, had to make a sample index in Excel for every sample and its dilution levels, and starting material amounts (`sample_index_file`)
+
+Also had to manually create a table of the known mutations we want to look for in the analysis output (`selected_mutations_file`)
+
+Load the data 
+```{r}
+sample_index_file <- "/ifs/data/molecpathlab/NGS580_WES-development/SeraSeq-dilution-detection-limit/sample-index.tsv"
+sample_index <- read.delim(file = sample_index_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE)
+# > colnames(sample_index)
+# [1] "sample"            "source"            "dilution"          "starting_material" "replicate"  
+# > nrow(sample_index)
+# [1] 24
+
+# Already found the exact matching AAChange entries for every expected variant in the LoFreq output, saved in this file here
+selected_mutations_file <- "/ifs/data/molecpathlab/NGS580_WES-development/SeraSeq-dilution-detection-limit/SeraCare_mutation_match_list.Sheet1.tsv"
+selected_mutations <- read.delim(file = selected_mutations_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE)
+colnames(selected_mutations)
+# [1] "Gene.ID"                       "SeraCare.HGVS.Nomenclature"    "SeraCar.Amino.Acid"            "Mutation.Type"                
+# [5] "SeraCare.Ladder.Target.AF...." "NGS.580.LoFreq.Nomenclature"  
+# colnames(selected_mutations) <- c("GeneIDs", "Coding", "Mutation_Type", "HGVS_Nomenclature", "AminoAcid", "TargetAF")
+
+# variant calling output for GATK and LoFreq variant callers; results for all samples in a single table each
+GATK_annotations_file <- "/ifs/data/molecpathlab/NGS580_WES/170721_NB501073_0018_AH5C7GBGX3/results_2017-07-28_21-02-00/sns-wes-downstream-analysis/170721_NB501073_0018_AH5C7GBGX3_results_2017-07-28_21-02-00_GATK_annotations.tsv"
+loFreq_annotations_file <- "/ifs/data/molecpathlab/NGS580_WES/170721_NB501073_0018_AH5C7GBGX3/results_2017-07-28_21-02-00/sns-wes-downstream-analysis/170721_NB501073_0018_AH5C7GBGX3_results_2017-07-28_21-02-00_LoFreq_annotations.tsv"
+
+
+GATK_annotations <- read.delim(file = GATK_annotations_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE)
+loFreq_annotations <- read.delim(file = loFreq_annotations_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE)
+# > colnames(loFreq_annotations)
+#  [1] "X.MUT"              "SAMPLE"             "CHR"                "POS"                "QUAL"               "DEPTH"             
+#  [7] "FREQ"               "Ref"                "Alt"                "Func.refGene"       "Gene.refGene"       "GeneDetail.refGene"
+# [13] "ExonicFunc.refGene" "AAChange.refGene"   "snp138"             "snp138NonFlagged"   "ExAC_ALL"           "esp6500siv2_all"   
+# [19] "X1000g2015aug_all"  "cosmic80"           "CADD13_PHRED"       "FATHMM_noncoding"   "FATHMM_coding"   
+
+```
+
+# Find the matches in the data
+
+Need to search for known mutations from the SeraCare samples in the variant calling output tables. 
+Thankfully this time I have the exact matches already listed in the `selected_mutations_file` file so I do not need to implement crazy pattern searching like last time to find the matching variant entries from the experimental output.
+
+```{r}
+lofreq_matches <- loFreq_annotations[loFreq_annotations[["AAChange.refGene"]] %in% selected_mutations[['NGS.580.LoFreq.Nomenclature']], ]
+GATK_matches <- GATK_annotations[GATK_annotations[["AAChange.refGene"]] %in% selected_mutations[['NGS.580.LoFreq.Nomenclature']], ]
+# use lofreq because it has higher sensitivity! 
+```
+
+Next we need to clean up the `lofreq_matches` dataframe some more for plotting.
+- fix the "dilution" and "starting_material" column entries and convery them to ordered factors
+- remove the HapMap-only samples from the df (they did not match any variants, which is to be expected)
+- add a MutationID column
+- save a hard copy of the table to file
+
+```{r}
+write.table(x = lofreq_matches, file = "/ifs/data/molecpathlab/NGS580_WES-development/SeraSeq-dilution-detection-limit/lofreq_matches.tsv", quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+# get rid of the HapMap samples for the plots
+lofreq_matches <- lofreq_matches[! grepl(pattern = "HapMap", x = lofreq_matches[["SAMPLE"]] ), ]
+nrow(lofreq_matches)
+# [1] 464
+
+# add the sample_index fields, except for hapmap
+sample_index_samples <- sample_index[! grepl(pattern = "HapMap", x = sample_index[["sample"]]), ]
+
+# merge in the fields from the original tables
+lofreq_matches <- merge(x = lofreq_matches, y = sample_index_samples, by.x = 'SAMPLE', by.y = 'sample', all = TRUE)
+nrow(lofreq_matches)
+# [1] 464
+
+lofreq_matches <- merge(x = lofreq_matches, y = selected_mutations, by.x = 'AAChange.refGene', by.y = 'NGS.580.LoFreq.Nomenclature', all = TRUE)
+nrow(lofreq_matches)
+# [1] 464
+
+# need to clean up the table some more; 
+# - convert dilution, starting material to numerics
+
+lofreq_matches[["dilution"]] <- gsub(pattern = "1|1", replacement = "1", x = lofreq_matches[["dilution"]], fixed = TRUE)
+lofreq_matches[["dilution"]] <- gsub(pattern = "1|2", replacement = "0.5", x = lofreq_matches[["dilution"]], fixed = TRUE)
+lofreq_matches[["dilution"]] <- gsub(pattern = "1|4", replacement = "0.25", x = lofreq_matches[["dilution"]], fixed = TRUE)
+
+# reorder the factor levels
+lofreq_matches[["dilution"]] <- factor(x = lofreq_matches[["dilution"]], levels = sort(as.numeric(unique(lofreq_matches[["dilution"]])), decreasing = TRUE) )
+
+lofreq_matches[["starting_material"]] <- gsub(pattern = 'ng', replacement = '', x = lofreq_matches[["starting_material"]])
+lofreq_matches[["starting_material"]] <- factor(x = lofreq_matches[["starting_material"]], levels = sort(as.numeric(unique(lofreq_matches[["starting_material"]])), decreasing = TRUE) )
+
+# add unique ID columns for the mutations
+lofreq_matches[["MutationID"]] <- paste(lofreq_matches[["Gene.ID"]], lofreq_matches[["SeraCar.Amino.Acid"]], sep = ' ')
+
+
+# save hard copy
+write.table(x = lofreq_matches, file = "/ifs/data/molecpathlab/NGS580_WES-development/SeraSeq-dilution-detection-limit/lofreq_matches_merged.tsv", quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+
+# check that all original varaints are present in the final table
+length(unique(selected_mutations[["NGS.580.LoFreq.Nomenclature"]])) # 35
+length(unique(lofreq_matches[['AAChange.refGene']])) # [1] 35
+
+any(! unique(selected_mutations[["NGS.580.LoFreq.Nomenclature"]]) %in% unique(lofreq_matches[['AAChange.refGene']]))
+# [1] FALSE
+```
+
+# Plots
+
+Now we will make some plots; we will start with `ggplot2` bar plots, then make them interactive to better explore the data with `plotly`. 
+
+```{r}
+library("ggplot2")
+library("plotly")
+
+# plot the depth 
+mutation_plot <- ggplot(data = lofreq_matches, aes(x = MutationID, y = DEPTH, fill = starting_material)) +  
+    facet_grid(starting_material~dilution) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+    ggtitle("Variant Depth per Dilution Factor & Starting Material (ng)") +
+    geom_bar(position = "dodge", stat = "identity") + 
+    scale_y_continuous(breaks = seq(0, max(lofreq_matches[["DEPTH"]]), 100)) + 
+    geom_hline(aes(yintercept = 200), linetype="dotted")
+
+mutation_plotly <- ggplotly(mutation_plot, tooltip = "all")
+
+pdf(file = '/ifs/data/molecpathlab/NGS580_WES-development/SeraSeq-dilution-detection-limit/lofreq_mutations_depth.pdf', width = 18, height = 14)
+print(mutation_plot)
+dev.off()
+
+htmlwidgets::saveWidget(as_widget(mutation_plotly), file = "/ifs/data/molecpathlab/NGS580_WES-development/SeraSeq-dilution-detection-limit/lofreq_mutations_depth.html", selfcontained = TRUE)
+
+
+# plot the freq
+mutation_plot_freq <- ggplot(data = lofreq_matches, aes(x = MutationID, y = FREQ, fill = starting_material)) +  
+    facet_grid(starting_material~dilution) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+    ggtitle("Variant Frequency per Dilution Factor & Starting Material (ng)") +
+    geom_bar(position = "dodge", stat = "identity") +
+    scale_y_continuous(breaks = seq(0, max(lofreq_matches[["FREQ"]]), 0.01))
+
+mutation_plotly_freq <- ggplotly(mutation_plot_freq, tooltip = "all")
+
+pdf(file = '/ifs/data/molecpathlab/NGS580_WES-development/SeraSeq-dilution-detection-limit/lofreq_mutations_freq.pdf', width = 18, height = 14)
+print(mutation_plot_freq)
+dev.off()
+
+htmlwidgets::saveWidget(as_widget(mutation_plotly_freq), file = "/ifs/data/molecpathlab/NGS580_WES-development/SeraSeq-dilution-detection-limit/lofreq_mutations_freq.html", selfcontained = TRUE)
+
+```
