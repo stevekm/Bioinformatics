@@ -1,0 +1,448 @@
+---
+title: "NGS580 Variant Filtering Demo"
+author: "Stephen Kelly"
+date: "6/1/2017"
+output:
+  html_document:
+    css: styles.css
+    keep_md: yes
+    number_sections: true
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Setup {.tabset .tabset-pills}
+
+## Hide
+
+## Show
+Need to find ways to filter the variant list output from the current NGS580 pipeline
+
+Suggested methods:
+- exlude dbSNP variants
+- include COMSIC variants
+- include Cornell Knowledge Base variants
+
+Need to do:
+- get annotated variants from all samples of a recent run
+- Find overlap of number of variants in all categories
+- Make venn and/or UpSet plot
+
+Gather the data. Make hard copy of the data here. 
+
+Annotations from the latest NGS580 run
+```{r, engine='bash', eval=FALSE}
+analysis_dir="/ifs/data/molecpathlab/NGS580_WES/170526_NB501073_0011_AHCJTYBGX2/results_2017-05-31_11-18-08" # where the data comes from
+GATK_dir="${analysis_dir}/VCF-GATK-HC-annot"
+LoFreq_dir="${analysis_dir}/VCF-LoFreq-annot"
+
+GATK_summary="${analysis_dir}/summary.VCF-GATK-HC-annot.csv"
+LoFreq_summary="${analysis_dir}/summary.VCF-LoFreq-annot.csv"
+
+project_dir="/ifs/data/molecpathlab/NGS580_WES-development/variant_filtering" # current location
+
+cp "$GATK_summary" "$project_dir"
+cp "$LoFreq_summary" "$project_dir"
+cp -vr "$GATK_dir" "$project_dir"
+cp -vr "$LoFreq_dir" "$project_dir"
+```
+
+example Files to look at:
+MP12345-B12345.combined.txt
+
+contains annotation + VCF meta data; http://annovar.openbioinformatics.org/en/latest/user-guide/download/
+- cosmic80 = COSMIC database
+- snp138 = dbSNP with ANNOVAR index files
+- snp138NonFlagged = dbSNP with ANNOVAR index files, after removing those flagged SNPs (SNPs < 1% minor allele frequency (MAF) (or unknown), mapping only once to reference assembly, flagged in dbSnp as "clinically associated")
+
+
+Cornell Knowledge Base file from before:
+
+```{r, engine='bash', eval=FALSE}
+kb_file="/ifs/data/molecpathlab/IonTorrent_reporter/pipeline/clinical_interpretations/IPMKB_interpretations_utf8.tsv"
+project_dir="/ifs/data/molecpathlab/NGS580_WES-development/variant_filtering" # current location
+
+cp "$kb_file" "${project_dir}/"
+
+```
+
+
+# Analysis {.tabset .tabset-pills}
+
+## Hide
+
+## Show
+
+
+Load a sample dataset in R
+
+```{r}
+
+project_dir <- "/ifs/data/molecpathlab/NGS580_WES-development/variant_filtering"
+GATK_dir <- file.path(project_dir, "VCF-GATK-HC-annot")
+LoFreq_dir <- file.path(project_dir, "VCF-LoFreq-annot")
+
+venn_output_dir <- file.path(project_dir, "venn_output")
+dir.create(path = venn_output_dir, recursive = TRUE)
+
+table_output_dir <- file.path(project_dir, "filtered_table_output")
+dir.create(path = table_output_dir, recursive = TRUE)
+
+kb_file <- file.path(project_dir, "IPMKB_interpretations_utf8.tsv")
+kb_df <- read.delim(file = kb_file, header = TRUE, sep = '\t')
+
+GATK_files <- setNames(object = dir(GATK_dir, pattern = ".combined.txt", full.names = TRUE), nm = dir(GATK_dir, pattern = ".combined.txt"))
+
+#  dput(colnames(df))
+# c("X.MUT", "SAMPLE", "CHR", "POS", "QUAL", "DEPTH", "FREQ", "Ref", 
+# "Alt", "Func.refGene", "Gene.refGene", "GeneDetail.refGene", 
+# "ExonicFunc.refGene", "AAChange.refGene", "snp138", "snp138NonFlagged", 
+# "ExAC_ALL", "esp6500siv2_all", "X1000g2015aug_all", "cosmic80", 
+# "CADD13_PHRED", "FATHMM_noncoding", "FATHMM_coding")
+
+make_annotation_variant_list <- function(df){
+    dbSNP_col <- "snp138" 
+    dbSNP_nonflag_col <- "snp138NonFlagged"
+    COSMIC_col <- "cosmic80"
+    varaint_col <- "X.MUT"
+    MAF_col <- "X1000g2015aug_all"
+    exonic_func_col <- "ExonicFunc.refGene"
+    
+    all_variants <- as.character(df[[varaint_col]])
+    COSMIC_variants <- as.character(df[df[COSMIC_col] != '.', varaint_col])
+    dbSNP_variants <-  as.character(df[ which( df[[dbSNP_col]] != '.' | df[[dbSNP_nonflag_col]] != '.') , varaint_col])
+    MAF_01_variants <- as.character(df[ which( as.numeric(as.character(df[[MAF_col]])) > 0.01  ) , varaint_col]) # 
+    notSynon_variants <- as.character(df[ which( as.character(df[[exonic_func_col]]) != "synonymous SNV"  ) , varaint_col])
+    variant_list <- list("AllVariants" = all_variants,
+                         "COSMIC" = COSMIC_variants,
+                         "dbSNP" = dbSNP_variants,
+                         "MAF_01" = MAF_01_variants,
+                         "notSynonymousSNV" = notSynon_variants)
+    
+    return(variant_list)
+    # make sure there are no duplicate variants listed
+    # length(as.character(df[[varaint_col]])) == length(unique(as.character(df[[varaint_col]])))
+}
+
+
+get_plot_colors <- function(variant_list){
+    index_colors <- c("black", "red", "blue", "green", "orange")
+    plot_colors <- character(0)
+    for(i in seq_along(names(variant_list))){
+        plot_colors <- c(plot_colors, index_colors[i])
+    }
+    return(plot_colors)
+}
+
+make_venn_from_annotation_files <- function(annot_files, output_file = FALSE){
+    library("VennDiagram")
+    
+    if(output_file != FALSE) pdf(file = output_file, width = 10, height = 10, onefile = TRUE)
+    for(i in seq_along(annot_files)){
+        annot_file <- annot_files[i]
+        
+        df <- read.delim(file = annot_file, header = TRUE, sep = '\t')
+        variant_list <- make_annotation_variant_list(df)
+        
+        sample_name <- unique(as.character(df[["SAMPLE"]]))[1]
+        
+        alpha_values <- rep(0.2, length(names(variant_list)))
+        
+        venn_colors <- get_plot_colors(variant_list)
+        
+        venn_plot <- venn.diagram(x = variant_list, 
+                                  filename = NULL, 
+                                  main = sample_name, 
+                                  fill = venn_colors, 
+                                  col = venn_colors, 
+                                  cat.col = venn_colors, 
+                                  alpha = alpha_values, 
+                                  scaled = TRUE)
+        grid.draw(venn_plot)
+        grid.newpage()
+    }
+    
+    if(output_file != FALSE) dev.off()
+}
+
+
+
+make_upset_from_annotation_files <- function(annot_files, output_file = FALSE){
+    library("UpSetR")
+    if(output_file != FALSE) pdf(file = output_file, width = 10, height = 10, onefile = TRUE)
+    
+    for(i in seq_along(annot_files)){
+        annot_file <- annot_files[i]
+        
+        df <- read.delim(file = annot_file, header = TRUE, sep = '\t')
+        variant_list <- make_annotation_variant_list(df)
+        
+        sample_name <- unique(as.character(df[["SAMPLE"]]))[1]
+        
+        sample_title <- sample_name
+        upset(fromList(variant_list), order.by = "freq")
+        # text(x = 0, y = 1, sample_title) # add a title
+        grid.text(label = sample_title, x = 0.5, y = 0.95, just = "left")
+    }
+    if(output_file != FALSE) dev.off()
+}
+
+# make_venn_from_annotation_files(annot_files = GATK_files, output_file = file.path(venn_output_dir, "GATK_variants_venn.pdf"))
+
+# make_upset_from_annotation_files(annot_files = GATK_files, output_file = file.path(venn_output_dir, "GATK_variants_upset.pdf"))
+
+
+
+# # # # # #
+filter_annotation_df <- function(df){
+    dbSNP_col <- "snp138" 
+    dbSNP_nonflag_col <- "snp138NonFlagged"
+    COSMIC_col <- "cosmic80"
+    varaint_col <- "X.MUT"
+    MAF_col <- "X1000g2015aug_all"
+    exonic_func_col <- "ExonicFunc.refGene"
+    gene_func_col <- "Func.refGene"
+    
+    message(sprintf("Total number: %s", nrow(df)))
+    
+    # remove dbSNP
+    df <- df[ which( df[[dbSNP_col]] == '.' | df[[dbSNP_nonflag_col]] == '.') , ]
+    
+    # include only COSMIC
+    df <- df[df[COSMIC_col] != '.', ]
+    
+    # filter MAF
+    df <- df[ which( as.numeric(as.character(df[[MAF_col]])) > 0.01  ) , ]
+    
+    # remove Synonmous SNV
+    df <- df[ which( as.character(df[[exonic_func_col]]) != "synonymous SNV"  ) , ]
+    
+    # filter intronic
+    df <- df[ which( as.character(df[[gene_func_col]]) != "intronic"  ) , ]
+    
+    message(sprintf("Total number: %s", nrow(df)))
+    return(df)
+}
+
+make_annotation_variant_list_nodbSNP <- function(df){
+    dbSNP_col <- "snp138" 
+    dbSNP_nonflag_col <- "snp138NonFlagged"
+    COSMIC_col <- "cosmic80"
+    varaint_col <- "X.MUT"
+    MAF_col <- "X1000g2015aug_all"
+    exonic_func_col <- "ExonicFunc.refGene"
+    gene_func_col <- "Func.refGene"
+    
+    
+    message(sprintf("Total number: %s", nrow(df)))
+    df <- df[ which( df[[dbSNP_col]] == '.' | df[[dbSNP_nonflag_col]] == '.') , ]
+    message(sprintf("Without dbSNP: %s", nrow(df)))
+    
+    all_variants <- as.character(df[[varaint_col]])
+    COSMIC_variants <- as.character(df[df[COSMIC_col] != '.', varaint_col])
+    MAF_01_variants <- as.character(df[ which( as.numeric(as.character(df[[MAF_col]])) > 0.01  ) , varaint_col])
+    notSynon_variants <- as.character(df[ which( as.character(df[[exonic_func_col]]) != "synonymous SNV"  ) , varaint_col])
+    notIntronic_variants <- as.character(df[ which( as.character(df[[gene_func_col]]) != "intronic"  ) , varaint_col])
+    variant_list <- list("AllVariants" = all_variants,
+                         "COSMIC" = COSMIC_variants,
+                         "MAF_01" = MAF_01_variants,
+                         "notSynonymousSNV" = notSynon_variants,
+                         "notIntronic" = notIntronic_variants)
+    
+    return(variant_list)
+    # make sure there are no duplicate variants listed
+    # length(as.character(df[[varaint_col]])) == length(unique(as.character(df[[varaint_col]])))
+}
+
+make_venn_from_annotation_files_nodbSNP <- function(annot_files, output_file = FALSE){
+    library("VennDiagram")
+    
+    if(output_file != FALSE) pdf(file = output_file, width = 10, height = 10, onefile = TRUE)
+    for(i in seq_along(annot_files)){
+        annot_file <- annot_files[i]
+        
+        df <- read.delim(file = annot_file, header = TRUE, sep = '\t')
+        variant_list <- make_annotation_variant_list_nodbSNP(df)
+        
+        sample_name <- unique(as.character(df[["SAMPLE"]]))[1]
+        message(sprintf("%s", nrow(sample_name)))
+        alpha_values <- rep(0.2, length(names(variant_list)))
+        
+        venn_colors <- get_plot_colors(variant_list)
+        
+        venn_plot <- venn.diagram(x = variant_list, 
+                                  filename = NULL, 
+                                  main = sample_name, 
+                                  fill = venn_colors, 
+                                  col = venn_colors, 
+                                  cat.col = venn_colors, 
+                                  alpha = alpha_values, 
+                                  scaled = TRUE)
+        grid.draw(venn_plot)
+        grid.newpage()
+    }
+    
+    if(output_file != FALSE) dev.off()
+}
+
+
+make_upset_from_annotation_files_nodbSNP <- function(annot_files, output_file = FALSE){
+    library("UpSetR")
+    if(output_file != FALSE) pdf(file = output_file, width = 10, height = 10, onefile = TRUE)
+    
+    for(i in seq_along(annot_files)){
+        annot_file <- annot_files[i]
+        
+        df <- read.delim(file = annot_file, header = TRUE, sep = '\t')
+        variant_list <- make_annotation_variant_list_nodbSNP(df)
+        
+        sample_name <- unique(as.character(df[["SAMPLE"]]))[1]
+        message(sprintf("%s", nrow(sample_name)))
+        sample_title <- sample_name
+        upset(fromList(variant_list), order.by = "freq")
+        # text(x = 0, y = 1, sample_title) # add a title
+        grid.text(label = sample_title, x = 0.5, y = 0.95, just = "left")
+    }
+    if(output_file != FALSE) dev.off()
+}
+
+save_filtered_tables <- function(annot_files){
+    for(i in seq_along(annot_files)){
+        annot_file <- annot_files[i]
+        df <- read.delim(file = annot_file, header = TRUE, sep = '\t')
+        og_colnames <- colnames(read.delim(file = annot_file, header = TRUE, sep = '\t', check.names = FALSE, nrows = 1))
+        sample_name <- unique(as.character(df[["SAMPLE"]]))[1]
+        df <- filter_annotation_df(df)
+        colnames(df) <- og_colnames
+        output_file <- file.path(table_output_dir, paste0(sample_name, ".filtered.tsv"))
+        write.table(x = df, file = output_file, quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+    }
+}
+
+
+make_sample_data_list <- function(annot_files){
+    library("VennDiagram")
+    data_list <- list()
+    # data_list <- rep(list(list()), length(annot_files))
+    for(i in seq_along(annot_files)){
+        annot_file <- annot_files[i]
+        
+        df <- read.delim(file = annot_file, header = TRUE, sep = '\t')
+        sample_name <- unique(as.character(df[["SAMPLE"]]))[1]
+
+        data_list[[sample_name]] <- list()
+        data_list[[sample_name]][["raw_data"]] <- df
+        
+        variant_list <- make_annotation_variant_list_nodbSNP(df)
+        # message(sprintf("%s", nrow(sample_name)))
+        alpha_values <- rep(0.2, length(names(variant_list)))
+        
+        venn_colors <- get_plot_colors(variant_list)
+        
+        venn_plot <- venn.diagram(x = variant_list, 
+                                  filename = NULL, 
+                                  main = sample_name, 
+                                  fill = venn_colors, 
+                                  col = venn_colors, 
+                                  cat.col = venn_colors, 
+                                  alpha = alpha_values, 
+                                  scaled = TRUE)
+        data_list[[sample_name]][["venn"]] <- venn_plot
+        
+        df <- filter_annotation_df(df)
+        data_list[[sample_name]][["filtered_data"]] <- df
+    }
+    return(data_list)
+}
+
+mycat <- function(text){
+    # function for formatting text in the report
+    cat(gsub(pattern = "\n", replacement = "  \n", x = text))
+}
+
+# make_venn_from_annotation_files_nodbSNP(annot_files = GATK_files, output_file = file.path(venn_output_dir, "GATK_variants_venn_nodbSNP.pdf"))
+# 
+# make_upset_from_annotation_files_nodbSNP(annot_files = GATK_files, output_file = file.path(venn_output_dir, "GATK_variants_upset_nodbSNP.pdf"))
+# 
+# save_filtered_tables(annot_files = GATK_files)
+
+data_list <- make_sample_data_list(annot_files = GATK_files)
+names(data_list)
+
+make_concatenated_table <- function(data_list){
+    full_df <- data.frame()
+    for(i in seq_along(names(data_list))){
+        name <- names(data_list)[i]
+        if(nrow(full_df) < 1) {
+            full_df <- data_list[[name]][["filtered_data"]]
+        } else {
+            full_df <- rbind(full_df, data_list[[name]][["filtered_data"]])
+        }
+    }
+    return(full_df)
+}
+
+og_colnames <- colnames(read.delim(file = GATK_files[1], header = TRUE, sep = '\t', check.names = FALSE, nrows = 1))
+concat_df <- make_concatenated_table(data_list)
+colnames(concat_df) <- og_colnames
+output_file <- file.path(table_output_dir,"170526_NB501073_0011_AHCJTYBGX2.results_2017-05-31_11-18-08.all_samples_filtered.tsv")
+write.table(x = concat_df, file = output_file, quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+```
+
+# Results
+This section does not work it will not print the tables correctly, see:
+https://github.com/rstudio/DT/issues/67
+```{r, results='asis'}
+library("DT")
+# for(i in seq_along(names(data_list))){
+#     item_name <- names(data_list)[i]
+#     list_item <- data_list[[i]]
+#     mycat(sprintf("## %s \n\n", item_name))
+#     mycat("### Filtered Variants \n\n")
+#     htmltools::tagList(datatable(list_item[["filtered_data"]]))
+#     mycat("\n\n")
+#     mycat("### Venn \n\n")
+#     grid.draw(list_item[["venn"]])
+#     
+#     mycat("\n\n")
+# }
+# htmltools::tagList(
+#   lapply(split(iris, iris[, 5]), datatable)
+# )
+
+
+library("VennDiagram")
+library("DT")
+# set up data
+car_list <- list()
+for(i in seq_along(unique(mtcars[["gear"]]))){
+    gears <- as.character(unique(mtcars[["gear"]])[i])
+    car_list[[gears]] <- list()
+    gears_df <- mtcars[mtcars[["gear"]] == gears , ]
+    car_list[[gears]][["data"]] <- gears_df
+    carb_2 <- rownames(gears_df[gears_df[["carb"]] == 2 , ])
+    carb_4 <- rownames(gears_df[gears_df[["carb"]] == 4 , ])
+    carb_list <- list("carb_2" = carb_2, "carb_4" = carb_4)
+    venn_plot <- venn.diagram(x = carb_list, filename = NULL, main = gears) # grid.draw(venn_plot)
+    car_list[[gears]][["venn"]] <- venn_plot
+}
+
+# print to HTML
+cat("# Results \n \n ")
+for(i in seq_along(names(car_list))){
+    name <- names(car_list)[i]
+    cat("\n \n")
+    cat(sprintf("## Gears: %s {.tabset .tabset-pills} \n \n", name))
+    cat("### Table \n \n")
+    print(htmltools::tagList(datatable(car_list[[i]][["data"]])))
+    cat("\n \n")
+    cat("### Venn \n \n")
+    grid.draw(car_list[[i]][["venn"]])
+    cat("\n \n")
+}
+```
