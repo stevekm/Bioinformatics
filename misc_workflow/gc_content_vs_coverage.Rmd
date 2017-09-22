@@ -1,0 +1,358 @@
+---
+title: "GC Content vs. Coverage"
+author: "Stephen Kelly"
+date: "9/21/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Need to try a correlation between GC content for NGS50 panel genes against coverage, for the best and worst regions
+
+
+Get all the average coverage per sample files from the selected results
+
+```
+[2017-09-21 16:20:10]
+kellys04@phoenix2:~/projects/Clinical_580_gene_panel/molecpathlab/NGS580_WES-development/validation_plots/GC_Content_Coverage_Correlation$ find -L results_dirs/ -type f -name "*_average_coverage_per_sample.tsv" -exec readlink -f  {} \; | sort -u > average_coverage_per_sample_files.txt
+
+```
+
+# Load the files
+
+```{r}
+library("data.table")
+library("ggplot2")
+
+# ~~~~~ FUNCTIONS ~~~~~ #
+chrom_rownames2cols <- function(df){
+    # split rownames into separate columns for chromosome coordinates
+    # chr10:100026989-100027328 
+    df_chrom <- as.data.frame(do.call(rbind, strsplit(rownames(df), ':')))
+    df_chrom <- cbind(df_chrom[1], as.data.frame(do.call(rbind, strsplit(as.character(df_chrom$V2), '-'))))
+    colnames(df_chrom) <- c("chrom", "start", "stop")
+    df <- cbind(df_chrom, df)
+    return(df)
+}
+
+
+
+# get a the paths to the files with the average coverages per target region
+average_coverage_per_sample_files_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/GC_Content_Coverage_Correlation/average_coverage_per_sample_files.txt"
+average_coverage_per_sample_files <- readLines(average_coverage_per_sample_files_file)
+
+# load them all into a single df
+avg_cov_df <- data.frame()
+sample_run_df <- data.frame()
+for(cov_file in average_coverage_per_sample_files){
+    run <- strsplit(basename(cov_file), split = "_results")[[1]][1]
+    df <- read.delim(file = cov_file, header = TRUE, sep = '\t', row.names = 1)
+    
+    df_run <- data.frame(sample = colnames(df))
+    df_run[["run"]] <- run
+    
+    head(df)
+    
+    if(nrow(avg_cov_df) < 1){
+        avg_cov_df <- df
+    } else {
+        avg_cov_df <- cbind(avg_cov_df, df)
+    }
+    
+    if(nrow(sample_run_df) < 1){
+        sample_run_df <- df_run
+    } else {
+        sample_run_df <- rbind(sample_run_df, df_run)
+    }
+}
+
+dim(avg_cov_df)
+# [1] 9909  384
+
+write.table(x = sample_run_df, file = "samples_per_run.tsv", quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+```
+
+
+# Make annotations for the regions
+
+```{r}
+# need to save a copy of the regions in BED format and get some annotations
+avg_cov_df <- chrom_rownames2cols(avg_cov_df)
+chrom_bed <- avg_cov_df[c("chrom", "start", "stop")]
+# remove duplicates
+chrom_bed <- chrom_bed[! duplicated(chrom_bed), ]
+
+dim(avg_cov_df)
+# [1] 9909  387
+
+dim(chrom_bed)
+# [1] 9909    3
+
+# > setwd("~/projects/Clinical_580_gene_panel/molecpathlab/NGS580_WES-development/validation_plots/GC_Content_Coverage_Correlation")
+write.table(x = chrom_bed, file = "target_regions.bed", quote = FALSE, sep = '\t', row.names = FALSE, col.names = FALSE)
+
+```
+
+```
+[2017-09-21 16:34:09]
+kellys04@phoenix2:~/projects/Clinical_580_gene_panel/molecpathlab/NGS580_WES-development/validation_plots/GC_Content_Coverage_Correlation$ git clone git@github.com:stevekm/annotate-peaks.git
+
+[2017-09-21 16:39:03]
+kellys04@phoenix2:~/projects/Clinical_580_gene_panel/molecpathlab/NGS580_WES-development/validation_plots/GC_Content_Coverage_Correlation$ annotate-peaks/ANNOVAR/annotate.R target_regions.bed
+
+```
+
+```{r}
+regions_annotations_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/GC_Content_Coverage_Correlation/target_regions.hg19_multianno.txt"
+regions_annotations <- read.delim(file = regions_annotations_file, header = TRUE, sep = '\t')
+
+dim(regions_annotations)
+# [1] 9909   11
+
+head(regions_annotations)
+#    Chr   Start     End Ref Alt cytoBand Func.refGene Gene.refGene GeneDetail.refGene ExonicFunc.refGene AAChange.refGene
+# 1 chr1 2985824 2985860   0   0  1p36.32       exonic       PRDM16                  .                  .                .
+# 2 chr1 3102689 3103038   0   0  1p36.32       exonic       PRDM16                  .                  .                .
+# 3 chr1 3160651 3160701   0   0  1p36.32       exonic       PRDM16                  .                  .                .
+
+
+# merge the annotations with the coverage data
+avg_cov_df_genes <- merge(x = avg_cov_df, 
+                          y = regions_annotations[c("Chr", "Start", "End", "Func.refGene", "Gene.refGene")], 
+                          by.x = c("chrom", "start", "stop"), 
+                          by.y = c("Chr", "Start", "End"))
+
+dim(avg_cov_df_genes)
+# [1] 9909  389
+
+colnames(avg_cov_df_genes)
+#   [1] "chrom"                          "start"                          "stop"                          
+#   [4] "M85B.NS17.06"    "MP14.NS17.06"     "MP134.NS17.06"    
+# ...
+# [388] "Func.refGene"                   "Gene.refGene"                  
+
+```
+
+Get the fasta for the bed regions
+http://bedtools.readthedocs.io/en/latest/content/tools/getfasta.html
+
+```
+$ wget https://github.com/arq5x/bedtools2/releases/download/v2.26.0/bedtools-2.26.0.tar.gz
+$ tar -zxvf bedtools-2.26.0.tar.gz
+$ cd bedtools2
+$ make
+
+(cd bedtools2; make)
+```
+
+```
+# /ifs/home/kellys04/projects/Clinical_580_gene_panel/molecpathlab/NGS580_WES-development/validation_plots/GC_Content_Coverage_Correlation
+hg19_fa="/local/data/iGenomes/Homo_sapiens/UCSC/hg19/Sequence/WholeGenomeFasta/genome.fa"
+
+module load bedtools/2.26.0
+
+/local/apps/bedtools/2.26.0/bin/bedtools getfasta -fi "$hg19_fa" -bed target_regions.bed -fo target_regions_fasta.bed -tab
+```
+Feature (chr7:13950140-13950140) has length = 0, Skipping.
+
+Merge the fasta back into the data
+
+```{r}
+target_regions_fasta_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/GC_Content_Coverage_Correlation/target_regions_fasta.bed"
+target_regions_fasta <- read.delim(file = target_regions_fasta_file, header = FALSE, sep = '\t')
+dim(target_regions_fasta)
+# [1] 9908    2
+colnames(target_regions_fasta) <- c("region", "fasta")
+head(target_regions_fasta, 1)
+#                 region                                fasta
+# 1 chr1:2985824-2985860 TGCGATCCAAGGCGAGGGCGAGGAAGCTAGCCAAAA
+
+
+# need to merge back with the df 
+# need to make a region col there
+# do.call(paste, c(dat[c("C3", "C4")], sep = "")) 
+regions <- do.call(paste, c(avg_cov_df_genes[c("chrom", "start")], sep = ":"))
+regions[1]
+# [1] "chr1:110091343"
+regions <- paste(regions, avg_cov_df_genes[["stop"]], sep = "-")
+avg_cov_df_genes[["region"]] <- regions
+head(avg_cov_df_genes[c(c("chrom", "start", "stop", "region"))])
+#   chrom     start      stop                   region
+# 1  chr1 110091343 110091460 chr1:110091343-110091460
+# 2  chr1 110116359 110116401 chr1:110116359-110116401
+# 3  chr1 110116518 110116659 chr1:110116518-110116659
+# 4  chr1 110121826 110121983 chr1:110121826-110121983
+
+avg_cov_df_genes_fasta <- merge(x = avg_cov_df_genes, y = target_regions_fasta, by = "region")
+dim(avg_cov_df_genes_fasta)
+# [1] 9908  391
+
+```
+
+Calculate the GC content per region
+
+```{r}
+# convert to character
+avg_cov_df_genes_fasta[["fasta"]] <- as.character(avg_cov_df_genes_fasta[["fasta"]])
+
+# convert to upper
+avg_cov_df_genes_fasta[["fasta"]] <- toupper(avg_cov_df_genes_fasta[["fasta"]])
+
+# count the number of each base in each fasta
+# sapply(regmatches(x, gregexpr("g", x)), length)
+avg_cov_df_genes_fasta[["G_total"]] <- sapply(regmatches(avg_cov_df_genes_fasta[["fasta"]], gregexpr("G", avg_cov_df_genes_fasta[["fasta"]])), length)
+avg_cov_df_genes_fasta[["C_total"]] <- sapply(regmatches(avg_cov_df_genes_fasta[["fasta"]], gregexpr("C", avg_cov_df_genes_fasta[["fasta"]])), length)
+avg_cov_df_genes_fasta[["T_total"]] <- sapply(regmatches(avg_cov_df_genes_fasta[["fasta"]], gregexpr("T", avg_cov_df_genes_fasta[["fasta"]])), length)
+avg_cov_df_genes_fasta[["A_total"]] <- sapply(regmatches(avg_cov_df_genes_fasta[["fasta"]], gregexpr("A", avg_cov_df_genes_fasta[["fasta"]])), length)
+
+# count the total length o the sequence
+avg_cov_df_genes_fasta[["fasta_total"]] <- sapply(avg_cov_df_genes_fasta[["fasta"]], nchar)
+
+# nchar(avg_cov_df_genes_fasta[["fasta"]][1])
+
+avg_cov_df_genes_fasta[["GC_total"]] <- avg_cov_df_genes_fasta[["G_total"]] + avg_cov_df_genes_fasta[["C_total"]]
+avg_cov_df_genes_fasta[["GC_content"]] <- avg_cov_df_genes_fasta[["GC_total"]] / avg_cov_df_genes_fasta[["fasta_total"]]
+
+head(avg_cov_df_genes_fasta[c("fasta", "fasta_total", "GC_content", "G_total", "GC_total")])
+
+write.table(x = avg_cov_df_genes_fasta, file = "avg_cov_df_genes_fasta.tsv", quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+```
+
+Start plotting the GC content vs. Coverage
+
+```{r}
+dput(colnames(avg_cov_df_genes_fasta))
+# c("region", "chrom", "start", "stop",
+#   # ... sample IDs here... 
+# "Func.refGene", 
+# "Gene.refGene", "fasta", "G_num", "fasta_total", "G_total", "C_total", 
+# "T_total", "A_total", "GC_total", "GC_content")
+
+# all columns that are not samples
+non_sample_cols <- c("region", "chrom", "start", "stop", "Func.refGene", 
+"Gene.refGene", "fasta", "G_num", "fasta_total", "G_total", "C_total", 
+"T_total", "A_total", "GC_total", "GC_content")
+
+sample_cols <- colnames(avg_cov_df_genes_fasta)[which( ! colnames(avg_cov_df_genes_fasta) %in% non_sample_cols)]
+length(sample_cols)
+# [1] 384
+
+# columns to use for the plot
+plot_cols <- c("region", "Gene.refGene", "GC_content")
+
+# melt the df to long format
+avg_cov_df_long <- reshape2::melt(avg_cov_df_genes_fasta[c(sample_cols, plot_cols)], 
+                                  id.vars = plot_cols, 
+                                  variable.name = "sample", 
+                                  value.name = "coverage")
+
+head(avg_cov_df_long)
+#                     region Gene.refGene GC_content                      sample coverage
+# 1 chr1:110091343-110091460        GNAI3  0.5897436 ABCD0685B.NS17.06   868.30
+# 2 chr1:110116359-110116401        GNAI3  0.4047619 ABCD0685B.NS17.06   662.19
+
+dim(avg_cov_df_long)
+# [1] 3804672       5
+
+# subset for only IonTorrent 50 genes list
+IonTorrent_genes <- readLines("/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/IonTorrent_reporter_panel_genes.txt")
+IonTorrent_genes <- IonTorrent_genes[which(IonTorrent_genes != "")]
+# there is an IonTorrent gene missing from NGS580
+IonTorrent_genes <- c(IonTorrent_genes, "GNA11")
+
+avg_cov_df_long <- avg_cov_df_long[which(avg_cov_df_long[["Gene.refGene"]] %in% IonTorrent_genes), ]
+dim(avg_cov_df_long)
+# [1] 328320      5
+# [1] 331008      5
+
+# add back the run IDs
+
+avg_cov_df_long <- merge(x = avg_cov_df_long, y = sample_run_df, by = "sample")
+dim(avg_cov_df_long)
+# [1] 331008      6
+
+colnames(avg_cov_df_long)
+# [1] "sample"       "region"       "Gene.refGene" "GC_content"   "coverage"     "run" 
+
+# subset for coverage <1000
+avg_cov_df_long <- avg_cov_df_long[which(avg_cov_df_long[["coverage"]] < 1000), ]
+
+# linear model 
+fit <- lm(GC_content ~ coverage, data = avg_cov_df_long)
+
+summary(fit)
+
+fit_intercept <- signif(fit$coef[[1]],5 )
+fit_slope <- signif(fit$coef[[2]], 5)
+
+lm_formula <- sprintf("y = %s + %s * x", fit_intercept, fit_slope)
+lm_r2 <- sprintf("Adj. R2 = %s", signif(summary(fit)$adj.r.squared, 5))
+lm_p <- sprintf("p = %s", signif(summary(fit)$coef[2,4], 5))
+
+stats_title <- paste(lm_formula, lm_r2, lm_p, sep = ', ')
+# [1] "y = 0.47259 + 5.4948e-05 * x, Adj. R2 = 0.013066, p = 0"
+
+
+library('devtools')
+# https://susanejohnston.wordpress.com/2012/08/09/a-quick-and-easy-function-to-plot-lm-results-in-r/
+devtools::source_gist("524eade46135f6348140", filename = "ggplot_smooth_func.R") 
+
+cov_plot <- ggplot(data = avg_cov_df_long) + 
+    geom_point(aes(x = coverage, y = GC_content, color = Gene.refGene)) + 
+    geom_smooth(aes(x = coverage, y = GC_content), method="lm", alpha = 0) +
+    stat_smooth_func(aes(x = coverage, y = GC_content), 
+                     geom="text", method="lm", hjust=0, vjust = 0, parse=TRUE) +
+    theme(legend.position="none") + 
+    facet_wrap(~Gene.refGene) + 
+    ggtitle(sprintf("GC Content vs. Coverage Across All NGS580 Runs for IT50 genes\nOverall Stats: %s", stats_title))
+
+pdf(file = "coverage_corr_all_runs.pdf", width = 24, height = 24)
+print(cov_plot)
+dev.off()
+
+
+
+
+# it does not look so good
+
+
+# limit to only the latest runs
+# dput(sort(unique(avg_cov_df_long[["run"]])))
+keep_runs <- c("170905_NB501073_0022_AHH5GMBGX3", "170912_NB501073_0023_AHH5LWBGX3", "170915_NB501073_0024_AHH5CVBGX3")
+avg_cov_df_long_recent <- avg_cov_df_long[which(avg_cov_df_long[["run"]] %in% keep_runs), ]
+dim(avg_cov_df_long_recent)
+# [1] 58441     6
+
+
+# linear model 
+fit_recent <- lm(GC_content ~ coverage, data = avg_cov_df_long_recent)
+
+summary(fit_recent)
+
+fit_intercept_recent <- signif(fit_recent$coef[[1]],5 )
+fit_slope_recent <- signif(fit_recent$coef[[2]], 5)
+
+lm_formula_recent <- sprintf("y = %s + %s * x", fit_intercept_recent, fit_slope_recent)
+lm_r2_recent <- sprintf("Adj. R2 = %s", signif(summary(fit_recent)$adj.r.squared, 5))
+lm_p_recent <- sprintf("p = %s", signif(summary(fit_recent)$coef[2,4], 5))
+
+stats_title_recent <- paste(lm_formula_recent, lm_r2_recent, lm_p_recent, sep = ', ')
+# [1] "y = 0.41683 + 0.00018225 * x, Adj. R2 = 0.11975, p = 0"
+
+cov_plot_recent <- ggplot(data = avg_cov_df_long_recent) + 
+    geom_point(aes(x = coverage, y = GC_content, color = Gene.refGene)) + 
+    geom_smooth(aes(x = coverage, y = GC_content), method="lm", alpha = 0) +
+    stat_smooth_func(aes(x = coverage, y = GC_content), 
+                     geom="text", method="lm", hjust=0, vjust = 0, parse=TRUE) +
+    theme(legend.position="none") + 
+    facet_wrap(~Gene.refGene) +
+    ggtitle(sprintf("GC Content vs. Coverage Across Recent NGS580 Runs for IT50 genes\nOverall Stats: %s", stats_title_recent))
+
+pdf(file = "coverage_corr_recent_runs.pdf", width = 24, height = 24)
+print(cov_plot_recent)
+dev.off()
+
+# still doesnt look good its not the GC content driving the coverages there are lots of runs in the data of same GC content but vastly different coverages per samples
+```
