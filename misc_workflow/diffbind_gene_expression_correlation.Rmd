@@ -1,0 +1,837 @@
+---
+title: "Diffbind Gene Expression Correlation"
+author: "Stephen Kelly"
+date: "8/25/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Correlation of ChIP-Seq differential binding (DiffBind) data with gene expression data
+
+Diffbind output location:
+
+```
+/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-29/project_notes/diffbind-custom/output
+```
+
+DiffBind filters:
+- TSS_peak_abs_distance_lessthaneq = 3000
+
+# Alice samples
+
+gene expression data from microarray
+already have table of pairwise change in gene expression per patient
+- uses the 'LR' log ratio columns already present in the dataset
+- - log2( R / D )
+
+
+## Sample ID Pairs
+
+```{r}
+H3K27AC_sample_pairs <- '
+Sample1.R.H3K27AC	Sample1.D.H3K27AC	Sample1	H3K27AC	Sample1.H3K27AC	Alice
+Sample2.R.H3K27AC	Sample2.D.H3K27AC	Sample2	H3K27AC	Sample2.H3K27AC	Alice
+Sample3.R.H3K27AC	Sample3.D.H3K27AC	Sample3	H3K27AC	Sample3.H3K27AC	Alice
+Sample4.R.H3K27AC	Sample4.D.H3K27AC	Sample4	H3K27AC	Sample4.H3K27AC	Alice
+Sample5.R.H3K27AC	Sample5.D.H3K27AC	Sample5	H3K27AC	Sample5.H3K27AC	Alice
+Sample6.R.H3K27AC	Sample6.D.H3K27AC	Sample6	H3K27AC	Sample6.H3K27AC	Alice
+Sample7.R.H3K27AC	Sample7.D.H3K27AC	Sample7	H3K27AC	Sample7.H3K27AC	Alice
+Sample8.R.H3K27AC	Sample8.D.H3K27AC	Sample8	H3K27AC	Sample8.H3K27AC	Alice
+Sample9.R.H3K27AC	Sample9.D.H3K27AC	Sample9	H3K27AC	Sample9.H3K27AC	Susan
+Sample10.R.H3K27AC	Sample10.D.H3K27AC	Sample10	H3K27AC	Sample10.H3K27AC	Susan
+Sample11.R.H3K27AC	Sample11.D.H3K27AC	Sample11	H3K27AC	Sample11.H3K27AC	Susan
+Sample12.R.H3K27AC	Sample12.D.H3K27AC	Sample12	H3K27AC	Sample12.H3K27AC	Susan
+Sample13.R.H3K27AC	Sample13.D.H3K27AC	Sample13	H3K27AC	Sample13.H3K27AC	Susan
+Sample14.R.H3K27AC	Sample14.D.H3K27AC	Sample14	H3K27AC	Sample14.H3K27AC	Susan
+Sample15.R.H3K27AC	Sample15.D.H3K27AC	Sample15	H3K27AC	Sample15.H3K27AC	Susan
+Sample16.R.H3K27AC	Sample16.D.H3K27AC	Sample16	H3K27AC	Sample16.H3K27AC	Susan
+Sample17.R.H3K27AC	Sample17.D.H3K27AC	Sample17	H3K27AC	Sample17.H3K27AC	Susan
+Sample18.R.H3K27AC	Sample18.D.H3K27AC	Sample18	H3K27AC	Sample18.H3K27AC	Susan
+Sample19.R.H3K27AC	Sample19.D.H3K27AC	Sample19	H3K27AC	Sample19.H3K27AC	Susan
+Sample20.R.H3K27AC	Sample20.D.H3K27AC	Sample20	H3K27AC	Sample20.H3K27AC	Susan
+Sample21.R.H3K27AC	Sample21.D.H3K27AC	Sample21	H3K27AC	Sample21.H3K27AC	Susan
+Sample22.R.H3K27AC	Sample22.D.H3K27AC	Sample22	H3K27AC	Sample22.H3K27AC	Susan
+Sample23.R.H3K27AC	Sample23.D.H3K27AC	Sample23	H3K27AC	Sample23.H3K27AC	Susan
+Sample24.R.H3K27AC	Sample24.D.H3K27AC	Sample24	H3K27AC	Sample24.H3K27AC	Susan
+Sample25.R.H3K27AC	Sample25.D.H3K27AC	Sample25	H3K27AC	Sample25.H3K27AC	Susan
+Sample26.R.H3K27AC	Sample26.D.H3K27AC	Sample26	H3K27AC	Sample26.H3K27AC	Susan
+Sample27.R.H3K27AC	Sample27.D.H3K27AC	Sample27	H3K27AC	Sample27.H3K27AC	Susan
+Sample28.R.H3K27AC	Sample28.D.H3K27AC	Sample28	H3K27AC	Sample28.H3K27AC	Susan
+Sample29.R.H3K27AC	Sample29.D.H3K27AC	Sample29	H3K27AC	Sample29.H3K27AC	Alice
+Sample30.R.H3K27AC	Sample30.D.H3K27AC	Sample30	H3K27AC	Sample30.H3K27AC	Alice
+Sample31.R.H3K27AC	Sample31.D.H3K27AC	Sample31	H3K27AC	Sample31.H3K27AC	Alice
+Sample32.R.H3K27AC	Sample32.D.H3K27AC	Sample32	H3K27AC	Sample32.H3K27AC	Alice
+Sample33.R.H3K27AC	Sample33.D.H3K27AC	Sample33	H3K27AC	Sample33.H3K27AC	Alice
+'
+H3K27AC_sample_pairs_df <- read.table(textConnection(H3K27AC_sample_pairs), sep = '\t', stringsAsFactors = FALSE)
+colnames(H3K27AC_sample_pairs_df) <- c('D', 'R', 'Patient', 'Mark', 'Pair', 'Set')
+
+```
+
+## Workflow
+
+```{r}
+# current dir
+proj_dir <- '/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-29/project_notes/diffbind-gene_expression-correlation'
+setwd(proj_dir)
+library('ggplot2')
+library('reshape2')
+library("plotly")
+#
+#
+# PARAMETERS
+#
+#
+
+# number of bp from gene TSS to use for DiffBind peaks
+distancetoFeature_cutoff <- 3000
+
+gene_expression_fc_cutoff <- 1.5
+
+gene_expression_logfc_cutoff <- log2(gene_expression_fc_cutoff)
+
+#
+#
+# FUNCTIONS
+#
+#
+
+# load the external function package I made
+source("analysis_functions.R")
+
+# filter_diffbind_df <- function(df, ratio_cols = FALSE,
+#                                p_value_lessthan = 0.2,
+#                                TSS_peak_abs_distance_lessthaneq = 3000, #
+#                                ratio_base = 1.5){
+#     # custom filter criteria for the DiffBind peaks dataframe
+#     diffbind_chrom_cols <- c("seqnames", "start", "end")
+#     ratio_greaterthan <- log2(ratio_base)
+#     ratio_lessthan <- -log2(ratio_base)
+# 
+#     # subset for loci that pass upper/lower cutoffs
+#     # if(ratio_cols != FALSE){
+#     #     for(ratio_col in ratio_cols){
+#     #         df <- df[ df[[ratio_col]] > ratio_greaterthan | df[[ratio_col]] < ratio_lessthan , ]
+#     #     }
+#     # }
+# 
+#     # subset for peaks with significant p value
+#     df <- df[ df[["p.value"]] < p_value_lessthan , ]
+# 
+#     # subset for peaks closest to gene TSS
+#     df <- subset(df, abs(distancetoFeature) <= TSS_peak_abs_distance_lessthaneq )
+#     return(df)
+# }
+
+#
+#
+# LOAD DATA
+#
+#
+
+
+
+
+# parent dir for diffbind files output
+diffbind_dir <- '/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-29/project_notes/diffbind-custom/output'
+dir(diffbind_dir)
+# [1] "CTCF"     "H3K27AC"  "H3K27ME3" "H3K4ME3"  "H3K9AC"   "H3K9ME3" 
+
+
+# gene expression file from before
+gene_expression_file <- '/ifs/home/kellys04/projects/CarrollLab_Alice_ChIpSeq_2016-03-10/project_notes/integrated_analysis/source_data/gene_expression_microarray/gene_expression_log_ratios.tsv'
+gene_expression_df <- read_microarray_sheet(gene_expression_file)
+gene_expression_df[["gene"]] <- rownames(gene_expression_df)
+gene_expression_df_long <- reshape2::melt(gene_expression_df, id.vars= 'gene', variable.name = "patient", value.name = 'expression') # 
+
+gene_expression_df_long <- gene_expression_df_long[with(gene_expression_df_long, order(-expression)), ]
+
+# load a diffbind file to start
+H3K27AC_diffbind_file <- '/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-29/project_notes/diffbind-custom/output/H3K27AC/diff_bind.D-vs-R.blocking.p100.csv'
+diffbind_df <- read_diffbind_sheet(H3K27AC_diffbind_file)
+
+# save.image("load_data.Rdata", compress = TRUE)
+```
+
+```{r}
+
+#
+#
+# PROCESS DATA
+#
+#
+
+```
+
+```{r}
+
+#
+#
+# MICROARRAY GENE EXPRESSION PLOT
+#
+#
+
+microarray_gene_expression_plots_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-29/project_notes/diffbind-gene_expression-correlation/microarray_gene_expression_plots"
+
+# make hist of the gene expression to get an idea what it lookslike
+gene_expression_plot <- ggplot(data = gene_expression_df_long ) + 
+    geom_tile(aes(x = patient, y = gene, fill = expression)) + 
+    scale_fill_gradient(low = 'blue', high = 'red')
+    # scale_color_gradient2(low = "red", midpoint = 3, mid = "blue", high = "green")
+    # scale_color_gradient2()
+# +    facet_grid( ~ patient)
+# print(gene_expression_plot)
+
+pdf(file = file.path(microarray_gene_expression_plots_dir, 'gene_expression_unscaled.pdf'), width = 18, height = 14)
+print(gene_expression_plot)
+dev.off()
+
+gene_expression_plotly <- ggplotly(gene_expression_plot, tooltip = "all")
+htmlwidgets::saveWidget(as_widget(gene_expression_plotly), file = file.path(microarray_gene_expression_plots_dir, 'gene_expression.html'), selfcontained = TRUE)
+
+
+# boxplot
+gene_expression_boxplot <- ggplot(data = gene_expression_df_long ) + 
+    geom_boxplot(aes(x = patient, y = expression)) +
+    ggtitle("Microarray Gene Expression") + 
+    ylab("gene expression log2( R / D )")
+
+pdf(file = file.path(microarray_gene_expression_plots_dir, 'gene_expression_boxplot.pdf'), width = 10, height = 10)
+print(gene_expression_boxplot)
+dev.off()
+
+
+
+
+# HEATMAP
+
+library(gplots)
+# File="input.tsv"
+# 
+# counts <- read.table(File, header = TRUE)
+# row.names(counts) <- counts$gene #row names
+# counts <- counts[,-1]
+# # top 500
+counts <- gene_expression_df
+counts <- counts[, colnames(counts)[!colnames(counts) %in% 'gene']]
+counts <- counts[ order(rowMeans(counts), decreasing = T), ]
+# counts <- head(counts,500)
+data <- data.matrix(counts)
+head(data)
+dim(data)
+
+mycol <- colorRampPalette(c( "blue" ,"white", "red"))(n = 100)
+
+pdf(file = file.path(microarray_gene_expression_plots_dir, 'gene_expression_scaled_heatmap2.pdf'), width = 12, height = 12)
+heatmap.2(data, col = mycol,key=TRUE, symm=F,symkey=F,trace="none",density.info="none",Rowv=T, Colv=T,margins=c(32,15),keysize=0.55,key.par = list(cex=0.5),scale="row")
+dev.off()
+
+```
+
+```{r}
+
+data_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-29/project_notes/diffbind-gene_expression-correlation/data"
+
+
+# get the genes in common between the diffbind and gene expression data
+gene_names_overlap <- intersect(rownames(gene_expression_df), unique(diffbind_df[["external_gene_name"]]))
+
+# subset for closest genes
+diffbind_df_clean <- subset(diffbind_df, abs(distancetoFeature) <= distancetoFeature_cutoff)
+
+# subset for intersected genes only
+diffbind_df_clean <- droplevels(diffbind_df_clean[diffbind_df_clean[["external_gene_name"]] %in% gene_names_overlap,])
+
+# remove extraneous columns
+diffbind_cols_to_remove <-c("seqnames","start","end","width","strand","Conc","Conc_D","Conc_R","Fold",
+                            "p.value","FDR","feature","gene_biotype","start_position","end_position",
+                            "insideFeature","shortestDistance","fromOverlappingOrNearest", "distancetoFeature")
+diffbind_df_clean <- diffbind_df_clean[,! colnames(diffbind_df_clean) %in% diffbind_cols_to_remove]
+
+# new df for just the pairwise comparison
+diffbind_df_clean_pairwise <- diffbind_df_clean[, 'external_gene_name', drop = FALSE]
+
+nrow(diffbind_df_clean_pairwise) 
+# [1] 4510
+
+length(unique(diffbind_df_clean_pairwise[['external_gene_name']])) 
+# [1] 4421
+
+# add pairwise DiffBind values
+# only for Alice samples
+for(i in seq(nrow(H3K27AC_sample_pairs_df))){
+    irow <- H3K27AC_sample_pairs_df[i, ]
+    
+    R_sample <- irow[['R']]
+    D_sample <- irow[['D']]
+    FC_sample_colname <- irow[['Pair']]
+    
+    # skip entry if its not Alice's
+    if(irow[['Set']] != 'Alice') break
+    
+    # calculate fold change for the two samples
+    fc <- log2(diffbind_df_clean[[R_sample]] / diffbind_df_clean[[D_sample]])
+    
+    # add column to the df
+    diffbind_df_clean_pairwise[[ irow[['Patient']] ]] <- fc
+}
+
+
+# melt it into long format for plotting
+diffbind_df_clean_pairwise_long <- reshape2::melt(diffbind_df_clean_pairwise, 
+                                             id.vars="external_gene_name",
+                                             variable.name="patient",
+                                             value.name="log2FC")
+
+# quantile normalization of a dataframe
+library("preprocessCore")
+library('data.table')
+# Warning in install.packages :
+#   package ‘preprocessCore’ is not available (for R version 3.2.3)
+
+#
+# !! CANT DO THIS ON HPCF BECAUSE WRONG R VERSION 
+# !! SAVE HARD COPY, DO IT ON ANOTHER R VERSION, READ IT BACK IN
+#
+
+#  Save on HPCF
+dim(diffbind_df_clean_pairwise) # [1] 4510    9
+data_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-29/project_notes/diffbind-gene_expression-correlation/data"
+write.table(x = diffbind_df_clean_pairwise, file = file.path(data_dir, 'H3K27AC_diffbind_df_clean_pairwise.csv'), sep = ',', quote = FALSE, row.names = FALSE)
+# save(diffbind_df_clean_pairwise, file = file.path(data_dir, 'H3K27AC_diffbind_df_clean_pairwise.Rdata'), compress = TRUE)
+
+# Load on Phoenix
+diffbind_df_clean_pairwise <- read.delim(file = file.path(data_dir, 'H3K27AC_diffbind_df_clean_pairwise.csv'), header = TRUE, sep = ',')
+dim(diffbind_df_clean_pairwise) # [1] 4510    9
+
+# make normalized df
+diffbind_df_clean_pairwise_quantnorm <- cbind(setnames(x = as.data.frame(normalize.quantiles(as.matrix(diffbind_df_clean_pairwise[, colnames(diffbind_df_clean_pairwise)[!colnames(diffbind_df_clean_pairwise) %in% 'external_gene_name'] ]))), 
+                                            colnames(diffbind_df_clean_pairwise)[!colnames(diffbind_df_clean_pairwise) %in% 'external_gene_name'] ),  diffbind_df_clean_pairwise[, 'external_gene_name', drop = FALSE])
+
+# Save on Phoenix
+write.table(x = diffbind_df_clean_pairwise_quantnorm, file = file.path(data_dir, 'H3K27AC_diffbind_df_clean_pairwise_quantnorm.csv'), sep = ',', quote = FALSE, row.names = FALSE)
+
+
+
+
+
+
+# load on HPCF
+diffbind_df_clean_pairwise_quantnorm <- read.delim(file = file.path(data_dir, 'H3K27AC_diffbind_df_clean_pairwise_quantnorm.csv'), header = TRUE, sep = ',')
+
+# melt it into long format for plotting
+diffbind_df_clean_pairwise_quantnorm_long <- reshape2::melt(diffbind_df_clean_pairwise_quantnorm, 
+                                                            id.vars="external_gene_name",
+                                                            variable.name="patient",
+                                                            value.name="log2FC_quantNorm")
+
+# merge the two dfs
+nrow(diffbind_df_clean_pairwise_long)
+# [1] 36080
+nrow(diffbind_df_clean_pairwise_quantnorm_long)
+# [1] 36080
+
+colnames(diffbind_df_clean_pairwise_long)
+# [1] "external_gene_name" "patient"            "log2FC"            
+colnames(diffbind_df_clean_pairwise_quantnorm_long)
+# [1] "external_gene_name" "patient"            "log2FC_quantNorm"  
+
+diffbind_df_clean_pairwise_cbind <- cbind(diffbind_df_clean_pairwise_long, diffbind_df_clean_pairwise_quantnorm_long[,! colnames(diffbind_df_clean_pairwise_quantnorm_long) %in% colnames(diffbind_df_clean_pairwise_long), drop = FALSE])
+
+head(diffbind_df_clean_pairwise_cbind)
+#   external_gene_name patient     log2FC log2FC_quantNorm
+# 1             FAM87B     Sample1 -5.1347686        -5.351794
+# 2             SAMD11     Sample1 -0.8534457        -2.391334
+
+# melt it again
+diffbind_df_clean_pairwise_cbind_long <- reshape2::melt(diffbind_df_clean_pairwise_cbind, 
+                                                        id.vars=c("external_gene_name", "patient"),
+                                                        variable.name="diffbind_stat_type",
+                                                        value.name="diffbind")
+
+
+setnames(x = diffbind_df_clean_pairwise_cbind_long, old = 'external_gene_name', new = 'gene')
+head(diffbind_df_clean_pairwise_cbind_long)
+#   gene patient diffbind_stat_type   diffbind
+# 1             FAM87B     Sample1             log2FC -5.1347686
+# 2             SAMD11     Sample1             log2FC -0.8534457
+
+dim(diffbind_df_clean_pairwise_cbind_long)
+# [1] 72160     4
+
+
+
+#
+#
+# combine with the gene expression data
+#
+#
+
+head(gene_expression_df_long)
+#            gene patient expression
+# 15958       HBM     Sample1  10.921546
+# 3934        CA1     Sample1   9.341632
+dim(gene_expression_df_long)
+# [1] 313668      3
+
+# drop the gene's that have expression cutoff outside desired range
+# gene_expression_logfc_cutoff
+
+# merge, excluding non-matching entries in both datasets
+diffbind_df_clean_pairwise_cbind_long_merge_gene_expr <- merge(x = diffbind_df_clean_pairwise_cbind_long, y = gene_expression_df_long, by = c('gene', 'patient'))
+
+head(diffbind_df_clean_pairwise_cbind_long_merge_gene_expr)
+#    gene patient diffbind_stat_type  diffbind  expression
+# 1 A2ML1     Sample1   log2FC_quantNorm -6.731835 -0.06897689
+# 2 A2ML1     Sample1             log2FC -6.458338 -0.06897689
+dim(diffbind_df_clean_pairwise_cbind_long_merge_gene_expr)
+# [1] 72160     5
+```
+
+
+```{r}
+
+#
+#
+# DIFFBIND GENE EXPRESSION CORRELATION
+#
+#
+
+# correlations
+with(subset(diffbind_df_clean_pairwise_cbind_long_merge_gene_expr, subset = (patient == 'Sample1' & diffbind_stat_type == 'log2FC')), 
+     cor(diffbind, expression))
+# [1] -0.1271341
+
+with(subset(diffbind_df_clean_pairwise_cbind_long_merge_gene_expr, subset = (patient == 'Sample1' & diffbind_stat_type == 'log2FC')), 
+     lm(diffbind~expression))
+# Call:
+# lm(formula = diffbind ~ expression)
+# 
+# Coefficients:
+# (Intercept)   expression  
+#     -0.5526      -0.1845  
+
+with(subset(diffbind_df_clean_pairwise_cbind_long_merge_gene_expr, subset = (patient == 'Sample1' & diffbind_stat_type == 'log2FC')), 
+     summary(lm(diffbind~expression)))
+# Call:
+# lm(formula = diffbind ~ expression)
+# Residuals:
+#     Min      1Q  Median      3Q     Max 
+# -8.3089 -0.3352  0.2291  0.5897  8.0340 
+# 
+# Coefficients:
+#             Estimate Std. Error t value Pr(>|t|)    
+# (Intercept) -0.55261    0.02661 -20.765   <2e-16 ***
+# expression  -0.18451    0.02144  -8.606   <2e-16 ***
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# Residual standard error: 1.753 on 4508 degrees of freedom
+# Multiple R-squared:  0.01616,	Adjusted R-squared:  0.01594 
+# F-statistic: 74.06 on 1 and 4508 DF,  p-value: < 2.2e-16
+
+
+
+
+
+# make a wide version of the df for calling all linear models
+# head(reshape2::dcast(diffbind_df_clean_pairwise_cbind_long_merge_gene_expr, patient +  gene ~ diffbind_stat_type, value.var = 'diffbind'))
+
+# head(diffbind_df_clean_pairwise_cbind_long_merge_gene_expr)
+# #    gene patient diffbind_stat_type  diffbind  expression
+# # 1 A2ML1     Sample1   log2FC_quantNorm -6.731835 -0.06897689
+# # 2 A2ML1     Sample1             log2FC -6.458338 -0.06897689
+# 
+# # split the df's back again
+# diffbind_df_clean_pairwise_cbind_long_merge_expronly <- diffbind_df_clean_pairwise_cbind_long_merge_gene_expr[c("gene", 'patient', 'expression')]
+# diffbind_df_clean_pairwise_cbind_long_merge_diffonly <- diffbind_df_clean_pairwise_cbind_long_merge_gene_expr[c("gene", 'patient', 'diffbind_stat_type', 'diffbind')]
+# head(diffbind_df_clean_pairwise_cbind_long_merge_diffonly)
+# #    gene patient diffbind_stat_type  diffbind
+# # 1 A2ML1     Sample1   log2FC_quantNorm -6.731835
+# # 2 A2ML1     Sample1             log2FC -6.458338
+# 
+# # cast back to wide
+# head(reshape2::dcast(diffbind_df_clean_pairwise_cbind_long_merge_diffonly, gene ~ diffbind_stat_type + patient, value.var = 'diffbind'))
+# 
+# dont do this its a giant mess
+#
+#
+
+
+
+
+# https://stackoverflow.com/a/27959418/5359531
+install.packages("devtools")
+library('devtools')
+# source_gist("524eade46135f6348140")
+# https://stackoverflow.com/questions/38345894/r-source-gist-not-working
+# https://gist.github.com/kdauria/524eade46135f6348140
+devtools::source_gist("524eade46135f6348140", filename = "ggplot_smooth_func.R") 
+
+plot_dir <- '/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-29/project_notes/diffbind-gene_expression-correlation/diffbind_microarray_correlation_plots'
+
+
+diffbind_correlation_plot <- ggplot(data = diffbind_df_clean_pairwise_cbind_long_merge_gene_expr ) + 
+    geom_point(aes(x = diffbind, y = expression, color = patient)) + 
+    geom_smooth(aes(x = diffbind, y = expression), method="lm") +
+    stat_smooth_func(aes(x = diffbind, y = expression), geom="text", method="lm", hjust=0, vjust = 0, parse=TRUE) +
+    facet_wrap( ~ diffbind_stat_type * patient) + 
+    ggtitle("H3K27AC DiffBind vs. Microarray Gene Expression")
+
+pdf(file = file.path(plot_dir, 'H3K27AC_diffbind_micrarray_correlation_scatterplot.pdf'), width = 18, height = 18)
+print(diffbind_correlation_plot)
+dev.off()
+
+```
+
+
+
+
+
+
+
+
+# Susan Samples
+
+Use the DiffBind tables from before for H3K27AC
+
+```{r}
+counts_samples_pairs <- '
+Sample15_D	Sample15_R	Sample15
+Sample18-D	Sample18-R	Sample18
+Sample20-D	Sample20-R	Sample20
+Sample22-D	Sample22-R	Sample22
+Sample23-D	Sample23-R	Sample23
+Sample24-D	Sample24-R	Sample24
+Sample25-D	Sample25-R	Sample25
+Sample26-D	Sample26-R	Sample26
+Sample27-D	Sample27-R	Sample27
+Sample28-D	Sample28-R	Sample28
+'
+Susan_counts_samples_df <- read.table(textConnection(counts_samples_pairs), sep = '\t', stringsAsFactors = FALSE)
+colnames(Susan_counts_samples_df) <- c('D', 'R', 'Patient')
+
+# the normalized RNASeq gene transcript counts file
+counts_file <- '/ifs/home/kellys04/projects/CarrollLab_Susan_RNASeq_2017-03-07/RNA-Seq_2017-06-06/DGE-DESeq2-rev-20samples/counts.norm.csv'
+counts_df <- read.delim(file = counts_file, header = TRUE, sep = ',', check.names = FALSE)
+head(counts_df[1:5])
+#          X Sample15_D Sample15_R Sample18.D
+# 1  5S_rRNA    0.369   32.524    0.000
+# 2      7SK    1.230   19.515    0.000
+dim(counts_df)
+# [1] 58434    21
+
+colnames(counts_df)[1] <- "gene"
+
+length(unique(counts_df[["gene"]]))
+# [1] 58434
+
+
+# melt for plotting
+counts_df_long <- reshape2::melt(counts_df, 
+               id.vars="gene",
+               variable.name="patient",
+               value.name="counts")
+
+
+# make a quick plot of the RNAseq values
+plot_dir <- '/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-29/project_notes/diffbind-gene_expression-correlation/RNASeq_plots'
+
+RNAseq_counts_boxplot <- ggplot(data = counts_df_long ) + 
+    geom_boxplot(aes(x = patient, y = counts)) +
+    ggtitle("RNASeq Normalized Gene Transcript Counts") 
+
+pdf(file = file.path(plot_dir, 'RNASeq_normalized_counts_boxplot.pdf'), width = 10, height = 10)
+print(RNAseq_counts_boxplot)
+dev.off()
+
+
+
+
+
+
+
+# create pairwise logFC counts
+counts_pairwise <- counts_df[, 'gene', drop = FALSE]
+for(i in seq(nrow(Susan_counts_samples_df))){
+    irow <- Susan_counts_samples_df[i,]
+    D_sample <- irow[["D"]]
+    R_sample <- irow[["R"]]
+    Patient <- irow[["Patient"]]
+    
+    counts_pairwise[[Patient]] <- log2( (counts_df[[R_sample]] / counts_df[[D_sample]]) )
+}
+head(counts_pairwise[1:3])
+#       gene     Sample15     Sample18
+# 1  5S_rRNA  6.4617401        Inf
+# 2      7SK  3.9878532        NaN
+# 3     A1BG  2.3324737  0.9252270
+
+dim(counts_pairwise)
+# [1] 58434    11
+
+# melt for plotting
+counts_pairwise_long <- reshape2::melt(counts_pairwise, 
+                                       id.vars="gene",
+                                       variable.name="patient",
+                                       value.name="counts")
+head(counts_pairwise_long)
+#       gene patient     counts
+# 1  5S_rRNA  Sample15  6.4617401
+# 2      7SK  Sample15  3.9878532
+
+dim(counts_pairwise_long)
+# [1] 584340      3
+
+
+
+
+# make a quick plot of the RNAseq values
+plot_dir <- '/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-29/project_notes/diffbind-gene_expression-correlation/RNASeq_plots'
+
+RNAseq_counts_logFC_boxplot <- ggplot(data = counts_pairwise_long ) + 
+    geom_boxplot(aes(x = patient, y = counts)) +
+    ggtitle("RNASeq logFC Gene Transcript Counts") 
+
+pdf(file = file.path(plot_dir, 'RNASeq_logFC_counts_boxplot.pdf'), width = 10, height = 10)
+print(RNAseq_counts_logFC_boxplot)
+dev.off()
+
+
+
+
+
+
+```
+
+
+```{r}
+
+# get the genes in common between the diffbind and gene expression data
+Susan_gene_names_overlap <- intersect(counts_df[["gene"]], unique(diffbind_df[["external_gene_name"]]))
+length(Susan_gene_names_overlap)
+# [1] 41252
+
+
+# subset for closest genes
+Susan_diffbind_df_clean <- subset(diffbind_df, abs(distancetoFeature) <= distancetoFeature_cutoff)
+
+# subset for intersected genes only
+Susan_diffbind_df_clean <- droplevels(Susan_diffbind_df_clean[Susan_diffbind_df_clean[["external_gene_name"]] %in% Susan_gene_names_overlap,])
+
+# remove extraneous columns
+# diffbind_cols_to_remove <-c("seqnames","start","end","width","strand","Conc","Conc_D","Conc_R","Fold",
+#                             "p.value","FDR","feature","gene_biotype","start_position","end_position",
+#                             "insideFeature","shortestDistance","fromOverlappingOrNearest", "distancetoFeature")
+Susan_diffbind_df_clean <- Susan_diffbind_df_clean[,! colnames(Susan_diffbind_df_clean) %in% diffbind_cols_to_remove]
+
+dim(Susan_diffbind_df_clean)
+# [1] 16638    86
+
+
+# new df for just the pairwise comparison
+Susan_diffbind_df_clean_pairwise <- Susan_diffbind_df_clean[, 'external_gene_name', drop = FALSE]
+
+nrow(Susan_diffbind_df_clean_pairwise) 
+# [1] 16638
+
+length(unique(Susan_diffbind_df_clean_pairwise[['external_gene_name']])) 
+# [1] 15680
+
+# add pairwise DiffBind values
+# only for Alice samples
+for(i in seq(nrow(H3K27AC_sample_pairs_df))){
+    irow <- H3K27AC_sample_pairs_df[i, ]
+    
+    R_sample <- irow[['R']]
+    D_sample <- irow[['D']]
+    FC_sample_colname <- irow[['Pair']]
+    
+    # skip entry if its not Susan's
+    if(irow[['Set']] == 'Susan'){
+        # calculate fold change for the two samples
+        fc <- log2(Susan_diffbind_df_clean[[R_sample]] / Susan_diffbind_df_clean[[D_sample]])
+        
+        # add column to the df
+        Susan_diffbind_df_clean_pairwise[[ irow[['Patient']] ]] <- fc
+    }
+}
+
+head(Susan_diffbind_df_clean_pairwise[1:6])
+#    external_gene_name Sample9    Sample10     Sample11     Sample12   Sample13
+# 1             DDX11L1      0 0.6057211 -2.3719688 -3.2616676 1.922166
+# 2            MTND1P23      0 0.0000000  0.3870231  0.6520767 1.000000
+# 4            MTND2P28      0 0.0000000  0.3870231  0.6520767 1.000000
+
+# melt it into long format for plotting
+Susan_diffbind_df_clean_pairwise_long <- reshape2::melt(Susan_diffbind_df_clean_pairwise, 
+                                                         id.vars="external_gene_name",
+                                                         variable.name="patient",
+                                                         value.name="log2FC")
+
+head(Susan_diffbind_df_clean_pairwise_long)
+#   external_gene_name patient log2FC
+# 1            DDX11L1  Sample9      0
+# 2           MTND1P23  Sample9      0
+# 3           MTND2P28  Sample9      0
+dim(Susan_diffbind_df_clean_pairwise_long)
+# [1] 332760      3
+
+
+
+
+
+# quantile normalization of a dataframe
+library("preprocessCore")
+library('data.table')
+# Warning in install.packages :
+#   package ‘preprocessCore’ is not available (for R version 3.2.3)
+
+#
+# !! CANT DO THIS ON HPCF BECAUSE WRONG R VERSION 
+# !! SAVE HARD COPY, DO IT ON ANOTHER R VERSION, READ IT BACK IN
+#
+
+#  Save on HPCF
+dim(Susan_diffbind_df_clean_pairwise) 
+# [1] 16638    21
+
+data_dir <- "/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-29/project_notes/diffbind-gene_expression-correlation/data"
+
+write.table(x = Susan_diffbind_df_clean_pairwise, file = file.path(data_dir, 'H3K27AC_Susan_diffbind_df_clean_pairwise.csv'), sep = ',', quote = FALSE, row.names = FALSE)
+
+
+# Load on Phoenix
+Susan_diffbind_df_clean_pairwise <- read.delim(file = file.path(data_dir, 'H3K27AC_Susan_diffbind_df_clean_pairwise.csv'), header = TRUE, sep = ',')
+dim(Susan_diffbind_df_clean_pairwise) 
+# [1] 16638    21
+
+
+# make normalized df
+Susan_diffbind_df_clean_pairwise_quantnorm <- cbind(setnames(x = as.data.frame(normalize.quantiles(as.matrix(Susan_diffbind_df_clean_pairwise[, colnames(Susan_diffbind_df_clean_pairwise)[!colnames(Susan_diffbind_df_clean_pairwise) %in% 'external_gene_name'] ]))), 
+                                            colnames(Susan_diffbind_df_clean_pairwise)[!colnames(Susan_diffbind_df_clean_pairwise) %in% 'external_gene_name'] ),  Susan_diffbind_df_clean_pairwise[, 'external_gene_name', drop = FALSE])
+
+dim(Susan_diffbind_df_clean_pairwise_quantnorm)
+# [1] 16638    21
+
+# Save on Phoenix
+write.table(x = Susan_diffbind_df_clean_pairwise_quantnorm, file = file.path(data_dir, 'H3K27AC_Susan_diffbind_df_clean_pairwise_quantnorm.csv'), sep = ',', quote = FALSE, row.names = FALSE)
+
+
+
+
+
+
+# load on HPCF
+Susan_diffbind_df_clean_pairwise_quantnorm <- read.delim(file = file.path(data_dir, 'H3K27AC_Susan_diffbind_df_clean_pairwise_quantnorm.csv'), header = TRUE, sep = ',')
+dim(Susan_diffbind_df_clean_pairwise_quantnorm)
+# [1] 16638    21
+
+# melt it into long format for plotting
+Susan_diffbind_df_clean_pairwise_quantnorm_long <- reshape2::melt(Susan_diffbind_df_clean_pairwise_quantnorm, 
+                                                                   id.vars="external_gene_name",
+                                                                   variable.name="patient",
+                                                                   value.name="log2FC_quantNorm")
+
+
+
+
+# merge the two dfs
+nrow(Susan_diffbind_df_clean_pairwise_long)
+# [1] 332760
+nrow(Susan_diffbind_df_clean_pairwise_quantnorm_long)
+# [1] 332760
+
+colnames(Susan_diffbind_df_clean_pairwise_long)
+# [1] "external_gene_name" "patient"            "log2FC"            
+colnames(Susan_diffbind_df_clean_pairwise_quantnorm_long)
+# [1] "external_gene_name" "patient"            "log2FC_quantNorm"  
+
+Susan_diffbind_df_clean_pairwise_cbind <- cbind(Susan_diffbind_df_clean_pairwise_long, Susan_diffbind_df_clean_pairwise_quantnorm_long[,! colnames(Susan_diffbind_df_clean_pairwise_quantnorm_long) %in% colnames(Susan_diffbind_df_clean_pairwise_long), drop = FALSE])
+
+head(Susan_diffbind_df_clean_pairwise_cbind)
+#   external_gene_name patient log2FC log2FC_quantNorm
+# 1            DDX11L1  Sample9      0      -0.02749791
+# 2           MTND1P23  Sample9      0      -0.02749791
+# 3           MTND2P28  Sample9      0      -0.02749791
+
+
+# melt it again
+Susan_diffbind_df_clean_pairwise_cbind_long <- reshape2::melt(Susan_diffbind_df_clean_pairwise_cbind, 
+                                                        id.vars=c("external_gene_name", "patient"),
+                                                        variable.name="diffbind_stat_type",
+                                                        value.name="diffbind")
+
+
+setnames(x = Susan_diffbind_df_clean_pairwise_cbind_long, old = 'external_gene_name', new = 'gene')
+head(Susan_diffbind_df_clean_pairwise_cbind_long)
+#       gene patient diffbind_stat_type diffbind
+# 1  DDX11L1  Sample9             log2FC        0
+# 2 MTND1P23  Sample9             log2FC        0
+# 3 MTND2P28  Sample9             log2FC        0
+
+dim(Susan_diffbind_df_clean_pairwise_cbind_long)
+# [1] 665520      4
+
+
+#
+#
+# combine with the gene expression data
+#
+#
+
+head(counts_pairwise_long)
+#       gene patient     counts
+# 1  5S_rRNA  Sample15  6.4617401
+# 2      7SK  Sample15  3.9878532
+# 3     A1BG  Sample15  2.3324737
+
+dim(counts_pairwise_long)
+# [1] 584340      3
+
+
+# drop the gene's that have expression cutoff outside desired range
+# gene_expression_logfc_cutoff
+
+# merge, excluding non-matching entries in both datasets
+Susan_diffbind_df_clean_pairwise_cbind_long_merge_counts <- merge(x = Susan_diffbind_df_clean_pairwise_cbind_long, y = counts_pairwise_long, by = c('gene', 'patient'))
+
+head(Susan_diffbind_df_clean_pairwise_cbind_long_merge_counts)
+#      gene patient diffbind_stat_type   diffbind  counts
+# 1 5S_rRNA  Sample15             log2FC -2.2428565 6.46174
+# 2 5S_rRNA  Sample15   log2FC_quantNorm -0.8906502 6.46174
+# 3 5S_rRNA  Sample15             log2FC -4.5969351 6.46174
+
+dim(Susan_diffbind_df_clean_pairwise_cbind_long_merge_counts)
+# [1] 332760      5
+
+
+
+# make the plot
+
+# https://stackoverflow.com/a/27959418/5359531
+# install.packages("devtools")
+library('devtools')
+# source_gist("524eade46135f6348140")
+# https://stackoverflow.com/questions/38345894/r-source-gist-not-working
+# https://gist.github.com/kdauria/524eade46135f6348140
+devtools::source_gist("524eade46135f6348140", filename = "ggplot_smooth_func.R") 
+
+plot_dir <- '/ifs/home/kellys04/projects/SmithLab_ChIpSeq_2017-12-29/project_notes/diffbind-gene_expression-correlation/diffbind_RNASeqCounts_correlation_plots'
+
+
+diffbind_correlation_plot <- ggplot(data = Susan_diffbind_df_clean_pairwise_cbind_long_merge_counts ) + 
+    geom_point(aes(x = diffbind, y = counts, color = patient)) + 
+    geom_smooth(aes(x = diffbind, y = counts), method="lm") +
+    stat_smooth_func(aes(x = diffbind, y = counts), geom="text", method="lm", hjust=0, vjust = 0, parse=TRUE) +
+    facet_wrap( ~ diffbind_stat_type * patient) + 
+    ggtitle("H3K27AC DiffBind vs. RNASeq logFC Gene Transcript Counts")
+
+pdf(file = file.path(plot_dir, 'H3K27AC_diffbind_RNASeqCounts_correlation_scatterplot.pdf'), width = 18, height = 18)
+print(diffbind_correlation_plot)
+dev.off()
+
+```
