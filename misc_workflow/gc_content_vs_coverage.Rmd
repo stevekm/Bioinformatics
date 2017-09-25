@@ -455,3 +455,135 @@ dev.off()
 
 # still looks bad! 
 ```
+
+As per Igor:
+
+```
+Something is wrong.
+ 
+Also, you should have always coverage on the Y-axis (so high coverage is actually high).
+ 
+Once you switch the axis, the result should look like a rainbow. Thus, the regular (linear) correlation will be flat. It should be a polynomial (change the method in geom_smooth).
+ 
+-igor
+ 
+```
+
+Try changing the coverage to the y axis
+change to polynomial model
+
+```{r}
+
+avg_cov_df_regLo_stats <- list()
+avg_cov_df_regLo_stats[["fit"]] <- lm(coverage ~ poly(GC_content, 2), data = avg_cov_df_regLo)
+avg_cov_df_regLo_stats[["formula"]] <- sprintf("y = %s + %sx + %sx^2", 
+                                               signif(avg_cov_df_regLo_stats[["fit"]]$coef[[1]], 5), 
+                                               signif(avg_cov_df_regLo_stats[["fit"]]$coef[[2]], 5),
+                                               signif(avg_cov_df_regLo_stats[["fit"]]$coef[[3]], 5))
+
+avg_cov_df_regLo_stats[["R2"]] <- sprintf("Adj. R2 = %s", signif(summary(avg_cov_df_regLo_stats[["fit"]])$adj.r.squared, 5))
+avg_cov_df_regLo_stats[["title"]] <- paste(avg_cov_df_regLo_stats[["formula"]], 
+                                           avg_cov_df_regLo_stats[["R2"]], 
+                                           sep = ', ')
+
+library('devtools')
+devtools::source_gist("524eade46135f6348140", filename = "ggplot_smooth_func.R") 
+
+cov_plot_lo <- ggplot(data = avg_cov_df_regLo) + 
+    geom_point(aes(x = GC_content, y = coverage, color = Gene.refGene)) + 
+    geom_smooth(aes(x = GC_content, y = coverage), method="lm", alpha = 0, formula = y~poly(x,2)) +
+    # stat_smooth_func(aes(x = GC_content, y = coverage), 
+                     # geom="text", method="lm", hjust=0, vjust = 0, parse=TRUE, formula = y~poly(x,2)) +
+    # theme(legend.position="none") + 
+    # facet_wrap(~Gene.refGene) + 
+    ggtitle(sprintf("GC Content vs. Coverage Across All NGS580 Runs for IT50 Gene Regions with Coverage <50\nOverall Stats: %s", avg_cov_df_regLo_stats[["title"]]))
+
+pdf(file = "coverage_corr_recent_low_cover_regions.pdf", width = 10, height = 10)
+print(cov_plot_lo)
+dev.off()
+
+
+
+
+
+
+avg_cov_df_regHi_stats <- list()
+avg_cov_df_regHi_stats[["fit"]] <- lm(coverage ~ poly(GC_content, 2), data = avg_cov_df_regHi)
+
+avg_cov_df_regHi_stats[["formula"]] <- sprintf("y = %s + %sx + %sx^2", 
+                                               signif(avg_cov_df_regHi_stats[["fit"]]$coef[[1]], 5), 
+                                               signif(avg_cov_df_regHi_stats[["fit"]]$coef[[2]], 5),
+                                               signif(avg_cov_df_regHi_stats[["fit"]]$coef[[3]], 5))
+
+avg_cov_df_regHi_stats[["R2"]] <- sprintf("Adj. R2 = %s", signif(summary(avg_cov_df_regHi_stats[["fit"]])$adj.r.squared, 5))
+avg_cov_df_regHi_stats[["title"]] <- paste(avg_cov_df_regHi_stats[["formula"]], 
+                                           avg_cov_df_regHi_stats[["R2"]], 
+                                           sep = ', ')
+
+library('devtools')
+# https://susanejohnston.wordpress.com/2012/08/09/a-quick-and-easy-function-to-plot-lm-results-in-r/
+devtools::source_gist("524eade46135f6348140", filename = "ggplot_smooth_func.R") 
+
+cov_plot_hi <- ggplot(data = avg_cov_df_regHi) + 
+    geom_point(aes(x = GC_content, y = coverage, color = Gene.refGene)) + 
+    geom_smooth(aes(x = GC_content, y = coverage), method="lm", alpha = 0, formula = y~poly(x,2)) +
+    # stat_smooth_func(aes(x = coverage, y = GC_content), 
+    #                  geom="text", method="lm", hjust=0, vjust = 0, parse=TRUE) +
+    theme(legend.position="none") +
+    facet_wrap(~Gene.refGene) +
+    ggtitle(sprintf("GC Content vs. Coverage Across All NGS580 Runs for IT50 Gene Regions with Coverage between 500 and 1000\nOverall Stats: %s", avg_cov_df_regHi_stats[["title"]]))
+
+pdf(file = "coverage_corr_recent_high_cover_regions.pdf", width = 24, height = 24)
+print(cov_plot_hi)
+dev.off()
+
+cov_plot_hi <- ggplot(data = avg_cov_df_regHi) + 
+    geom_point(aes(x = GC_content, y = coverage, color = Gene.refGene)) + 
+    geom_smooth(aes(x = GC_content, y = coverage), method="lm", alpha = 0, formula = y~poly(x,2)) +
+    # stat_smooth_func(aes(x = coverage, y = GC_content), 
+    #                  geom="text", method="lm", hjust=0, vjust = 0, parse=TRUE) +
+    # theme(legend.position="none") +
+    # facet_wrap(~Gene.refGene) +
+    ggtitle(sprintf("GC Content vs. Coverage Across All NGS580 Runs for IT50 Gene Regions with Coverage between 500 and 1000\nOverall Stats: %s", avg_cov_df_regHi_stats[["title"]]))
+
+pdf(file = "coverage_corr_recent_high_cover_regions_nosplit.pdf", width = 24, height = 24)
+print(cov_plot_hi)
+dev.off()
+
+
+
+
+
+
+
+# all the regions again
+# avg_cov_df_long_recent
+avg_cov_df_stats <- list()
+avg_cov_df_stats[["fit"]] <- lm(coverage ~ poly(GC_content, 2), data = avg_cov_df_long_recent)
+
+avg_cov_df_stats[["formula"]] <- sprintf("y = %s + %sx + %sx^2", 
+                                               signif(avg_cov_df_stats[["fit"]]$coef[[1]], 5), 
+                                               signif(avg_cov_df_stats[["fit"]]$coef[[2]], 5),
+                                               signif(avg_cov_df_stats[["fit"]]$coef[[3]], 5))
+
+avg_cov_df_stats[["R2"]] <- sprintf("Adj. R2 = %s", signif(summary(avg_cov_df_stats[["fit"]])$adj.r.squared, 5))
+avg_cov_df_stats[["title"]] <- paste(avg_cov_df_stats[["formula"]], 
+                                           avg_cov_df_stats[["R2"]], 
+                                           sep = ', ')
+
+cov_plot <- ggplot(data = avg_cov_df_long_recent) + 
+    geom_point(aes(x = GC_content, y = coverage, color = Gene.refGene)) + 
+    geom_smooth(aes(x = GC_content, y = coverage), method="lm", alpha = 0, formula = y~poly(x,2)) +
+    # stat_smooth_func(aes(x = coverage, y = GC_content), 
+    #                  geom="text", method="lm", hjust=0, vjust = 0, parse=TRUE) +
+    # theme(legend.position="none") +
+    # facet_wrap(~Gene.refGene) +
+    ggtitle(sprintf("GC Content vs. Coverage Across All NGS580 Runs for IT50 Gene Regions\nOverall Stats: %s", avg_cov_df_stats[["title"]]))
+
+pdf(file = "coverage_corr_recent_nosplit.pdf", width = 20, height = 20)
+print(cov_plot)
+dev.off()
+
+summary(avg_cov_df_long_recent[["coverage"]])
+```
+ Looks a little better with polynomial and swapped axes yes
