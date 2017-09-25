@@ -1,0 +1,359 @@
+---
+title: "Load Variant Data into SQLite"
+author: "Stephen Kelly"
+date: "9/25/2017"
+output: html_document
+---
+It is getting very tedious and redundant to repeatedly load and parse all the TSV files for every analysis
+
+Load all the data into a SQLite database for use with all analyses from now on.
+
+Find some files:
+
+LoFreq
+
+```
+[2017-09-25 12:13:11]
+kellys04@phoenix2:~/projects/Clinical_580_gene_panel/molecpathlab/NGS580_WES-development/validation_plots/variant_correlations$ find -L results_dirs/ -type f -name "*VCF-LoFreq-annot.all.txt*" -exec readlink -f  {} \; | sort -u > VCF-LoFreq-annot.all_files.txt
+
+```
+
+GATK HaplotType Caller
+
+```
+[2017-09-25 12:13:11]
+kellys04@phoenix2:~/projects/Clinical_580_gene_panel/molecpathlab/NGS580_WES-development/validation_plots/variant_correlations$ find -L results_dirs/ -type f -name "*VCF-GATK-HC-annot.all.txt*" -exec readlink -f  {} \; | sort -u > VCF-GATK-HC-annot.all.txt_files.txt
+
+```
+
+Load the data into a SQLite
+https://cran.r-project.org/web/packages/RSQLite/vignettes/RSQLite.html
+```{r}
+library("data.table")
+library("ggplot2")
+require("RSQLite")
+
+# ~~~~~ FUNCTIONS ~~~~~ # 
+read_annotations <- function(file){
+    # read the annotation files output by sns pipeline
+    df <- read.delim(file = file, header = TRUE, sep = '\t', stringsAsFactors = FALSE, na.strings = ".")
+    setnames(x = df, old = 'X.MUT', new = 'MUT')
+    return(df)
+}
+
+chrom_rownames2cols <- function(df){
+    # split rownames into separate columns for chromosome coordinates
+    # chr10:100026989-100027328 
+    df_chrom <- as.data.frame(do.call(rbind, strsplit(rownames(df), ':')))
+    df_chrom <- cbind(df_chrom[1], as.data.frame(do.call(rbind, strsplit(as.character(df_chrom$V2), '-'))))
+    colnames(df_chrom) <- c("chrom", "start", "stop")
+    df <- cbind(df_chrom, df)
+    return(df)
+}
+
+
+
+
+# ~~~~~ LOAD ~~~~~ #
+
+# load all the data
+LoFreq_annot_files_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/variant_correlations/VCF-LoFreq-annot.all_files.txt"
+GATK_HC_annot_files_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/variant_correlations/VCF-GATK-HC-annot.all.txt_files.txt"
+
+average_coverage_per_sample_files_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/GC_Content_Coverage_Correlation/average_coverage_per_sample_files.txt"
+
+
+
+# list of file paths to load
+LoFreq_annot_files <- readLines(LoFreq_annot_files_file)
+GATK_HC_annot_files <- readLines(GATK_HC_annot_files_file)
+average_coverage_per_sample_files <- readLines(average_coverage_per_sample_files_file)
+
+
+# ANNOTATIONS
+
+
+# empty df's to hold data we will load
+run_results_index <- data.frame()
+LoFreq_annot <- data.frame()
+
+for(LoFreq_annot_file in LoFreq_annot_files){
+    
+    # run metadata 
+    run_path <- dirname(LoFreq_annot_file)
+    run_ID <- basename(dirname(dirname(LoFreq_annot_file)))
+    results_ID <- basename(dirname(LoFreq_annot_file))
+    
+    # read the annotations data
+    df <- read_annotations(file = LoFreq_annot_file)
+    head(df)
+    
+    # add them to df's
+    if(nrow(LoFreq_annot) < 1){
+        LoFreq_annot <- df
+    } else {
+        LoFreq_annot <- rbind(LoFreq_annot, df)
+    }
+    
+    run_df <- data.frame(run = run_ID, 
+                         results_ID = results_ID, 
+                         path = run_path)
+    
+    if(nrow(run_results_index) < 1){
+        run_results_index <- run_df
+    } else {
+        run_results_index <- rbind(run_results_index, run_df)
+    }
+}
+
+GATK_HC_annot <- data.frame()
+for(GATK_HC_annot_file in GATK_HC_annot_files){
+    # run metadata 
+    run_path <- dirname(GATK_HC_annot_file)
+    run_ID <- basename(dirname(dirname(GATK_HC_annot_file)))
+    results_ID <- basename(dirname(GATK_HC_annot_file))
+    
+    # read the annotations data
+    df <- read_annotations(file = GATK_HC_annot_file)
+    head(df)
+    
+    # add them to df's
+    if(nrow(GATK_HC_annot) < 1){
+        GATK_HC_annot <- df
+    } else {
+        GATK_HC_annot <- rbind(GATK_HC_annot, df)
+    }
+    
+    run_df <- data.frame(run = run_ID, 
+                         results_ID = results_ID, 
+                         path = run_path)
+    
+    if(nrow(run_results_index) < 1){
+        run_results_index <- run_df
+    } else {
+        run_results_index <- rbind(run_results_index, run_df)
+    }
+}
+
+
+# remove duplicates
+run_results_index <- run_results_index[! duplicated(run_results_index), ]
+
+dim(run_results_index)
+# [1] 16  3
+
+dim(LoFreq_annot)
+# [1] 1078093      23
+
+str(LoFreq_annot)
+# 'data.frame':	1078093 obs. of  23 variables:
+#  $ MUT               : chr  "chr10:102891290:A:C" "chr10:102891290:A:C" "chr10:102891290:A:C" "chr10:102891290:A:C" ...
+#  $ SAMPLE            : chr  "ABC0714-NS17-06" "ABC1196-NS17-06" "ABC1365-NS17-06" "ABC1484-NS17-06" ...
+#  $ CHR               : chr  "chr10" "chr10" "chr10" "chr10" ...
+#  $ POS               : int  102891290 102891290 102891290 102891290 102891290 102891290 102891290 102891290 102891290 102891290 ...
+#  $ QUAL              : int  120 118 164 149 140 184 283 136 116 122 ...
+#  $ DEPTH             : int  382 206 234 449 494 608 468 525 713 288 ...
+#  $ FREQ              : num  0.045 0.068 0.077 0.047 0.043 0.044 0.073 0.036 0.029 0.059 ...
+#  $ Ref               : chr  "A" "A" "A" "A" ...
+#  $ Alt               : chr  "C" "C" "C" "C" ...
+#  $ Func.refGene      : chr  "ncRNA_intronic" "ncRNA_intronic" "ncRNA_intronic" "ncRNA_intronic" ...
+#  $ Gene.refGene      : chr  "TLX1NB" "TLX1NB" "TLX1NB" "TLX1NB" ...
+#  $ GeneDetail.refGene: chr  NA NA NA NA ...
+#  $ ExonicFunc.refGene: chr  NA NA NA NA ...
+#  $ AAChange.refGene  : chr  NA NA NA NA ...
+#  $ snp138            : chr  NA NA NA NA ...
+#  $ snp138NonFlagged  : chr  NA NA NA NA ...
+#  $ ExAC_ALL          : num  NA NA NA NA NA NA NA NA NA NA ...
+#  $ esp6500siv2_all   : num  NA NA NA NA NA NA NA NA NA NA ...
+#  $ X1000g2015aug_all : num  NA NA NA NA NA NA NA NA NA NA ...
+#  $ cosmic80          : chr  NA NA NA NA ...
+#  $ CADD13_PHRED      : num  10.2 10.2 10.2 10.2 10.2 ...
+#  $ FATHMM_noncoding  : num  0.875 0.875 0.875 0.875 0.875 0.875 0.875 0.875 0.875 0.875 ...
+#  $ FATHMM_coding     : num  0.787 0.787 0.787 0.787 0.787 ...
+
+dim(GATK_HC_annot)
+# [1] 601250     23
+
+head(GATK_HC_annot, 1)
+#                 X.MUT                     SAMPLE   CHR       POS   QUAL DEPTH  FREQ Ref Alt Func.refGene Gene.refGene
+# 1 chr10:102891680:G:A ABC0088-NS17-06 chr10 102891680 3238.8   394 0.475   G   A       exonic         TLX1
+#   GeneDetail.refGene ExonicFunc.refGene                                                             AAChange.refGene      snp138
+# 1                  .  nonsynonymous SNV TLX1:NM_001195517:exon1:c.G382A:p.A128T,TLX1:NM_005521:exon1:c.G382A:p.A128T rs113474709
+#   snp138NonFlagged ExAC_ALL esp6500siv2_all X1000g2015aug_all cosmic80 CADD13_PHRED FATHMM_noncoding FATHMM_coding
+# 1      rs113474709   0.0594          0.0185        0.00878594        .         23.4          0.91879       0.88179
+
+
+# COVERAGES
+
+
+avg_cov_df <- data.frame()
+sample_run_df <- data.frame()
+for(cov_file in average_coverage_per_sample_files){
+    results_id <- basename(dirname(dirname(cov_file)))
+    run <- basename(dirname(dirname(dirname(cov_file))))
+    
+    df <- read.delim(file = cov_file, header = TRUE, sep = '\t', row.names = 1, check.names = FALSE)
+    
+    df_run <- data.frame(sample = colnames(df))
+    df_run[["run"]] <- run
+    df_run[["results_id"]] <- results_id
+    
+    head(df)
+    
+    if(nrow(avg_cov_df) < 1){
+        avg_cov_df <- df
+    } else {
+        avg_cov_df <- cbind(avg_cov_df, df)
+    }
+    
+    if(nrow(sample_run_df) < 1){
+        sample_run_df <- df_run
+    } else {
+        sample_run_df <- rbind(sample_run_df, df_run)
+    }
+}
+
+# add region columns
+avg_cov_df[["region"]] <- rownames(avg_cov_df)
+avg_cov_df <- chrom_rownames2cols(avg_cov_df)
+
+dim(avg_cov_df)
+# [1] 9909  388
+
+dim(sample_run_df)
+# [1] 384   3
+
+
+
+# TARGETS
+
+
+regions_annotations_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/GC_Content_Coverage_Correlation/target_regions.hg19_multianno.txt"
+regions_annotations <- read.delim(file = regions_annotations_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE, na.strings = '.')
+
+dim(regions_annotations)
+# [1] 9909   11
+
+head(regions_annotations)
+#    Chr   Start     End Ref Alt cytoBand Func.refGene Gene.refGene GeneDetail.refGene ExonicFunc.refGene AAChange.refGene
+# 1 chr1 2985824 2985860   0   0  1p36.32       exonic       PRDM16                  .                  .                .
+# 2 chr1 3102689 3103038   0   0  1p36.32       exonic       PRDM16                  .                  .                .
+# 3 chr1 3160651 3160701   0   0  1p36.32       exonic       PRDM16                  .                  .                .
+
+
+
+
+target_regions_fasta_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/GC_Content_Coverage_Correlation/target_regions_fasta.bed"
+target_regions_fasta <- read.delim(file = target_regions_fasta_file, header = FALSE, sep = '\t', na.strings = '.')
+dim(target_regions_fasta)
+# [1] 9908    2
+colnames(target_regions_fasta) <- c("region", "fasta")
+head(target_regions_fasta, 1)
+#                 region                                fasta
+# 1 chr1:2985824-2985860 TGCGATCCAAGGCGAGGGCGAGGAAGCTAGCCAAAA
+
+regions <- do.call(paste, c(regions_annotations[c("Chr", "Start")], sep = ":"))
+regions[1]
+# [1] "chr1:110091343"
+regions <- paste(regions, regions_annotations[["End"]], sep = "-")
+# regions[1]
+# [1] "chr1:2985824-2985860"
+regions_annotations[["region"]] <- regions
+
+regions_annotations_fasta <- merge(x = regions_annotations, y = target_regions_fasta, by = "region")
+dim(regions_annotations_fasta)
+# [1] 9908   13
+
+# calculate region stats
+regions_annotations_fasta[["fasta"]] <- as.character(regions_annotations_fasta[["fasta"]])
+regions_annotations_fasta[["fasta"]] <- toupper(regions_annotations_fasta[["fasta"]])
+
+regions_annotations_fasta[["G_total"]] <- sapply(regmatches(regions_annotations_fasta[["fasta"]], gregexpr("G", regions_annotations_fasta[["fasta"]])), length)
+regions_annotations_fasta[["C_total"]] <- sapply(regmatches(regions_annotations_fasta[["fasta"]], gregexpr("C", regions_annotations_fasta[["fasta"]])), length)
+regions_annotations_fasta[["T_total"]] <- sapply(regmatches(regions_annotations_fasta[["fasta"]], gregexpr("T", regions_annotations_fasta[["fasta"]])), length)
+regions_annotations_fasta[["A_total"]] <- sapply(regmatches(regions_annotations_fasta[["fasta"]], gregexpr("A", regions_annotations_fasta[["fasta"]])), length)
+
+# count the total length o the sequence
+regions_annotations_fasta[["fasta_total"]] <- sapply(regions_annotations_fasta[["fasta"]], nchar)
+
+# nchar(avg_cov_df_genes_fasta[["fasta"]][1])
+
+regions_annotations_fasta[["GC_total"]] <- regions_annotations_fasta[["G_total"]] + regions_annotations_fasta[["C_total"]]
+regions_annotations_fasta[["GC_content"]] <- regions_annotations_fasta[["GC_total"]] / regions_annotations_fasta[["fasta_total"]]
+
+dim(regions_annotations_fasta)
+# [1] 9908   20
+
+str(regions_annotations_fasta)
+# 'data.frame':	9908 obs. of  20 variables:
+#  $ region            : chr  "chr1:110091343-110091460" "chr1:110116359-110116401" "chr1:110116518-110116659" "chr1:110121826-110121983" ...
+#  $ Chr               : chr  "chr1" "chr1" "chr1" "chr1" ...
+#  $ Start             : int  110091343 110116359 110116518 110121826 110125059 110128838 110129351 110134665 110882028 110888161 ...
+#  $ End               : int  110091460 110116401 110116659 110121983 110125187 110128967 110129504 110134855 110884890 110888271 ...
+#  $ Ref               : int  0 0 0 0 0 0 0 0 0 0 ...
+#  $ Alt               : int  0 0 0 0 0 0 0 0 0 0 ...
+#  $ cytoBand          : chr  "1p13.3" "1p13.3" "1p13.3" "1p13.3" ...
+#  $ Func.refGene      : chr  "exonic" "exonic" "exonic" "exonic" ...
+#  $ Gene.refGene      : chr  "GNAI3" "GNAI3" "GNAI3" "GNAI3" ...
+#  $ GeneDetail.refGene: chr  NA NA NA NA ...
+#  $ ExonicFunc.refGene: logi  NA NA NA NA NA NA ...
+#  $ AAChange.refGene  : logi  NA NA NA NA NA NA ...
+#  $ fasta             : chr  "TGGGCTGCACGTTGAGCGCCGAAGACAAGGCGGCAGTGGAGCGAAGCAAGATGATCGACCGCAACTTACGGGAGGACGGGGAAAAAGCGGCCAAAGAAGTGAAGCTGCTGCTACTCG" "TGCTGGAGAATCTGGTAAAAGCACCATTGTGAAACAGATGAA" "ATCATTCATGAGGATGGCTATTCAGAGGATGAATGTAAACAATATAAAGTAGTTGTCTACAGCAATACTATACAGTCCATCATTGCAATCATAAGAGCCATGGGACGGCTAAAGATTGACTTTGGGG"| __truncated__ "ATGATGCCCGGCAATTATTTGTTTTAGCTGGCAGTGCTGAAGAAGGAGTCATGACTCCAGAACTAGCAGGAGTGATTAAACGGTTATGGCGAGATGGTGGGGTACAAGCTTGCTTCAGCAGATCCAG"| __truncated__ ...
+#  $ G_total           : int  43 11 34 44 20 39 25 37 849 34 ...
+#  $ C_total           : int  26 6 24 28 30 19 27 34 781 12 ...
+#  $ T_total           : int  14 9 35 42 33 37 42 53 585 31 ...
+#  $ A_total           : int  34 16 48 43 45 34 59 66 647 33 ...
+#  $ fasta_total       : int  117 42 141 157 128 129 153 190 2862 110 ...
+#  $ GC_total          : int  69 17 58 72 50 58 52 71 1630 46 ...
+#  $ GC_content        : num  0.59 0.405 0.411 0.459 0.391 ...
+
+
+
+IonTorrent_genes <- readLines("/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/IonTorrent_reporter_panel_genes.txt")
+IonTorrent_genes <- IonTorrent_genes[which(IonTorrent_genes != "")]
+# there is an IonTorrent gene missing from NGS580
+IonTorrent_genes <- c(IonTorrent_genes, "GNA11")
+IonTorrent_genes <- IonTorrent_genes[which(! IonTorrent_genes == "GNA 11")]
+#  [1] "ABL1"    "AKT1"    "ALK"     "APC"     "ATM"     "BRAF"    "CDH1"    "CDKN2A"  "CSF1R"   "CTNNB1"  "EGFR"    "ERBB2"   "ERBB4"  
+# [14] "EZH2"    "FBXW7"   "FGFR1"   "FGFR2"   "FGFR3"   "FLT3"    "GNAS"    "GNAQ"    "HNF1A"   "HRAS"    "IDH1"    "JAK2"    "JAK3"   
+# [27] "IDH2"    "KDR"     "KIT"     "KRAS"    "MET"     "MLH1"    "MPL"     "NOTCH1"  "NPM1"    "NRAS"    "PDGFRA"  "PIK3CA"  "PTEN"   
+# [40] "PTPN11"  "RB1"     "RET"     "SMAD4"   "SMARCB1" "SMO"     "SRC"     "STK11"   "TP53"    "VHL"     "GNA11" 
+
+regions_annotations_fasta[["in_IT50"]] <- FALSE
+
+length(unique(regions_annotations_fasta[which(regions_annotations_fasta[["Gene.refGene"]] %in% IonTorrent_genes), "Gene.refGene"]))
+# [1] 50
+regions_annotations_fasta[which(regions_annotations_fasta[["Gene.refGene"]] %in% IonTorrent_genes), "in_IT50"] <- TRUE
+head(regions_annotations_fasta, 1)
+#                     region  Chr     Start       End Ref Alt cytoBand Func.refGene Gene.refGene GeneDetail.refGene ExonicFunc.refGene
+# 1 chr1:110091343-110091460 chr1 110091343 110091460   0   0   1p13.3       exonic        GNAI3               <NA>                 NA
+#   AAChange.refGene
+# 1               NA
+#                                                                                                                   fasta G_total
+# 1 TGGGCTGCACGTTGAGCGCCGAAGACAAGGCGGCAGTGGAGCGAAGCAAGATGATCGACCGCAACTTACGGGAGGACGGGGAAAAAGCGGCCAAAGAAGTGAAGCTGCTGCTACTCG      43
+#   C_total T_total A_total fasta_total GC_total GC_content in_IT50
+# 1      26      14      34         117       69  0.5897436   FALSE
+
+
+nrow(regions_annotations_fasta[which(regions_annotations_fasta[["in_IT50"]] == TRUE), ])
+# [1] 862
+
+# ~~~~~ WRITE ~~~~~ # 
+sqlite_file <- "/ifs/data/molecpathlab/NGS580_WES-development/NGS580.sqlite"
+
+mydb <- dbConnect(RSQLite::SQLite(), sqlite_file)
+
+dbWriteTable(mydb, "run_results_path_index", run_results_index)
+dbWriteTable(mydb, "sample_run_index", sample_run_df)
+dbWriteTable(mydb, "LoFreq_variant_annotations", LoFreq_annot)
+dbWriteTable(mydb, "GATK_HC_variant_annotations", GATK_HC_annot)
+dbWriteTable(mydb, "Coverage_per_region", avg_cov_df)
+dbWriteTable(mydb, "target_regions", regions_annotations_fasta)
+
+dbListTables(mydb)
+# [1] "Coverage_per_region"         "GATK_HC_variant_annotations" "LoFreq_variant_annotations"  "run_results_path_index"     
+# [5] "sample_run_index"            "target_regions"
+
+nrow(dbGetQuery(mydb, 'SELECT * FROM target_regions WHERE "in_IT50" == 1 '))
+# [1] 862
+```
