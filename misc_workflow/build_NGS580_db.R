@@ -73,7 +73,7 @@ sanitize_SQLite_colnames <- function(df){
 
 add_uid <- function(df){
     # add a unique ID column 'uid' to a dataframe
-    df[["uid"]] <- apply(X = df, MARGIN = 1, digest)
+    df[["uid"]] <- apply(X = df, MARGIN = 1, digest, algo = "xxhash64")
     return(df)
 }
 
@@ -506,7 +506,7 @@ create_table_with_primary_key <- function(db_con, table_name, df, key_colname = 
 }
 
 
-insert_or_ignore <- function(db_con, table_name, df, speedup = TRUE){
+insert_or_ignore <- function(db_con, table_name, df, speedup = FALSE){
     # insert entries from the df into the db if they're not already present
     tsprintf("Inserting new entries into table '%s' in database...", table_name)
     sql_names <- df_sqlite_names(df)
@@ -522,7 +522,9 @@ insert_or_ignore <- function(db_con, table_name, df, speedup = TRUE){
         dbGetQuery(db_con, "PRAGMA journal_mode = OFF")
     }
     
+    dbBegin(db_con)
     dbGetPreparedQuery(db_con, sql, bind.data=df)
+    dbCommit(db_con)
     # 1: RSQLite::dbGetPreparedQuery() is deprecated, please switch to DBI::dbGetQuery(params = bind.data).
 }
 
@@ -541,6 +543,7 @@ add_df_to_db <- function(db_con, table_name, df){
     tsprintf("Adding '%s' to database...", table_name)
     
     # add 'uid' unique ID column and clean the column names
+    tsprintf("Preparing dataframe for insertion into database...")
     df <- add_uid(df)
     df <- sanitize_SQLite_colnames(df)
 
@@ -562,7 +565,7 @@ add_df_to_db <- function(db_con, table_name, df){
         
         num_rows_end <- sqlite_count_table_rows(db_con = db_con, table_name = table_name)
         
-        tsprintf("Inserting finished for table '%s', table now contains %s rows", table_name, num_rows_end)
+        tsprintf("Finished insertion for table '%s', table now contains %s rows", table_name, num_rows_end)
     }
 }
 
@@ -587,6 +590,7 @@ results_list <- make_results_list(paths = results_dirs_paths)
 mydb <- dbConnect(RSQLite::SQLite(), sqlite_file)
 
 # add items to database
+# small datasets
 add_df_to_db(db_con = mydb,
              table_name = 'analysis_files',
              df = get_all_analysis_filepaths_table(results_list = results_list))
@@ -605,30 +609,22 @@ add_df_to_db(db_con = mydb,
                                   regions_annotations_file,
                                   IonTorrent_reporter_panel_genes_file))
 
-
-add_all_annotations_to_db(db_con = mydb, results_list = results_list, annot_file_list_index = "LoFreq_annot_all_file", table_name = 'LoFreq_annotations')
-
-add_all_annotations_to_db(db_con = mydb, results_list = results_list, annot_file_list_index = "GATK_HC_annot_all_file", table_name = 'GATK_HC_annotations')
-
-add_all_coverages_to_db(db_con = mydb, results_list = results_list)
 # problems here with duplicate entries or something
 # add_df_to_db(db_con = mydb,
 #              table_name = 'NextSeq_run_index',
 #              df = NextSeq_run_index)
 
 
-# add_df_to_db(db_con = mydb,
-#              table_name = 'LoFreq_annotations',
-#              df = read_all_annotations(results_list = results_list,
-#                                        annot_file_list_index = "LoFreq_annot_all_file"))
-# 
-# add_df_to_db(db_con = mydb,
-#              table_name = 'GATK_HC_annotations',
-#              df = read_all_annotations(results_list = results_list,
-#                                        annot_file_list_index = "GATK_HC_annot_all_file"))
-# 
-# add_df_to_db(db_con = mydb,
-#              table_name = 'Coverage_per_region',
-#              df = read_all_avg_coverages(results_list = results_list))
+# very large datasets
+add_all_annotations_to_db(db_con = mydb, results_list = results_list, annot_file_list_index = "LoFreq_annot_all_file", table_name = 'LoFreq_annotations')
+
+add_all_annotations_to_db(db_con = mydb, results_list = results_list, annot_file_list_index = "GATK_HC_annot_all_file", table_name = 'GATK_HC_annotations')
+
+add_all_coverages_to_db(db_con = mydb, results_list = results_list)
+
 
 dbDisconnect(mydb)
+
+
+
+
