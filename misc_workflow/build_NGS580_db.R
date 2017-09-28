@@ -4,6 +4,7 @@
 library("data.table")
 library("RSQLite")
 library("digest")
+library("reshape2")
 
 # ~~~~~ PARAMS & SETTINGS ~~~~~ #
 # a text file with the paths to the results of every clinical sequencing run analysis to use
@@ -31,10 +32,24 @@ msprintf <- function(fmt, ...) {
     message(sprintf(fmt, ...))
 }
 
+tsprintf <- function(fmt, ...){
+    # print a formatted message with timestamp
+    m <- sprintf(fmt, ...)
+    message(sprintf('[%s] %s', format(Sys.time(), "%H:%M:%S"), m))
+}
+
 remove_empty_str <- function(x){
     # remove empty strings from character vector
     x <- x[which(! x %in% "")]
     return(x)
+}
+
+get_numlines <- function(input_file, skip = NA) {
+    # count the number of lines in a file
+    # skip = integer number to subtract from line count e.g. to skip header (doesn't actually prevent lines from being read)
+    num_lines <- length(readLines(input_file))
+    if(!is.na(skip)) num_lines <- num_lines - as.numeric(skip)
+    return(num_lines)
 }
 
 chrom_rownames2cols <- function(df){
@@ -64,7 +79,7 @@ add_uid <- function(df){
 
 make_results_list <- function(paths){
     # make a list of runs & results IDs from paths to results dirs
-    msprintf("Making results list from run paths")
+    tsprintf("Making results list from run paths, searching for files associated with each run...")
 
         # empty list to hold results
     results_list <- list()
@@ -93,7 +108,7 @@ make_results_list <- function(paths){
             message(sprintf("WARNING: 'average_coverage_per_sample.tsv' not found for run %s, run will be skipped", path))
         } else {
             # add to the list
-            msprintf("Adding run %s to the results_list", path)
+            tsprintf("Adding run %s to the results_list", path)
             results_list[[i]] <- list(run = run,
                                       results_ID = results_ID,
                                       path = path,
@@ -110,7 +125,7 @@ make_results_list <- function(paths){
 create_run_results_index <- function(results_list){
     # create an index of all run IDs, results IDs, and paths
     # return a df
-    msprintf("Making run_results_index")
+    tsprintf("Making run_results_index")
     run_results_index <- data.frame()
     for(i in seq_along(results_list)){
         result <- results_list[[i]]
@@ -135,7 +150,7 @@ create_run_results_index <- function(results_list){
 
 read_annotations <- function(file){
     # read the annotation files output by sns pipeline
-    msprintf("Reading file: %s", file)
+    tsprintf("Reading file: %s", file)
     df <- read.delim(file = file, header = TRUE, sep = '\t', stringsAsFactors = FALSE, na.strings = ".")
     setnames(x = df, old = 'X.MUT', new = 'MUT')
     return(df)
@@ -145,7 +160,7 @@ read_all_annotations <- function(results_list, annot_file_list_index){
     # read all of the annotations files from the results_list into a single df
     # annot_file_list_index is the list index to read for each results entry
     # annot_file_list_index <- "LoFreq_annot_all_file"
-    msprintf("Loading all annotations of type '%s' from all runs...", annot_file_list_index)
+    tsprintf("Loading all annotations of type '%s' from all runs...", annot_file_list_index)
     # get vector of files to read in
     # annot_files <- sapply(X = results_list, "[[", annot_file_list_index)
     
@@ -182,7 +197,7 @@ read_all_annotations <- function(results_list, annot_file_list_index){
 
 read_all_summary_combined <- function(results_list){
     # get all the summary-combined.wes.csv files and read them into a single table
-    msprintf("Loading all summary_combined files from all runs...")
+    tsprintf("Loading all summary_combined files from all runs...")
     
     summary_combined <- data.frame()
     
@@ -245,25 +260,54 @@ read_all_summary_combined <- function(results_list){
 read_all_avg_coverages <- function(results_list){
     # read in all the '_average_coverage_per_sample.tsv' files to create a single dataframe with all data from all runs
     
-    msprintf("Reading in all average coverage files from all runs")
-    cov_files <- sapply(X = results_list, "[[", "average_coverage_per_sample_file")
+    tsprintf("Reading in all average coverage files from all runs")
+    # cov_files <- sapply(X = results_list, "[[", "average_coverage_per_sample_file")
     
+    # empty df to hold values
     avg_cov_df <- data.frame()
-    for(cov_file in cov_files){
-        msprintf("Reading file: %s", cov_file)
+    
+    # column names for non-samples
+    id_cols <- c("chrom", "start", "stop", "region")
+    
+    # for(cov_file in cov_files){
+    for(i in seq_along(results_list)){
+        result <- results_list[[i]]
+        run <- result[["run"]]
+        results_ID <- result[["results_ID"]]
+        cov_file <- result[["average_coverage_per_sample_file"]]
+        
+        tsprintf("Reading file: %s", cov_file)
+        
         df <- read.delim(file = cov_file, header = TRUE, sep = '\t', row.names = 1, check.names = FALSE)
+        
+        head(df)
+        
+        # add region columns and chrom cols
+        df[["region"]] <- rownames(df)
+        df <- chrom_rownames2cols(df)
+        
+        head(df)
+        
+        # melt the df to long format
+        df <- reshape2::melt(df,
+                             id.vars = id_cols,
+                             variable.name = "sample",
+                             value.name = "coverage")
+        
+        head(df)
+        
+        # add run info
+        df[["run"]] <- run
+        df[["results_ID"]] <- results_ID
+        
+        head(df)
         
         if(nrow(avg_cov_df) < 1){
             avg_cov_df <- df
         } else {
-            avg_cov_df <- cbind(avg_cov_df, df)
+            avg_cov_df <- rbind(avg_cov_df, df)
         }
     }
-    
-    # add region columns
-    avg_cov_df[["region"]] <- rownames(avg_cov_df)
-    avg_cov_df <- chrom_rownames2cols(avg_cov_df)
-    
     return(avg_cov_df)
 }
 
@@ -369,6 +413,7 @@ df_sqlite_param_names <- function(df){
 
 create_table_with_primary_key <- function(db_con, table_name, df, key_colname = "uid"){
     # create a table in a SQLite database and set the primary key for the table
+    tsprintf("Creating table '%s' in database and adding all entries...", table_name)
     if(! table_name %in% dbListTables(db_con)){
         sql_names <- df_sqlite_names(df)
         sql <- sprintf("CREATE TABLE %s(%s, primary key(%s))",
@@ -379,13 +424,14 @@ create_table_with_primary_key <- function(db_con, table_name, df, key_colname = 
         dbGetQuery(db_con, sql)
         dbWriteTable(db_con, table_name, df, append = TRUE, row.names = FALSE)
     } else {
-        msprintf("Table '%s' already exists in database, skipping...", table_name)
+        tsprintf("Table '%s' already exists in database, skipping...", table_name)
     }
 }
 
 
 insert_or_ignore <- function(db_con, table_name, df, speedup = FALSE){
     # insert entries from the df into the db if they're not already present
+    tsprintf("Inserting new entries into table '%s' in database...", table_name)
     sql_names <- df_sqlite_names(df)
     param_names <- df_sqlite_param_names(df)
     
@@ -402,6 +448,11 @@ insert_or_ignore <- function(db_con, table_name, df, speedup = FALSE){
     dbGetPreparedQuery(db_con, sql, bind.data=df)
 }
 
+sqlite_count_table_rows <- function(db_con, table_name){
+    sql <- sprintf('SELECT COUNT(*) FROM %s', table_name)
+    row_count <- unlist(dbGetQuery(db_con, sql))[["COUNT(*)"]]
+    return(row_count)
+}
 
 
 add_df_to_db <- function(db_con, table_name, df){
@@ -409,7 +460,7 @@ add_df_to_db <- function(db_con, table_name, df){
     # if the table does not exist; create it
     # if the table exists; insert only new entries
     
-    msprintf("Adding '%s' to database...", table_name)
+    tsprintf("Adding '%s' to database...", table_name)
     
     # add 'uid' unique ID column and clean the column names
     df <- add_uid(df)
@@ -417,16 +468,25 @@ add_df_to_db <- function(db_con, table_name, df){
 
     if( ! table_name %in% dbListTables(db_con)){
         # add table if its not present
+        tsprintf("Table '%s' does not exist, adding table and data...", table_name)
         create_table_with_primary_key(db_con = db_con,
                                       table_name = table_name,
                                       df = df)
     } else {
         # if the table already exists, add its entries
+        num_rows_start <- sqlite_count_table_rows(db_con = db_con, table_name = table_name)
+        
+        tsprintf("Table '%s' already exists in database with %s rows", table_name, num_rows_start)
+        
+        tsprintf("Starting insert operation for dataframe containing %s rows...", nrow(df))
+
         insert_or_ignore(db_con = db_con, table_name = table_name, df = df)
+        
+        num_rows_end <- sqlite_count_table_rows(db_con = db_con, table_name = table_name)
+        
+        tsprintf("Inserting finished for table '%s', table now contains %s rows", table_name, num_rows_end)
     }
 }
-
-
 
 
 
@@ -481,3 +541,7 @@ add_df_to_db(db_con = mydb,
              df = NextSeq_run_index)
 
 dbDisconnect(mydb)
+
+
+
+
