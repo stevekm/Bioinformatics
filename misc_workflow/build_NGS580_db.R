@@ -14,13 +14,13 @@ results_dirs_paths_file <- "/ifs/data/molecpathlab/NGS580_WES-development/db/res
 NextSeq_run_index_file <- "/ifs/data/molecpathlab/quicksilver/run_index/NextSeq_run_index.csv"
 
 # table with all NGS580 target genomic regions with ANNOVAR annotations
-regions_annotations_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/GC_Content_Coverage_Correlation/target_regions.hg19_multianno.txt"
+regions_annotations_file <- "/ifs/data/molecpathlab/NGS580_WES-development/db/target_regions.hg19_multianno.txt"
 
 # .bed format file with fasta sequence for each region appended on each row
-target_regions_fasta_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/GC_Content_Coverage_Correlation/target_regions_fasta.bed"
+target_regions_fasta_file <- "/ifs/data/molecpathlab/NGS580_WES-development/db/target_regions_fasta.bed"
 
 # list of genes included in the IonTorrent 50 gene panel
-IonTorrent_reporter_panel_genes_file <- "/ifs/data/molecpathlab/NGS580_WES-development/validation_plots/IonTorrent_reporter_panel_genes.txt"
+IonTorrent_reporter_panel_genes_file <- "/ifs/data/molecpathlab/NGS580_WES-development/db/IonTorrent_reporter_panel_genes.txt"
 
 # database file to use
 sqlite_file <- "/ifs/data/molecpathlab/NGS580_WES-development/db/NGS580.sqlite"
@@ -103,6 +103,9 @@ make_results_list <- function(paths){
         average_coverage_per_sample_file <- system(command = sprintf('find "%s" -name "*_average_coverage_per_sample.tsv"', path), intern = TRUE)
         
         
+        
+        
+        
         # make sure file was found!
         if(length(average_coverage_per_sample_file) < 1){
             message(sprintf("WARNING: 'average_coverage_per_sample.tsv' not found for run %s, run will be skipped", path))
@@ -121,6 +124,44 @@ make_results_list <- function(paths){
     return(results_list)
 }
 
+get_all_analysis_filepaths_table <- function(results_list){
+    # search all the analysis directories and make a table with paths to every file per type
+    tsprintf("Getting paths to all files for all analyses")
+    
+    data_list <- list()
+    
+    for(i in seq_along(results_list)){
+        result <- results_list[[i]]
+        run <- result[["run"]]
+        results_ID <- result[["results_ID"]]
+        
+        path <- result[["path"]]
+        
+        analysis_dirs <- list.dirs(path, recursive = FALSE)
+        
+        files_list <- list()
+        
+        for(q in seq_along(analysis_dirs)){
+            analysis_dir <- analysis_dirs[q]
+            analysis_dir_name <- basename(analysis_dir)
+            analysis_dir_files <- dir(analysis_dir, full.names = TRUE)
+            df <- data.frame(path = analysis_dir_files)
+            if(nrow(df) > 0){
+                df[["dir"]] <- analysis_dir_name
+                df[["file"]] <- basename(analysis_dir_files)
+                df[["run"]] <- run
+                df[["results_ID"]] <- results_ID
+                
+                files_list[[q]] <- df
+            }
+        }
+        files_df <- as.data.frame(data.table::rbindlist(files_list))
+        data_list[[i]] <- files_df
+    }
+    
+    tsprintf("Building file paths dataframe...")
+    return(as.data.frame(data.table::rbindlist(data_list)))
+}
 
 create_run_results_index <- function(results_list){
     # create an index of all run IDs, results IDs, and paths
@@ -187,11 +228,32 @@ read_all_annotations <- function(results_list, annot_file_list_index){
     return(as.data.frame(data.table::rbindlist(annot_dfs)))
 }
 
+add_all_annotations_to_db <- function(db_con, table_name, results_list, annot_file_list_index){
+    tsprintf("Loading all annotations of type '%s' from all runs...", annot_file_list_index)
+    # iterate over the files
+    for(i in seq_along(results_list)){
+        result <- results_list[[i]]
+        run <- result[["run"]]
+        results_ID <- result[["results_ID"]]
+        annot_file <- result[[annot_file_list_index]]
+        
+        # read the file into a dataframe
+        df <- read_annotations(annot_file)
+        
+        # add extra columns
+        df[["run"]] <- run
+        df[["results_ID"]] <- results_ID
+        
+        add_df_to_db(db_con = db_con,
+                     table_name = table_name,
+                     df = df)
+    }
+}
+
 read_all_summary_combined <- function(results_list){
     # get all the summary-combined.wes.csv files and read them into a single table
     tsprintf("Loading all summary_combined files from all runs...")
     
-    # summary_combined <- data.frame()
     data_list <- list()
     
     for(i in seq_along(results_list)){
@@ -239,13 +301,6 @@ read_all_summary_combined <- function(results_list){
         df <- add_uid(df)
         
         data_list[[i]] <- df
-        # # add to the full df
-        # if(nrow(summary_combined) < 1){
-        #     summary_combined <- df
-        # } else {
-        #     summary_combined <- rbind(summary_combined, df)
-        # }
-        
     }
     
     return(as.data.frame(data.table::rbindlist(data_list)))
@@ -295,6 +350,45 @@ read_all_avg_coverages <- function(results_list){
     return(as.data.frame(data.table::rbindlist(cov_dfs)))
 }
 
+
+add_all_coverages_to_db <- function(db_con, table_name = 'Coverage_per_region', results_list){
+    tsprintf("Adding all average coverage files from all runs to database")
+    
+    
+    # column names for non-samples
+    id_cols <- c("chrom", "start", "stop", "region")
+    
+    # for(cov_file in cov_files){
+    for(i in seq_along(results_list)){
+        result <- results_list[[i]]
+        run <- result[["run"]]
+        results_ID <- result[["results_ID"]]
+        cov_file <- result[["average_coverage_per_sample_file"]]
+        
+        tsprintf("Reading file: %s", cov_file)
+        
+        df <- read.delim(file = cov_file, header = TRUE, sep = '\t', row.names = 1, check.names = FALSE)
+        
+        # add region columns and chrom cols
+        df[["region"]] <- rownames(df)
+        df <- chrom_rownames2cols(df)
+        
+        # melt the df to long format
+        df <- reshape2::melt(df,
+                             id.vars = id_cols,
+                             variable.name = "sample",
+                             value.name = "coverage")
+        
+        # add run info
+        df[["run"]] <- run
+        df[["results_ID"]] <- results_ID
+        
+        add_df_to_db(db_con = db_con,
+                     table_name = table_name,
+                     df = df)
+    }
+    
+}
 
 read_IT50_genes <- function(path){
     # read in the list of genes for the IonTorrent 50 gene panel
@@ -412,7 +506,7 @@ create_table_with_primary_key <- function(db_con, table_name, df, key_colname = 
 }
 
 
-insert_or_ignore <- function(db_con, table_name, df, speedup = FALSE){
+insert_or_ignore <- function(db_con, table_name, df, speedup = TRUE){
     # insert entries from the df into the db if they're not already present
     tsprintf("Inserting new entries into table '%s' in database...", table_name)
     sql_names <- df_sqlite_names(df)
@@ -429,6 +523,7 @@ insert_or_ignore <- function(db_con, table_name, df, speedup = FALSE){
     }
     
     dbGetPreparedQuery(db_con, sql, bind.data=df)
+    # 1: RSQLite::dbGetPreparedQuery() is deprecated, please switch to DBI::dbGetQuery(params = bind.data).
 }
 
 sqlite_count_table_rows <- function(db_con, table_name){
@@ -493,18 +588,8 @@ mydb <- dbConnect(RSQLite::SQLite(), sqlite_file)
 
 # add items to database
 add_df_to_db(db_con = mydb,
-             table_name = 'LoFreq_annotations',
-             df = read_all_annotations(results_list = results_list,
-                                       annot_file_list_index = "LoFreq_annot_all_file"))
-
-add_df_to_db(db_con = mydb,
-             table_name = 'GATK_HC_annotations',
-             df = read_all_annotations(results_list = results_list,
-                                       annot_file_list_index = "GATK_HC_annot_all_file"))
-
-add_df_to_db(db_con = mydb,
-             table_name = 'Coverage_per_region',
-             df = read_all_avg_coverages(results_list = results_list))
+             table_name = 'analysis_files',
+             df = get_all_analysis_filepaths_table(results_list = results_list))
 
 add_df_to_db(db_con = mydb,
              table_name = 'run_results_index',
@@ -519,12 +604,31 @@ add_df_to_db(db_con = mydb,
              df = make_regions_df(target_regions_fasta_file,
                                   regions_annotations_file,
                                   IonTorrent_reporter_panel_genes_file))
-add_df_to_db(db_con = mydb,
-             table_name = 'NextSeq_run_index',
-             df = NextSeq_run_index)
+
+
+add_all_annotations_to_db(db_con = mydb, results_list = results_list, annot_file_list_index = "LoFreq_annot_all_file", table_name = 'LoFreq_annotations')
+
+add_all_annotations_to_db(db_con = mydb, results_list = results_list, annot_file_list_index = "GATK_HC_annot_all_file", table_name = 'GATK_HC_annotations')
+
+add_all_coverages_to_db(db_con = mydb, results_list = results_list)
+# problems here with duplicate entries or something
+# add_df_to_db(db_con = mydb,
+#              table_name = 'NextSeq_run_index',
+#              df = NextSeq_run_index)
+
+
+# add_df_to_db(db_con = mydb,
+#              table_name = 'LoFreq_annotations',
+#              df = read_all_annotations(results_list = results_list,
+#                                        annot_file_list_index = "LoFreq_annot_all_file"))
+# 
+# add_df_to_db(db_con = mydb,
+#              table_name = 'GATK_HC_annotations',
+#              df = read_all_annotations(results_list = results_list,
+#                                        annot_file_list_index = "GATK_HC_annot_all_file"))
+# 
+# add_df_to_db(db_con = mydb,
+#              table_name = 'Coverage_per_region',
+#              df = read_all_avg_coverages(results_list = results_list))
 
 dbDisconnect(mydb)
-
-
-
-
