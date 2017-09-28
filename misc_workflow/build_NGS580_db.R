@@ -159,13 +159,12 @@ read_annotations <- function(file){
 read_all_annotations <- function(results_list, annot_file_list_index){
     # read all of the annotations files from the results_list into a single df
     # annot_file_list_index is the list index to read for each results entry
-    # annot_file_list_index <- "LoFreq_annot_all_file"
     tsprintf("Loading all annotations of type '%s' from all runs...", annot_file_list_index)
     # get vector of files to read in
     # annot_files <- sapply(X = results_list, "[[", annot_file_list_index)
     
-    # empty df to hold results
-    annot_df <- data.frame()
+    # empty list to hold results
+    annot_dfs <- list()
     
     # iterate over the files
     for(i in seq_along(results_list)){
@@ -176,30 +175,24 @@ read_all_annotations <- function(results_list, annot_file_list_index){
         
         # read the file into a dataframe
         df <- read_annotations(annot_file)
-        
-        
-        
+
         # add extra columns
         df[["run"]] <- run
         df[["results_ID"]] <- results_ID
-        
-        
-        # add to the full df
-        if(nrow(annot_df) < 1){
-            annot_df <- df
-        } else {
-            annot_df <- rbind(annot_df, df)
-        }
+
+        annot_dfs[[i]] <- df
     }
     
-    return(annot_df)
+    tsprintf("Building '%s' dataframe...", annot_file_list_index)
+    return(as.data.frame(data.table::rbindlist(annot_dfs)))
 }
 
 read_all_summary_combined <- function(results_list){
     # get all the summary-combined.wes.csv files and read them into a single table
     tsprintf("Loading all summary_combined files from all runs...")
     
-    summary_combined <- data.frame()
+    # summary_combined <- data.frame()
+    data_list <- list()
     
     for(i in seq_along(results_list)){
         result <- results_list[[i]]
@@ -245,16 +238,17 @@ read_all_summary_combined <- function(results_list){
         # generate unique IDs for each entry
         df <- add_uid(df)
         
-        # add to the full df
-        if(nrow(summary_combined) < 1){
-            summary_combined <- df
-        } else {
-            summary_combined <- rbind(summary_combined, df)
-        }
+        data_list[[i]] <- df
+        # # add to the full df
+        # if(nrow(summary_combined) < 1){
+        #     summary_combined <- df
+        # } else {
+        #     summary_combined <- rbind(summary_combined, df)
+        # }
         
     }
     
-    return(summary_combined)
+    return(as.data.frame(data.table::rbindlist(data_list)))
 }
 
 read_all_avg_coverages <- function(results_list){
@@ -263,8 +257,8 @@ read_all_avg_coverages <- function(results_list){
     tsprintf("Reading in all average coverage files from all runs")
     # cov_files <- sapply(X = results_list, "[[", "average_coverage_per_sample_file")
     
-    # empty df to hold values
-    avg_cov_df <- data.frame()
+    # empty list to hold values
+    cov_dfs <- list()
     
     # column names for non-samples
     id_cols <- c("chrom", "start", "stop", "region")
@@ -280,13 +274,9 @@ read_all_avg_coverages <- function(results_list){
         
         df <- read.delim(file = cov_file, header = TRUE, sep = '\t', row.names = 1, check.names = FALSE)
         
-        head(df)
-        
         # add region columns and chrom cols
         df[["region"]] <- rownames(df)
         df <- chrom_rownames2cols(df)
-        
-        head(df)
         
         # melt the df to long format
         df <- reshape2::melt(df,
@@ -294,21 +284,15 @@ read_all_avg_coverages <- function(results_list){
                              variable.name = "sample",
                              value.name = "coverage")
         
-        head(df)
-        
         # add run info
         df[["run"]] <- run
         df[["results_ID"]] <- results_ID
         
-        head(df)
-        
-        if(nrow(avg_cov_df) < 1){
-            avg_cov_df <- df
-        } else {
-            avg_cov_df <- rbind(avg_cov_df, df)
-        }
+        cov_dfs[[i]] <- df
     }
-    return(avg_cov_df)
+    
+    tsprintf("Building coverages dataframe...")
+    return(as.data.frame(data.table::rbindlist(cov_dfs)))
 }
 
 
@@ -387,7 +371,6 @@ make_regions_df <- function(target_regions_fasta_file, regions_annotations_file,
         # load the IonTorrent 50 gene panel genes
         IonTorrent_genes = read_IT50_genes(path = IonTorrent_reporter_panel_genes_file)
     )
-    
     return(df)
 }
 
