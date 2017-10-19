@@ -1,0 +1,192 @@
+---
+title: "HapMap Pooled Variant reference list"
+author: "Stephen Kelly"
+output: html_document
+---
+
+Need to make a variant list out of the selected HapMap samples. 
+Compare variants for the new pipeline analysis HapMap samples against the reference list
+for QC
+
+use the .combined.txt file in the dirs  in the analysis data output location
+
+Need to create a single variant list
+label each variant with sample ID, analysis & results ID, dir path
+
+
+
+```{r}
+# library("data.table")
+# install.packages("RJSONIO")
+library("RJSONIO")
+
+# ~~~~~ FUNCTIONS ~~~~~ #
+annot_filter <- function(df, filter_criteria){
+    # filter an annotation table from the sns pipeline based on criteria
+    
+    for(i in seq_along(filter_criteria)){
+        filter_type <- names(filter_criteria)[i]
+        
+        if(filter_type == 'equals'){
+            for(q in seq_along(filter_criteria[[i]])){
+                filter_col <- names(filter_criteria[[i]])[q]
+                filter_value <- filter_criteria[[i]][[filter_col]]
+                
+                df <- df[which(df[[filter_col]] %in% filter_value), ]
+            }
+        }
+        
+        if(filter_type == 'greater_than'){
+            for(q in seq_along(filter_criteria[[i]])){
+                filter_col <- names(filter_criteria[[i]])[q]
+                filter_value <- filter_criteria[[i]][[filter_col]]
+                
+                df <- df[which(df[[filter_col]] > filter_value), ]
+            }
+        }
+    }
+    return(df)
+}
+
+read_annot <- function(input_file){
+    # read the sns pipeline output annotation file
+    df <- read.delim(file = input_file, 
+                     header = TRUE, 
+                     sep = '\t', 
+                     check.names = FALSE, 
+                     na.strings = '.', 
+                     stringsAsFactors = FALSE)
+    # setnames(x = df, old = "#MUT", new = 'MUT')
+    return(df)
+}
+
+concat_df <- function(df1, df2){
+    # rbind two df's, check that the first one has rows
+    if(nrow(df1) < 1){
+        df <- df2
+    } else {
+        df <- rbind(df1, df2)
+    }
+    return(df)
+}
+
+# ~~~~~ SETUP ~~~~~ #
+sample_paths <- list(
+    'NS17-15'= list(
+        NextSeq_ID ='170721_NB501073_0018_AH5C7GBGX3',
+        results_ID = 'results_2017-07-28_21-02-00',
+        path = '/ifs/data/molecpathlab/NGS580_WES/170721_NB501073_0018_AH5C7GBGX3/results_2017-07-28_21-02-00/VCF-GATK-HC-annot',
+        samples = list(
+            'HapMap-250ng-1' = list(),
+            'HapMap-250ng-2' = list(),
+            'HapMap-250ng-3' = list()
+        )
+    ),
+    
+    'NS17-16' = list(
+        NextSeq_ID = '170809_NB501073_0019_AH5FFYBGX3',
+        results_ID = 'results_2017-08-21_10-31-37',
+        path = '/ifs/data/molecpathlab/NGS580_WES/170809_NB501073_0019_AH5FFYBGX3/results_2017-08-21_10-31-37/VCF-GATK-HC-annot',
+        samples = list(
+            'HapMap-250ng-1-B16-804' = list(),
+            'HapMap-250ng-2-B16-804' = list()
+        )
+    )
+)
+
+
+# criteria to use for annotation filtering
+filter_criteria <- list(
+    'greater_than' = list(
+        'FREQ' = 0.05,
+        'DEPTH' = 200
+    ),
+    'equals' = list(
+        'Func.refGene' = "exonic",
+        'ExonicFunc.refGene' = 'nonsynonymous SNV'
+    )
+)
+write(toJSON(x = filter_criteria), "filter_criteria.json")
+
+annot_file_pattern = '.combined.txt$'
+
+annot_table <- data.frame()
+
+# ~~~~~ RUN ~~~~~ #
+# get the annotation files for each sample
+for(i in seq_along(sample_paths)){
+    search_path = sample_paths[[i]][["path"]]
+    
+    for(q in seq_along(sample_paths[[i]][["samples"]])){
+        sampleID <- names(sample_paths[[i]][["samples"]])[q]
+        
+        search_pattern <- sprintf('^%s*%s', sampleID, annot_file_pattern)
+        # "^HapMap-250ng-2-B16-804*.combined.txt$"
+        
+        annot_file <- dir(path = search_path, 
+                          pattern = search_pattern, 
+                          full.names = TRUE)
+        
+        sample_paths[[i]][["samples"]][[sampleID]][["annot_file"]] <- annot_file
+        # "HapMap-250ng-2-B16-804.combined.txt"
+        
+        # read in the filtered annotations
+        annot <- read_annot(annot_file)
+        num_annot_unfiltered <- nrow(annot)
+        sample_paths[[i]][["samples"]][[sampleID]][["num_annot_unfiltered"]] <- num_annot_unfiltered
+        
+        # filter the annotations
+        annot <- annot_filter(annot, filter_criteria)
+        num_annot_filtered <- nrow(annot)
+        sample_paths[[i]][["samples"]][[sampleID]][["num_annot_filtered"]] <- num_annot_filtered
+        
+        # add to full dataframe
+        annot_table <- concat_df(annot_table, annot)
+    }
+}
+write(toJSON(x = sample_paths), "sample_paths.json")
+
+write.table(x = annot_table, 
+            file = "HapMap_GATKHC_annotations_per_sample.tsv", 
+            quote = FALSE, 
+            sep = '\t', 
+            row.names = FALSE,
+            na = '.')
+
+# columns in the table to drop for the summary
+qual_cols <- c("SAMPLE", "QUAL", "DEPTH", "FREQ")
+# columns to keep
+meta_cols <- colnames(annot_table)[which(! colnames(annot_table) %in% qual_cols)]
+
+nrow(annot_table) # 1643
+
+length(which(duplicated(annot_table[, meta_cols]))) # 1277 duplicate entries
+
+summary_table <- annot_table[which(! duplicated(annot_table[, meta_cols])), meta_cols]
+nrow(summary_table) # 366
+
+write.table(x = summary_table, 
+            file = "HapMap_GATKHC_annotations_summary.tsv", 
+            quote = FALSE, 
+            sep = '\t', 
+            row.names = FALSE,
+            na = '.')
+
+colnames(summary_table)
+
+# just the variant identifiers
+variant_cols <- c("#MUT", "CHR", "POS", "Ref", "Alt")
+write.table(x = summary_table[, variant_cols], 
+            file = "HapMap_GATKHC_variants.tsv", 
+            quote = FALSE, 
+            sep = '\t', 
+            row.names = FALSE,
+            na = '.')
+
+
+```
+
+
+
+
+
