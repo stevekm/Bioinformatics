@@ -18,13 +18,21 @@ SeraCare-1to1-Positive	input_bam/SeraCare-1to1-Positive.bam	input_fastq/SeraCare
 """
 import time
 import os
+import sys
 import csv
 import gzip
 from Bio import SeqIO
 import pysam
 
+# reopen stdout file descriptor with write mode
+# and 0 as the buffer size (unbuffered)
+# because qsub print messages are not showing up in the log...
+# https://stackoverflow.com/questions/9876967/sge-script-print-to-file-during-execution-not-just-at-the-end
+# sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+# had issues with flushing print messages to stdout when running in qsub
+
 start_time = time.time()
-print('start time: {0}'.format(start_time))
+print('start time: {0}'.format(start_time)); sys.stdout.flush()
 
 # file with sample IDs, paths to .fastq and .bam files
 samples_file = "sample_files.tsv"
@@ -52,7 +60,7 @@ for sample in samples:
     for fastq in sample['fastq']:
         sample['output_fastq'][fastq] = os.path.join(output_dir, os.path.basename(fastq)).strip('.gz')
 
-print(samples)
+print(samples); sys.stdout.flush()
 
 
 
@@ -66,10 +74,10 @@ with open(target_file) as f:
 
 # get the read IDs ('qname') for the targets from each bam per sample
 for chrom, start, stop in targets:
-    print((chrom, start, stop))
+    print((chrom, start, stop)); sys.stdout.flush()
     for sample in samples:
         for bam_file in sample['bam']:
-            print(bam_file)
+            print(bam_file); sys.stdout.flush()
             # load the bam
             bam = pysam.AlignmentFile(bam_file, "rb")
             for read in bam.fetch(chrom, start, stop):
@@ -85,7 +93,7 @@ for sample in samples:
 for sample in samples:
     for fastq in sample['fastq']:
         output_fastq = sample['output_fastq'][fastq]
-        print((fastq, output_fastq))
+        print((fastq, output_fastq)); sys.stdout.flush()
         with gzip.open(fastq) as handle:
             input_seq_iterator = SeqIO.parse(handle, "fastq")
             seq_iterator = (record for record in input_seq_iterator if record.seq in sample['qname'])
@@ -93,7 +101,7 @@ for sample in samples:
 
 
 end_time = time.time()
-print('end_time: {0}'.format(end_time))
+print('end_time: {0}'.format(end_time)); sys.stdout.flush()
 
 time_elapsed = end_time - start_time
-print('time_elapsed: {0}'.format(time_elapsed))
+print('time_elapsed: {0}'.format(time_elapsed)); sys.stdout.flush()
