@@ -24,15 +24,9 @@ import gzip
 from Bio import SeqIO
 import pysam
 
-# reopen stdout file descriptor with write mode
-# and 0 as the buffer size (unbuffered)
-# because qsub print messages are not showing up in the log...
-# https://stackoverflow.com/questions/9876967/sge-script-print-to-file-during-execution-not-just-at-the-end
-# sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
-# had issues with flushing print messages to stdout when running in qsub
 
 start_time = time.time()
-print('start time: {0}'.format(start_time)); sys.stdout.flush()
+print('start time: {0}'.format(start_time)); sys.stdout.flush() # flush messages immediately or they hang in the buffer a long time
 
 # file with sample IDs, paths to .fastq and .bam files
 samples_file = "sample_files.tsv"
@@ -58,7 +52,7 @@ for sample in samples:
     # make fastq output file paths
     sample['output_fastq'] = {}
     for fastq in sample['fastq']:
-        sample['output_fastq'][fastq] = os.path.join(output_dir, os.path.basename(fastq)).strip('.gz')
+        sample['output_fastq'][fastq] = os.path.join(output_dir, os.path.basename(fastq)) # .strip('.gz')
 
 print(samples); sys.stdout.flush()
 
@@ -94,10 +88,10 @@ for sample in samples:
     for fastq in sample['fastq']:
         output_fastq = sample['output_fastq'][fastq]
         print((fastq, output_fastq)); sys.stdout.flush()
-        with gzip.open(fastq) as handle:
-            input_seq_iterator = SeqIO.parse(handle, "fastq")
+        with gzip.open(fastq) as gz_in, gzip.open(output_fastq, 'wb') as gz_out:
+            input_seq_iterator = SeqIO.parse(gz_in, "fastq")
             seq_iterator = (record for record in input_seq_iterator if record.id in sample['qname'])
-            SeqIO.write(seq_iterator, output_fastq, "fastq")
+            SeqIO.write(seq_iterator, gz_out, "fastq")
 
 
 end_time = time.time()
