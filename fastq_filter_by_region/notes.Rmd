@@ -1,0 +1,210 @@
+---
+title: "Demo Data for NGS580"
+author: "Stephen Kelly"
+date: "11/27/2017"
+output: html_document
+---
+need a small demo dataset to use for NGS580 testing
+
+Need: 
+
+- use subset of targets.bed, maybe 2 or 3 regions per chrom
+
+- subset .fastq.gz for only some reads that fall in those regions
+
+- only for some control samples, pos. & neg.
+
+Do: 
+
+- look in the .bam for reads in the selected regions
+
+- get the sequence ID for those reads
+
+- pull out those reads from the .fastq.gz and save to a new fastq
+
+want to use the original .fastq.gz to preserve its formatting, avoid sequence degredation from alignments, etc.
+
+
+https://www.biostars.org/p/49306/
+https://www.biostars.org/p/75568/#75575
+
+# Make .bed
+
+```{r}
+
+# original targets.bed
+
+targets_file <- "/ifs/data/molecpathlab/NGS580_WES-development/NGS580_demo_data/snsxt/targets.bed"
+
+targets <- read.delim(file = targets_file, header = FALSE, sep = '\t')
+
+dim(targets)
+# [1] 10640     6
+
+head(targets)
+#     V1      V2      V3                         V4 V5 V6
+# 1 chr1 2985823 2985860 472_145888_63976(PRDM16)_1  0  -
+# 2 chr1 3102688 3103038 472_145889_63976(PRDM16)_2  0  -
+# 3 chr1 3160650 3160701 472_145890_63976(PRDM16)_3  0  -
+# 4 chr1 3301712 3301850 472_145891_63976(PRDM16)_4  0  -
+# 5 chr1 3313054 3313157 472_145892_63976(PRDM16)_5  0  -
+# 6 chr1 3319354 3319562 472_145893_63976(PRDM16)_6  0  -
+
+
+# keep only first 3 columns
+targets <- targets[, 1:3]
+
+# set colnames 
+colnames(targets) <- c("chrom", "start", "stop")
+
+
+head(targets)
+#   chrom   start    stop
+# 1  chr1 2985823 2985860
+# 2  chr1 3102688 3103038
+# 3  chr1 3160650 3160701
+# 4  chr1 3301712 3301850
+# 5  chr1 3313054 3313157
+# 6  chr1 3319354 3319562
+
+# get first 3 regions per chrom
+library("data.table")
+targets <- setDT(targets)[ , .SD[order(-start, -stop)[1]], by = chrom]
+
+
+# only keep targets for chroms that ran really fast in MuTect2
+keep_chroms <- c("chr13", "chr14", "chr15", "chr18", "chr20", "chr21", "chrX", "chrY")
+targets <- targets[which(targets[["chrom"]] %in% keep_chroms), ]
+
+dim(targets)
+# [1] 8 3
+
+write.table(x = as.data.frame(targets), file = 'targets_subset.bed', quote = FALSE, sep = '\t', row.names = FALSE, col.names = FALSE)
+
+```
+
+
+```
+$ head targets_subset.bed
+chr13	113976596	113976736
+chr14	105258934	105258980
+chr15	99500289	99500671
+chr18	60984762	60986297
+chr20	62338350	62338443
+chr21	46330639	46330700
+chrX	153775003	153775085
+chrY	1281448	1281513
+```
+
+# Subset .bam
+
+https://samtools.github.io/hts-specs/SAMv1.pdf
+https://genome.sph.umich.edu/wiki/SAM
+
+```
+$ ls -1 /ifs/data/molecpathlab/snsxt-dev/example_runs/mini_analysis-controls/BAM-BWA
+HapMap-B17-1267.bam
+HapMap-B17-1267.bam.bai
+NTC-H2O.bam
+NTC-H2O.bam.bai
+SeraCare-1to1-Positive.bam
+SeraCare-1to1-Positive.bam.bai
+
+
+$ samtools view -L targets_subset.bed /ifs/data/molecpathlab/snsxt-dev/example_runs/mini_analysis-controls/BAM-BWA/HapMap-B17-1267.bam
+NB501073:25:HH35JBGX3:2:11210:1058:6660	163	chr1	244006280	60	150M	=	244006371	241	CTAACACACGTTAAATATATCATTTCTCTCTTACTAGACATAGCATGACACAGTTTAACAGTATCAGAAAAAAGATCAACTTCTAAGACACCACTCACTGCTAGCACTCTTACCAACCGTATTATTTTTGGTTTGCGGAGCACTTACCCC	AAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEAEEEEEEEEAEEEE/EEEEAEEEEEEEEEEEEEEEE<EEEE<EEEEEEE/E/EEEAEEEEEEEEEAEEAEE<AEEEEAEEA<</EEEEEEEEEEEEEAAA/<EE/<6AAEAA	NM:i:0	MD:Z:150	AS:i:150	XS:i:19	RG:Z:HapMap-B17-1267
+...
+...
+
+
+$ ls -1 NS17-22/HapMap-B17-1267_S8_L00*
+NS17-22/HapMap-B17-1267_S8_L001_R1_001.fastq.gz
+NS17-22/HapMap-B17-1267_S8_L001_R2_001.fastq.gz
+NS17-22/HapMap-B17-1267_S8_L002_R1_001.fastq.gz
+NS17-22/HapMap-B17-1267_S8_L002_R2_001.fastq.gz
+NS17-22/HapMap-B17-1267_S8_L003_R1_001.fastq.gz
+NS17-22/HapMap-B17-1267_S8_L003_R2_001.fastq.gz
+NS17-22/HapMap-B17-1267_S8_L004_R1_001.fastq.gz
+NS17-22/HapMap-B17-1267_S8_L004_R2_001.fastq.gz
+
+$ zcat  NS17-22/NS17-22/HapMap-B17-1267_S8_L001_R1_001.fastq.gz | head
+@NB501073:25:HH35JBGX3:1:11101:4085:1043 1:N:0:CTAAGGTC
+TTCATNTTGTCCTATAGCAATCAAANAGCTCTGATTCAGTGTTGCCCCCTACCTCCCACAGAAACATCNGAACACAGGACCTGCCCTTGAGCAAGAGGACAAGACCAGCAAGGTGGCTCCTGGCAAGANCGGAAGAGCACACGTCTGAACT
++
+AAAAA#EEEEEEEEEEEEEEEEEEE#EEEEEEEEAEEEEEEEEEEEEEEEEEEEEEEEEEEAEEEEEE#EEEEEEEEEEEEEEEEEEEEEEEEEE/EEEEEEEEEEE
+```
+
+Looks like the Identifier in the first column of the .bam might be the same ID in the .fastq.gz
+
+```
+$ samtools view -L targets_subset.bed /ifs/data/molecpathlab/snsxt-dev/example_runs/mini_analysis-controls/BAM-BWA/HapMap-B17-1267.bam | wc -l
+22177
+```
+
+```
+$ zcat NS17-22/HapMap-B17-1267_S8_L00* | grep 'NB501073:25:HH35JBGX3:2:11210:1058:6660'
+@NB501073:25:HH35JBGX3:2:11210:1058:6660 1:N:0:CTAAGGTC
+@NB501073:25:HH35JBGX3:2:11210:1058:6660 2:N:0:CTAAGGTC
+```
+yeah looks like we can get the paired fastq reads by these IDs
+
+Get the sample IDs for the samples to use
+
+```
+$ ls -1 BAM-BWA/
+HapMap-B17-1267.bam
+HapMap-B17-1267.bam.bai
+NTC-H2O.bam
+NTC-H2O.bam.bai
+SeraCare-1to1-Positive.bam
+SeraCare-1to1-Positive.bam.bai
+
+$ cat sampleIDs.txt
+HapMap-B17-1267
+NTC-H2O
+SeraCare-1to1-Positive
+```
+
+example fastq file
+
+```
+/ifs/data/molecpathlab/quicksilver/170918_NB501073_0025_AHH35JBGX3/Data/Intensities/BaseCalls/Unaligned/NS17-22/HapMap-B17-1267_S8_L001_R2_001.fastq.gz
+```
+
+```python
+import gzip
+from Bio import SeqIO
+fastq_file = "/ifs/data/molecpathlab/quicksilver/170918_NB501073_0025_AHH35JBGX3/Data/Intensities/BaseCalls/Unaligned/NS17-22/HapMap-B17-1267_S8_L001_R2_001.fastq.gz"
+
+with gzip.open(fastq_file) as handle: # , "rt"
+    for record in SeqIO.parse(handle, "fastq"):
+        print(record.id)
+
+```
+
+This works
+
+try to get the .bam IDs straight from Python too...
+https://www.biostars.org/p/186732/
+
+```python
+import pysam
+
+reads = []
+
+bam_file = "/ifs/data/molecpathlab/snsxt-dev/example_runs/mini_analysis-controls/BAM-BWA/HapMap-B17-1267.bam"
+bam = pysam.AlignmentFile(bam_file, "rb")
+for read in bam.fetch('chr13', 113976596, 113976736):
+     reads.append(read)
+
+bam.close()
+
+reads[0].qname
+# 'NB501073:25:HH35JBGX3:1:11205:6093:13436'
+```
+
+do it all in Python;
+
+- make a samplesheet for sample ID + fastq.gz files + bam files
+- load in regions from targets.bed
+- for each sample, load all the qnames for every target, get the reads with matching qnames, write to new fastq file
