@@ -19,6 +19,8 @@ module load python/2.7
 set -x
 echo "python $script"
 
+python $script
+
 date +"%Y-%m-%d-%H-%M-%S"
 echo "Duration: \$(((\$(date +%s)-\$start)/60)) minutes"
 set +x
