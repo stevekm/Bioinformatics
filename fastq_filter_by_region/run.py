@@ -96,7 +96,7 @@ for sample in samples:
         print((fastq, output_fastq)); sys.stdout.flush()
         with gzip.open(fastq) as handle:
             input_seq_iterator = SeqIO.parse(handle, "fastq")
-            seq_iterator = (record for record in input_seq_iterator if record.seq in sample['qname'])
+            seq_iterator = (record for record in input_seq_iterator if record.id in sample['qname'])
             SeqIO.write(seq_iterator, output_fastq, "fastq")
 
 
