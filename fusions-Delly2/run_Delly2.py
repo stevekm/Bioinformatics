@@ -197,7 +197,7 @@ def delly2_cmd(bam_file, output_dir, call_type_name, call_type_arg, sampleID = N
     # bcftools view "results_dir/delly2-snv/Sample1.deletions.bcf" > "results_dir/delly2-snv/Sample1.deletions.vcf"
     command = """
 {0} call -t {1} -g "{2}" -o "{3}" "{4}"
-{5} view "{6}" "{7}"
+{5} view "{6}" -o "{7}"
 """.format(
 delly2_bin,
 call_type_arg,
