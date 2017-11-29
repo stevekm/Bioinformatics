@@ -1,0 +1,240 @@
+---
+title: "VAF Plots"
+author: "Stephen Kelly"
+date: "11/28/2017"
+output: html_document
+---
+need VAF (variant allele frequency) plots
+- FREQ column in LoFreq annotations file
+- for chr Y, X vs. chr1
+- only dbSNP variants
+
+plotting the LoFreq variant annotation tables for the samples
+trying to compare the freq distribution of the X and Y chroms against the chr1, chr2
+some samples appear to show dist. centered around 0.5, others around 0.3 & 0.6
+might suggest genomic abnormalities
+
+# Data exploration
+
+```{r}
+annot_file <- "VCF-LoFreq-annot.all.txt"
+
+annotations_source <- read.delim(file = annot_file, header = TRUE, sep = '\t', check.names = FALSE)
+
+dput(colnames(annotations))
+# c("#MUT", "SAMPLE", "CHR", "POS", "QUAL", "DEPTH", "FREQ", "Ref", 
+# "Alt", "Func.refGene", "Gene.refGene", "GeneDetail.refGene", 
+# "ExonicFunc.refGene", "AAChange.refGene", "dbSNP_147", "gnomAD_exome_ALL", 
+# "gnomAD_genome_ALL", "Kaviar_AF", "cosmic80", "CADD13_PHRED", 
+# "FATHMM_noncoding", "FATHMM_coding")
+
+dim(annotations_source)
+# [1] 552993     22
+
+
+# filter for dbSNP
+annotations <- annotations_source[ which(annotations_source[["dbSNP_147"]] != '.'), ]
+dim(annotations)
+# [1] 512447     22
+
+# filter for only ch
+annotations <- annotations[which(annotations[["CHR"]] %in% c("chrY", "chrX", "chr1")), ]
+dim(annotations)
+# [1] 60298    22
+
+# remove FREQ > 0.9
+annotations <- annotations[ which(annotations[["FREQ"]] < 0.9), ]
+dim(annotations)
+# [1] 38262    22
+
+# var_types <- unique(sprintf('%s > %s', annotations[["Ref"]], annotations[["Alt"]]))
+# add factor levesl; 0.2 - 0.4, 0.
+
+
+library("ggplot2")
+vaf_plot <- ggplot(data = annotations, aes(x = FREQ, fill = CHR)) +
+    geom_histogram(alpha = 0.4, bins = 100) + 
+    ggtitle('Frequency Distribution per Chromosome') +
+    facet_grid(CHR ~ .)
+
+print(vaf_plot)
+
+
+
+
+
+
+
+keep_chroms <- c("chrY", "chrX", "chr1", "chr2")
+
+# subset for known male sample
+annotations_15_1067 <- annotations_source[ which(annotations_source[["SAMPLE"]] == "15-1067"), ]
+# annotations_15_1067 <- annotations_15_1067[ which(annotations_15_1067[["FREQ"]] < 0.9), ]
+annotations_15_1067 <- annotations_15_1067[which(annotations_15_1067[["CHR"]] %in% keep_chroms), ]
+annotations_15_1067 <- annotations_15_1067[ which(annotations_15_1067[["dbSNP_147"]] != '.'), ]
+
+dim(annotations_15_1067)
+# [1] 3494   22
+
+ggplot(data = annotations_15_1067, aes(x = FREQ, fill = CHR)) +
+    geom_histogram(alpha = 0.6, bins = 100) + 
+    ggtitle('Frequency Distribution per Chromosome Sample 15-1067') +
+    coord_cartesian(ylim = c(0, 300)) +
+    theme_bw()
+
+
+# subset for known female sample
+annotations_260 <- annotations_source[ which(annotations_source[["SAMPLE"]] == "260"), ]
+annotations_260 <- annotations_260[which(annotations_260[["CHR"]] %in% keep_chroms), ]
+annotations_260 <- annotations_260[ which(annotations_260[["dbSNP_147"]] != '.'), ]
+
+dim(annotations_260)
+# [1] 4780   22
+
+ggplot(data = annotations_260, aes(x = FREQ, fill = CHR)) +
+    geom_histogram(alpha = 0.6, bins = 100) + 
+    ggtitle('Frequency Distribution per Chromosome Sample 260') +
+    coord_cartesian(ylim = c(0, 300)) +
+    theme_bw()
+
+
+
+annotations_249 <- annotations_source[ which(annotations_source[["SAMPLE"]] == "249"), ]
+annotations_249 <- annotations_249[which(annotations_249[["CHR"]] %in% keep_chroms), ]
+annotations_249 <- annotations_249[ which(annotations_249[["dbSNP_147"]] != '.'), ]
+
+dim(annotations_249)
+# [1] 5914   22
+
+ggplot(data = annotations_249, aes(x = FREQ, fill = CHR)) +
+    geom_histogram(alpha = 0.6, bins = 100) + 
+    ggtitle('Frequency Distribution per Chromosome Sample 249') +
+    coord_cartesian(ylim = c(0, 300)) +
+    theme_bw()
+
+
+# combine the two
+annotations_15_1067[["sex"]] <- "male"
+annotations_260[["sex"]] <- "female"
+annotations_249[["sex"]] <- "female"
+
+
+annotations_compare <- rbind(annotations_15_1067, annotations_260)
+annotations_compare <- rbind(annotations_compare, annotations_249)
+
+
+ggplot(data = annotations_compare, aes(x = FREQ, fill = CHR)) +
+    geom_histogram(alpha = 0.6, bins = 100) + 
+    ggtitle('Frequency Distribution per Chromosome') +
+    coord_cartesian(ylim = c(0, 100)) +
+    theme_bw() +
+    facet_grid(sex ~ SAMPLE * CHR)
+
+
+```
+
+Looks good now bring in all the samples
+
+# Make Good Plots
+
+Need to fix the sample IDs
+
+```{r}
+
+sampleIDs_file <- "/ifs/data/molecpathlab/PNET_GYN/VAF_distribution_plots/sampleIDs_sex.tsv"
+annot_file <- "/ifs/data/molecpathlab/PNET_GYN/VAF_distribution_plots/VCF-LoFreq-annot.all.txt"
+
+annotations_source <- read.delim(file = annot_file, header = TRUE, sep = '\t', check.names = FALSE)
+sampleIDs <- read.delim(file = sampleIDs_file, header = TRUE, sep = '\t', check.names = FALSE)
+
+dput(colnames(annotations_source))
+# c("#MUT", "SAMPLE", "CHR", "POS", "QUAL", "DEPTH", "FREQ", "Ref", 
+# "Alt", "Func.refGene", "Gene.refGene", "GeneDetail.refGene", 
+# "ExonicFunc.refGene", "AAChange.refGene", "dbSNP_147", "gnomAD_exome_ALL", 
+# "gnomAD_genome_ALL", "Kaviar_AF", "cosmic80", "CADD13_PHRED", 
+# "FATHMM_noncoding", "FATHMM_coding")
+
+dim(annotations_source)
+# [1] 552993     22
+
+dput(colnames(sampleIDs))
+# c("ID", "Sex")
+
+dim(sampleIDs)
+# [1] 18  2
+
+annotations_merged <- merge(x = annotations_source, y = sampleIDs, by.x = 'SAMPLE', by.y = 'ID', all.x = TRUE)
+dim(annotations_merged)
+
+
+filter_annotations <- function(df){
+    # chroms to subset by
+    keep_chroms <- c("chrY", "chrX", "chr1", "chr2")
+    
+    # subset for chroms
+    df <- df[which(df[["CHR"]] %in% keep_chroms), ]
+    
+    # keep only dbSNP
+    df[ which(df[["dbSNP_147"]] != '.'), ]
+    
+    return(df)
+}
+
+annotations_filtered <- filter_annotations(annotations_merged)
+dim(annotations_filtered)
+# [1] 102395     23
+
+# make plot
+vaf_plot <- ggplot(data = annotations_filtered, aes(x = FREQ, fill = CHR)) +
+    geom_histogram(alpha = 0.6, bins = 100) + 
+    ggtitle('Frequency Distribution per Chromosome') +
+    coord_cartesian(ylim = c(0, 100)) +
+    theme_bw() +
+    facet_grid(SAMPLE * CHR ~ Sex)
+
+print(vaf_plot)
+
+ggsave(
+  "vaf_plot3.png",
+  vaf_plot,
+  width = 8,
+  height = 50,
+  dpi = 150,
+  limitsize = FALSE
+)
+
+pdf(file = "vaf_plot3.pdf", width = 10, height = 60)
+print(vaf_plot)
+dev.off()
+
+```
+
+alternate plot
+
+```{r}
+vaf_plot2 <- ggplot(data = annotations_filtered, aes(x = FREQ, fill = CHR)) +
+    geom_density(alpha = 0.4) + 
+    ggtitle('Frequency Distribution per Chromosome') +
+    coord_cartesian(ylim = c(0, 100)) +
+    theme_bw() +
+    facet_grid(SAMPLE * CHR ~ Sex)
+
+print(vaf_plot2)
+
+ggsave(
+  "vaf_plot4.png",
+  vaf_plot,
+  width = 8,
+  height = 50,
+  dpi = 150,
+  limitsize = FALSE
+)
+
+pdf(file = "vaf_plot4.pdf", width = 10, height = 60)
+print(vaf_plot)
+dev.off()
+
+
+```
+
+... looks the same
