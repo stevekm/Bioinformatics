@@ -238,3 +238,143 @@ dev.off()
 ```
 
 ... looks the same
+
+
+-----------
+Now need to make plots for every chrom, for every sample
+
+```{r}
+library("ggplot2")
+
+# ~~~~~ FUNCTIONS ~~~~~ #
+filter_annotations <- function(df){
+    # chroms to subset by
+    keep_chroms <- c("chrY", "chrX", "chr1", "chr2")
+    
+    # subset for chroms
+    # df <- df[which(df[["CHR"]] %in% keep_chroms), ]
+    
+    # keep only dbSNP
+    df <- df[ which(df[["dbSNP_147"]] != '.'), ]
+    
+    return(df)
+}
+
+# ~~~~~ RUN ~~~~~ #
+sampleIDs_file <- "/ifs/data/molecpathlab/PNET_GYN/VAF_distribution_plots/sampleIDs_sex.tsv"
+annot_file <- "/ifs/data/molecpathlab/PNET_GYN/VAF_distribution_plots/VCF-LoFreq-annot.all.txt"
+
+annotations_source <- read.delim(file = annot_file, header = TRUE, sep = '\t', check.names = FALSE)
+save(annotations_source, file = 'LoFreq_annotations_source.Rdata')
+sampleIDs <- read.delim(file = sampleIDs_file, header = TRUE, sep = '\t', check.names = FALSE)
+sampleIDs <- sampleIDs[with(sampleIDs, order(Sex)), ]
+
+annotations_merged <- merge(x = annotations_source, y = sampleIDs, by.x = 'SAMPLE', by.y = 'ID', all.x = TRUE)
+save(annotations_merged, file = 'LoFreq_annotations_merged.Rdata')
+
+annotations_filtered <- filter_annotations(annotations_merged)
+save(annotations_filtered, file = 'LoFreq_annotations_filtered.Rdata')
+
+
+pdf(file = "LoFreq_VAF_GYN_PNETs.pdf", width = 10, height = 60)
+for(i in seq(nrow(sampleIDs))){
+    sample <- as.character(sampleIDs[["ID"]][i])
+    sex <- as.character(sampleIDs[["Sex"]][i])
+    
+    df <- annotations_filtered[which(annotations_filtered[["SAMPLE"]] == sample), ]
+    
+    
+    
+    title <- sprintf('[%s] %s - Variant Frequency Distribution', sex, sample)
+    message(title)
+    if(nrow(df) < 1) {
+        message("skipping.... no variants")
+        next
+    }
+    
+    g <- ggplot(data = df, aes(x = FREQ, fill = CHR)) +
+        geom_vline(xintercept = 0.333, color = "red", linetype = "dashed", alpha = 0.5) +
+        geom_vline(xintercept = 0.666, color = "red", linetype = "dashed", alpha = 0.5) +
+        geom_vline(xintercept = 0.5, color = "blue", linetype = "dashed", alpha = 0.5) +
+        geom_histogram(alpha = 0.8, bins = 100) + 
+        ggtitle(title) +
+        coord_cartesian(ylim = c(0, 100), xlim = c(0, 1)) +
+        theme_bw() +
+        facet_grid(CHR ~ .) +
+        scale_x_continuous(breaks = seq(0, 1, .1)) 
+    
+    print(g)
+}
+dev.off()
+
+```
+
+also do GATK
+
+
+```{r}
+library("ggplot2")
+
+# ~~~~~ FUNCTIONS ~~~~~ #
+filter_annotations <- function(df){
+    # chroms to subset by
+    keep_chroms <- c("chrY", "chrX", "chr1", "chr2")
+    
+    # subset for chroms
+    # df <- df[which(df[["CHR"]] %in% keep_chroms), ]
+    
+    # keep only dbSNP
+    df <- df[ which(df[["dbSNP_147"]] != '.'), ]
+    
+    return(df)
+}
+
+# ~~~~~ RUN ~~~~~ #
+sampleIDs_file <- "/ifs/data/molecpathlab/PNET_GYN/VAF_distribution_plots/sampleIDs_sex.tsv"
+annot_file <- "/ifs/data/molecpathlab/PNET_GYN/VAF_distribution_plots/VCF-GATK-HC-annot.all.txt"
+
+annotations_source <- read.delim(file = annot_file, header = TRUE, sep = '\t', check.names = FALSE)
+save(annotations_source, file = 'GATK_annotations_source.Rdata')
+sampleIDs <- read.delim(file = sampleIDs_file, header = TRUE, sep = '\t', check.names = FALSE)
+sampleIDs <- sampleIDs[with(sampleIDs, order(Sex)), ]
+
+annotations_merged <- merge(x = annotations_source, y = sampleIDs, by.x = 'SAMPLE', by.y = 'ID', all.x = TRUE)
+save(annotations_merged, file = 'GATK_annotations_merged.Rdata')
+
+annotations_filtered <- filter_annotations(annotations_merged)
+save(annotations_filtered, file = 'GATK_annotations_filtered.Rdata')
+
+
+
+pdf(file = "GATK_VAF_GYN_PNETs.pdf", width = 10, height = 60)
+for(i in seq(nrow(sampleIDs))){
+    sample <- as.character(sampleIDs[["ID"]][i])
+    sex <- as.character(sampleIDs[["Sex"]][i])
+    
+    df <- annotations_filtered[which(annotations_filtered[["SAMPLE"]] == sample), ]
+    
+    
+    
+    title <- sprintf('[%s] %s - Variant Frequency Distribution', sex, sample)
+    message(title)
+    if(nrow(df) < 1) {
+        message("skipping.... no variants")
+        next
+    }
+    
+    g <- ggplot(data = df, aes(x = FREQ, fill = CHR)) +
+        geom_vline(xintercept = 0.333, color = "red", linetype = "dashed", alpha = 0.5) +
+        geom_vline(xintercept = 0.666, color = "red", linetype = "dashed", alpha = 0.5) +
+        geom_vline(xintercept = 0.5, color = "blue", linetype = "dashed", alpha = 0.5) +
+        geom_histogram(alpha = 0.8, bins = 100) + 
+        ggtitle(title) +
+        coord_cartesian(ylim = c(0, 100), xlim = c(0, 1)) +
+        theme_bw() +
+        facet_grid(CHR ~ .) +
+        scale_x_continuous(breaks = seq(0, 1, .1)) 
+    
+    print(g)
+}
+dev.off()
+
+```
