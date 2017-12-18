@@ -1,0 +1,406 @@
+---
+title: "summary intervals"
+author: "Stephen Kelly"
+date: "12/15/2017"
+output: html_document
+---
+
+- Figure out if the coverage of regions from the intervals file are present in the summary files
+
+Matija requested to find out if certain genes on the Y chromosome in our IDT exome sequencing samples had reads. 
+
+Using the sns whole exome sequencing pipeline output, check the summary interval files for coverage values
+
+These files contain coverage statistics for target regions in all the samples. 
+
+Need to:
+
+- figure out which summary interval correspond to the genes of interest (the intervals are not annotated)
+
+- plot the coverage values for those intervals
+
+
+NOTE: the first part of this notebook are misc notes used to determine the best approach
+
+The section starting with `Make Plots for All Samples` shows the final workflow bringing together the annotations with the interval statistics, and the final plotting. 
+
+Need to save this notebook since it has some useful code scraps.
+
+-----------
+
+number of IDT target regions used in the analysis & sequencing
+
+```
+[2017-12-15 15:36:54]
+steve@Li:~/projects/chrY_gene_coverage$ wc -l IDT.bed
+  205669 IDT.bed
+```
+
+```{r}
+# ~~~~~ FUNCTIONS ~~~~~ #
+chrom2cols <- function(df, col_name){
+    # split a column of genomic coordinates in a dataframe into separate columns
+    # example column to split format:
+    # chr10:100026989-100027328 
+    # need to make sure I save a copy of this function on GitHub !!
+    
+    # make sure its a character column
+    df[[col_name]] <- as.character(df[[col_name]])
+    
+    # split the first column
+    df_chrom <- as.data.frame(do.call(rbind, strsplit(df[[col_name]], ':')))
+    
+    # split the second column
+    df_chrom <- cbind(df_chrom[1], as.data.frame(do.call(rbind, strsplit(as.character(df_chrom$V2), '-'))))
+    
+    # rest the colnames
+    colnames(df_chrom) <- c("chrom", "start", "stop")
+    
+    # add to original df
+    df <- cbind(df_chrom, df)
+    return(df)
+}
+
+
+```
+
+
+```{r}
+QC_dir <- "/Users/steve/projects/chrY_gene_coverage/QC-coverage"
+dir(QC_dir, full.names = TRUE)
+
+sample_interval_summary_file <- "/Users/steve/projects/chrY_gene_coverage/QC-coverage/15-1067.sample_interval_summary"
+genes_file <- "/Users/steve/projects/chrY_gene_coverage/IDT.bed"
+
+target_genes <- read.delim(file = genes_file, header = FALSE, sep = '\t')
+
+sample_interval_summary <- read.delim(file = sample_interval_summary_file, header = TRUE, check.names = FALSE, sep = ',')
+
+# split chrom col
+sample_interval_summary <- chrom2cols(df = sample_interval_summary, col_name = "Target")
+
+# subset for chromosome Y
+sample_interval_summary <- sample_interval_summary[which(as.character(sample_interval_summary[["chrom"]]) == "chrY"), ]
+
+write.table(x = sample_interval_summary[, c("chrom", "start", "stop")], file = "15-1067.sample_interval_summary.bed", quote = FALSE, sep = '\t', col.names = FALSE, row.names = FALSE)
+
+# need to subtract 1 from the start coordinates
+# as.numeric(sample_interval_summary[['start']]) - 1
+```
+
+Get the .bed coordinates for all samples from summary interval file
+
+```{r}
+QC_dir <- "/Users/steve/projects/chrY_gene_coverage/QC-coverage"
+summary_interval_bed_dir <- "/Users/steve/projects/chrY_gene_coverage/summary_interval_bed"
+samples <- setNames(nm = sapply(X = strsplit(x = dir(QC_dir, 
+                                                     pattern = "*sample_interval_summary"), 
+                                             split = '.', 
+                                             fixed = TRUE), 
+                                FUN = function(x) x[1]), 
+                    object = dir(QC_dir, 
+                                 full.names = TRUE,
+                                 pattern = "*sample_interval_summary"))
+
+for(i in seq_along(samples)){
+    sampleID <- names(samples)[i]
+    sample_interval_summary_file <- samples[i]
+    sample_output_bedfile <- file.path(summary_interval_bed_dir, sprintf("%s.bed", sampleID))
+    
+    sample_interval_summary <- read.delim(file = sample_interval_summary_file, header = TRUE, check.names = FALSE, sep = ',')
+    
+    # split chrom col
+    sample_interval_summary <- chrom2cols(df = sample_interval_summary, col_name = "Target")
+    
+    # subset for chromosome Y
+    sample_interval_summary <- sample_interval_summary[which(as.character(sample_interval_summary[["chrom"]]) == "chrY"), ]
+    
+    write.table(x = sample_interval_summary[, c("chrom", "start", "stop")], 
+                file = sample_output_bedfile, 
+                quote = FALSE, 
+                sep = '\t', 
+                col.names = FALSE, 
+                row.names = FALSE)
+    
+    
+}
+
+```
+
+looks like its the same coordinates for all the files
+
+```
+
+[2017-12-15 17:09:46]
+steve@Li:~/projects/chrY_gene_coverage/QC-coverage$ cat *.sample_interval_summary | cut -f1 -d ',' | sort -u | wc -l
+  203396
+  
+ 
+
+[2017-12-15 17:12:12]
+steve@Li:~/projects/chrY_gene_coverage/summary_interval_bed$ cat * | sort -u | wc -l
+     579
+```
+
+just need to annotated one set of coordinates, merge with the rest
+
+
+```{r}
+# source("https://bioconductor.org/biocLite.R")
+# biocLite("TxDb.Hsapiens.UCSC.hg19.knownGene")
+# biocLite("org.Hs.eg.db")
+# biocLite("AnnotationDbi")
+library("AnnotationDbi")
+library("org.Hs.eg.db")
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+g <- genes(TxDb.Hsapiens.UCSC.hg19.knownGene)
+
+
+
+
+columns(org.Hs.eg.db)
+#  [1] "ACCNUM"       "ALIAS"        "ENSEMBL"      "ENSEMBLPROT"  "ENSEMBLTRANS" "ENTREZID"     "ENZYME"      
+#  [8] "EVIDENCE"     "EVIDENCEALL"  "GENENAME"     "GO"           "GOALL"        "IPI"          "MAP"         
+# [15] "OMIM"         "ONTOLOGY"     "ONTOLOGYALL"  "PATH"         "PFAM"         "PMID"         "PROSITE"     
+# [22] "REFSEQ"       "SYMBOL"       "UCSCKG"       "UNIGENE"      "UNIPROT" 
+
+
+matija_genes <- c("BPY2", "DAZ1", "DAZ2", "SRY", "UTY", "RBMY1A1", "ZFY", "TSPY1")
+
+matija_genes_annot<- select(org.Hs.eg.db, 
+                            keys=matija_genes, 
+                            columns=c("SYMBOL","GENENAME", "ENSEMBL", "ENTREZID"), 
+                            keytype="SYMBOL")
+matija_genes_entrez <- matija_genes_annot[["ENTREZID"]]
+
+g[which(g$gene_id %in% matija_genes_entrez), ]
+
+str(g)
+
+```
+
+forget about this, just use the annotations provided from my other annotation scripts; annotate the summary interval coordinates
+
+use ChipPeakAnno from here: https://github.com/stevekm/annotate-peaks ; already did this
+
+!! Note that the sample summary intervals are the same for ALL samples !! 
+so we only need to load one interval annotation to merge against all of them
+
+--------------
+
+# Test on a single sample file
+
+## Load data
+
+```{r}
+# genes of interest
+matija_genes <- c("BPY2", "DAZ1", "DAZ2", "SRY", "UTY", "RBMY1A1", "ZFY", "TSPY1")
+
+# files to load
+sample_interval_summary_file <- "/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/248.sample_interval_summary"
+interval_annotations_file <- "/ifs/data/molecpathlab/PNET_GYN/chrY_gene_coverage/summary_interval_bed_ChIPPeakAnno/248_annotations.tsv"
+
+# load the files
+sample_interval_summary <- read.delim(file = sample_interval_summary_file, header = TRUE, check.names = FALSE, sep = ',')
+interval_annotations <- read.delim(file = interval_annotations_file, header = TRUE, sep = '\t', check.names = FALSE)
+
+nrow(interval_annotations)
+# [1] 634
+
+# need to adjust the coordinates; subtract 1 from start position
+interval_annotations[["start"]] <- interval_annotations[["start"]] - 1
+
+
+# split the chrom cols
+sample_interval_summary <- chrom2cols(df = sample_interval_summary, col_name = "Target")
+
+# subset for Y chromosome intervals only
+sample_interval_summary <- sample_interval_summary[which(as.character(sample_interval_summary[["chrom"]]) == "chrY"), ]
+nrow(sample_interval_summary)
+# [1] 579
+
+
+# merge in the annotations
+sample_interval_summary <- merge(x = sample_interval_summary, 
+                                 y = interval_annotations[, c("seqnames", "start", "end", "external_gene_name")], 
+                                 by.x = c("chrom", "start", "stop"), 
+                                 by.y = c("seqnames", "start", "end"), 
+                                 all.x = TRUE)
+
+interval_genes <- unique(as.character(sample_interval_summary[["external_gene_name"]]))
+#  [1] "RNU6-1334P" "USP9Y"      "DDX3Y"      "UTY"        "TMSB4Y"     "VCY"        "VCY1B"      "NLGN4Y"     "AC007742.7"
+# [10] "CDY2B"      "CDY2A"      "AC024183.3" "AC022486.1" "HSFY1"      "OFD1P5Y"    "TTTY9B"     "OFD1P6Y"    "HSFY2"     
+# [19] "CD24P4"     "TTTY14"     "KDM5D"      "EIF1AY"     "RPS4Y2"     "CYorf17"    "RBMY1B"     "RBMY1A1"    "AC010141.8"
+# [28] "AC007322.1" "RBMY1E"     "RBMY1D"     "PRY2"       "RBMY1F"     "RBMY1J"     "PRY"        "BPY2"       "DAZ1"      
+# [37] "DAZ2"       "CDY1B"      "SRY"        "BPY2B"      "DAZ3"       "DAZ4"       "RPS4Y1"     "BPY2C"      "CDY1"      
+# [46] "ZFY"        "ZFY-AS1"    "TGIF2LY"    "PCDH11Y"    "CTBP2P1"    "TSPY2"      "AMELY"      "TBL1Y"      "TSPY4"     
+# [55] "TSPY8"      "TSPY1"      "TSPY3"      "AC006156.1" "TSPY10"
+
+
+interval_genes[which(interval_genes %in% matija_genes)]
+# [1] "UTY"     "RBMY1A1" "BPY2"    "DAZ1"    "DAZ2"    "SRY"     "ZFY"     "TSPY1"  
+
+
+# subset for genes of interest
+sample_interval_summary <- sample_interval_summary[which(as.character(sample_interval_summary[["external_gene_name"]]) %in% matija_genes), ]
+
+nrow(sample_interval_summary)
+# [1] 138
+
+# make sure its ordered by numeric start coordinate, since we're only dealing with one chromosome here
+sample_interval_summary[["start"]] <- as.numeric(as.character(sample_interval_summary[["start"]]))
+sample_interval_summary <- sample_interval_summary[with(sample_interval_summary, order(start)), ]
+
+
+# need to melt down the two value categories we want to plot
+library("reshape2")
+sample_interval_summary_long <- reshape2::melt(data = sample_interval_summary[ , c("chrom", "start", "stop", "Target", "total_coverage", "average_coverage", "external_gene_name")], 
+                                               id.vars = c("chrom", "start", "stop", "Target", "external_gene_name"),
+                                               variable.name = "type", 
+                                               value.name = 'coverage') 
+
+
+library("ggplot2")
+
+cov_plot <- ggplot(data = sample_interval_summary_long, aes(x = Target, y = coverage, fill = type)) + geom_bar(stat = 'identity', position = "dodge") + coord_flip() + facet_grid(external_gene_name ~ .)
+
+
+```
+
+I think this looks like what Matija wanted, though theres not much data in the file for these genes. Make plots anyway though for all samples
+
+# Make Plots for All Samples
+
+
+```{r}
+library("reshape2")
+library("ggplot2")
+# ~~~~~ FUNCTIONS ~~~~~ #
+chrom2cols <- function(df, col_name){
+    # split a column of genomic coordinates in a dataframe into separate columns
+    # example column to split format:
+    # chr10:100026989-100027328 
+    # need to make sure I save a copy of this function on GitHub because I use it constantly!
+    
+    # make sure its a character column
+    df[[col_name]] <- as.character(df[[col_name]])
+    
+    # split the first column
+    df_chrom <- as.data.frame(do.call(rbind, strsplit(df[[col_name]], ':')))
+    
+    # split the second column
+    df_chrom <- cbind(df_chrom[1], as.data.frame(do.call(rbind, strsplit(as.character(df_chrom$V2), '-'))))
+    
+    # rest the colnames
+    colnames(df_chrom) <- c("chrom", "start", "stop")
+    
+    # add to original df
+    df <- cbind(df_chrom, df)
+    return(df)
+}
+
+# ~~~~~ LOCATIONS ~~~~~ #
+output_dir <- "/ifs/data/molecpathlab/PNET_GYN/chrY_gene_coverage/output"
+
+
+# ~~~~~ LOAD ANNOTATIONS ~~~~~ # 
+# annotations file to use; they're all the same for all samples
+interval_annotations_file <- "/ifs/data/molecpathlab/PNET_GYN/chrY_gene_coverage/summary_interval_bed_ChIPPeakAnno/15-1067_annotations.tsv"
+interval_annotations <- read.delim(file = interval_annotations_file, header = TRUE, sep = '\t', check.names = FALSE)
+
+# need to adjust the coordinates; subtract 1 from start position to match the interval targets
+interval_annotations[["start"]] <- interval_annotations[["start"]] - 1
+
+# genes of interest
+matija_genes <- c("BPY2", "DAZ1", "DAZ2", "SRY", "UTY", "RBMY1A1", "ZFY", "TSPY1")
+
+# ~~~~~ LOAD SAMPLE DATA ~~~~~ # 
+# list of sample files + IDs to be processed
+sample_str <- "
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/250.sample_interval_summary	250
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/258.sample_interval_summary	258
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/254.sample_interval_summary	254
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/249.sample_interval_summary	249
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/248.sample_interval_summary	248
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/255.sample_interval_summary	255
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/257.sample_interval_summary	257
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/15-1067.sample_interval_summary	15-1067
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/260.sample_interval_summary	260
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/252.sample_interval_summary	252
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/259.sample_interval_summary	259
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/256.sample_interval_summary	256
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/253.sample_interval_summary	253
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/261.sample_interval_summary	261
+"
+samples <- read.table(textConnection(sample_str), sep = '\t', stringsAsFactors = FALSE)
+colnames(samples) <- c("file", "id")
+
+
+
+# ~~~~~ PROCESS SAMPLE DATA ~~~~~ # 
+pdf(file = file.path(output_dir, "interval_coverages.pdf"), width = 10, height = 110)
+for(i in seq(nrow(samples))){
+    sampleID <- samples[["id"]][i]
+    sample_interval_summary_file <- samples[["file"]][i]
+    
+    message(sampleID)
+    
+    # load the files
+    sample_interval_summary <- read.delim(file = sample_interval_summary_file, header = TRUE, check.names = FALSE, sep = ',')
+
+    # split the chrom cols
+    sample_interval_summary <- chrom2cols(df = sample_interval_summary, col_name = "Target")
+    
+    # subset for Y chromosome intervals only
+    sample_interval_summary <- sample_interval_summary[which(as.character(sample_interval_summary[["chrom"]]) == "chrY"), ]
+    nrow(sample_interval_summary)
+    # [1] 579
+    
+    
+    # merge in the annotations
+    sample_interval_summary <- merge(x = sample_interval_summary, 
+                                     y = interval_annotations[, c("seqnames", "start", "end", "external_gene_name")], 
+                                     by.x = c("chrom", "start", "stop"), 
+                                     by.y = c("seqnames", "start", "end"), 
+                                     all.x = TRUE)
+    
+    # subset for genes of interest
+    sample_interval_summary <- sample_interval_summary[which(as.character(sample_interval_summary[["external_gene_name"]]) %in% matija_genes), ]
+    
+    nrow(sample_interval_summary)
+    # [1] 138
+    
+    # make sure its ordered by numeric start coordinate, since we're only dealing with one chromosome here
+    sample_interval_summary[["start"]] <- as.numeric(as.character(sample_interval_summary[["start"]]))
+    sample_interval_summary <- sample_interval_summary[with(sample_interval_summary, order(start)), ]
+    
+    # save a copy of the final table
+    sample_output_table_file <- file.path(output_dir, sprintf("%s.sample_interval_summary_subset.tsv", sampleID))
+    write.table(x = sample_interval_summary, file = sample_output_table_file, quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+    
+    # need to melt down the two value categories we want to plot
+    sample_interval_summary_long <- reshape2::melt(data = sample_interval_summary[ , c("chrom", "start", "stop", "Target", "total_coverage", "average_coverage", "external_gene_name")], 
+                                                   id.vars = c("chrom", "start", "stop", "Target", "external_gene_name"),
+                                                   variable.name = "type", 
+                                                   value.name = 'coverage') 
+    
+    plot_title <- sprintf("%s Interval Coverages", sampleID)
+    message(plot_title)
+    
+    cov_plot <- ggplot(data = sample_interval_summary_long, aes(x = Target, y = coverage, fill = type)) + 
+        geom_bar(stat = 'identity', position = "dodge") + 
+        coord_cartesian(ylim = c(0, max(sample_interval_summary_long[["coverage"]]))) +
+        coord_flip() + 
+        facet_grid(external_gene_name ~ .) + 
+        ggtitle(plot_title) +
+        theme(axis.text=element_text(size=7))
+        
+    
+    print(cov_plot)
+
+    
+    
+}
+dev.off()
+
+```
