@@ -8,7 +8,8 @@
 # 
 # using broad public RNASeq tumor dataset from here https://portals.broadinstitute.org/ccle/data ; file 'ccle2maf_081117.txt'
 
-
+# USAGE: $ Rscript ccle_make_signatures.R "SampleID"
+# This script operates on a single sample at a time; submit for all samples in parrallel on the HPC
 
 
 
