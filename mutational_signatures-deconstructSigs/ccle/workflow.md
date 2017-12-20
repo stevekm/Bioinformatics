@@ -19,7 +19,7 @@ $ Rscript ccle_clean.R
 $ ./qsub_ccle_make_signatures.sh
 
 # extract the signature weights from all the samples
-$ ccle_compare_signatures.R
+$ Rscript ccle_compare_signatures.R
 
 ```
 
