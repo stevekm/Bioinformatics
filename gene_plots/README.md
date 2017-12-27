@@ -9,3 +9,5 @@ output plots
 ## DiagrammeR
 
 ![genes_diagram](https://user-images.githubusercontent.com/10505524/34390683-508e08a8-eb0f-11e7-92f4-7b0ee9a4f3d5.png)
+
+![](https://github.com/stevekm/Bioinformatics/raw/master/gene_plots/samples_genes.png)
