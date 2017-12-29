@@ -201,10 +201,14 @@ length(unique(fusion_df[["Genes"]]))
 
 # make the plot
 library("scales")
+library("ggrepel")
 library("ggplot2")
 library("plotly")
 
-g <- ggplot(data = fusion_df, aes(x = `Read Counts`, y = `Read Counts Per Million`, color = Genes, text = paste("Sample Name:", sampleNames) )) + 
+g <- ggplot(data = fusion_df, aes(x = `Read Counts`, 
+                                  y = `Read Counts Per Million`, 
+                                  color = Genes, 
+                                  text = paste("Sample Name:", sampleNames) )) + 
     geom_point() + 
     geom_hline(yintercept = 1e-10, color = "red") +
     # scale_x_log10(
@@ -217,8 +221,24 @@ g <- ggplot(data = fusion_df, aes(x = `Read Counts`, y = `Read Counts Per Millio
     scale_x_continuous(trans = 'log10', breaks = scales::trans_breaks("log10", function(x) 10^x)) +
     ggtitle("IonTorrent Reporter Fusions Analysis")
 
+
+pdf(file = "Oncomine_IonReporter_fusions.pdf", width = 10, height = 10)
+print(g)
+dev.off()
+
 p <- ggplotly(g, tooltip = "all")
 htmlwidgets::saveWidget(as_widget(p), file = "Oncomine_IonReporter_fusions.html", selfcontained = TRUE)
+
+# add some plot labels for the .pdf
+g_label <- g + geom_text_repel(data = subset(fusion_df, fusion_df[["Read Counts Per Million"]] <= 1e-10), 
+                    aes(x = `Read Counts`, y = `Read Counts Per Million`, 
+                        label = sampleNames), 
+                    show.legend = FALSE, size = 3)
+
+
+pdf(file = "Oncomine_IonReporter_fusions-labels.pdf", width = 15, height = 15)
+print(g_label)
+dev.off()
 
 
 # options(scipen=500) # big number of digits
