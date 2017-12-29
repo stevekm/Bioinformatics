@@ -1,0 +1,236 @@
+---
+title: "Oncomine IonTorrent Reporter Fusions Results Data Analysis"
+author: "Stephen Kelly"
+date: "12/28/2017"
+output: html_document
+---
+
+# Oncomine server & analysis
+
+Dec. 28, 2017
+
+problems establishing false positive cutoff criteria for fusion results coming from the IonTorrent Reporter software; some known false positive fusions appearing in results
+will probably need per-fusion criteria; specific criteria for each specific gene fusion
+criteria to look at: # of reads @ fusion site, total # aligned reads for sample, 3' vs 5' imbalance
+
+# Find the data on the server
+
+the data we need to check out is somewhere on the IonTorrent server
+
+get a filepath from the path shown in IGV from the web interface
+
+IGV session file:
+
+```
+username@1WJWP22:~$ ll /data/IR/data/IR_Org/webuser/AA16-123-1_RNA_v1/AA16-123-1_RNA_v1_20171226105223746/session1_RNA.xml
+-rw-r--r-- 1 iruser irgrp 29137 Dec 28 13:47 /data/IR/data/IR_Org/webuser/AA16-123-1_RNA_v1/AA16-123-1_RNA_v1_20171226105223746/session1_RNA.xml
+
+```
+
+
+```
+
+username@1WJWP22:/data/IR/data/IR_Org/webuser/AA16-123-1_RNA_v1/AA16-123-1_RNA_v1_20171226105223746$ ll outputs/RNACountsActor-00/
+total 104120
+drwxr-xr-x 2 iruser irgrp     4096 Dec 26 11:37 ./
+drwxr-xr-x 5 iruser irgrp     4096 Dec 27 12:01 ../
+-rw-r--r-- 1 iruser irgrp   109312 Dec 26 11:37 fusions.vcf
+-rw-r--r-- 1 iruser irgrp 61324589 Dec 26 11:36 IonXpress_036_rawlib.basecaller_alignments_unsorted.bam
+-rw-r--r-- 1 iruser irgrp     6568 Dec 26 11:37 IonXpress_036_rawlib.basecaller_Counts.txt
+-rw-r--r-- 1 iruser irgrp      441 Dec 26 11:37 IonXpress_036_rawlib.basecaller_Fusions.txt
+-rw-r--r-- 1 iruser irgrp    15238 Dec 26 11:36 IonXpress_036_rawlib.basecaller_IGV.bed
+-rw-r--r-- 1 iruser irgrp 45062882 Dec 26 11:37 IonXpress_036_rawlib.basecaller_merged.bam
+-rw-r--r-- 1 iruser irgrp     3512 Dec 26 11:37 IonXpress_036_rawlib.basecaller_merged.bam.bai
+-rw-r--r-- 1 iruser irgrp    45595 Dec 26 11:37 IonXpress_036_rawlib.basecaller_merged.fasta
+-rw-r--r-- 1 iruser irgrp    10932 Dec 26 11:37 IonXpress_036_rawlib.basecaller_merged.fasta.fai
+-rw-r--r-- 1 iruser irgrp        0 Dec 26 11:37 IonXpress_036_rawlib.basecaller_moreCounts.txt
+-rw-r--r-- 1 iruser irgrp        0 Dec 26 11:37 IonXpress_036_rawlib.basecaller_NovelCounts.txt
+-rw-r--r-- 1 iruser irgrp     6567 Dec 26 11:37 IonXpress_036_rawlib.basecaller_TotalCounts.txt
+-rw-r--r-- 1 iruser irgrp      352 Dec 26 11:37 RNAQCAndCalls.txt
+-rw-r--r-- 1 iruser irgrp       34 Dec 26 11:37 TotalMappedFusionPanelReads.txt
+io
+```
+
+found files that appear to have the information we need on the server
+
+```
+username@1WJWP22:/data/IR/data/IR_Org/webuser$ find . -path "*analysis_downloads/currentTsv*" -name "*.tsv" | head
+./SC_v1_SC_RNA_v1/SC_v1_20161110113219711/analysis_downloads/currentTsv/SC_Test-2016-11-11-12-39-26093.tsv
+./SC_v1_SC_RNA_v1/SC_v1_20161110113219711/analysis_downloads/currentTsv/SC_Test-2016-11-17-11-19-35882.tsv
+./SC_v1_SC_RNA_v1/SC_v1_20161110113219711/analysis_downloads/currentTsv/SC_Test-2016-11-17-11-20-29490.tsv
+./AA-0228_v1_AA-0228_RNA_v1/AA-0228_v1_20170222204515215/analysis_downloads/currentTsv/AA-0228_v1_3435a271-9025-4a77-879e-e816ad10cefe-2017-02-23-12-51-24484.tsv
+./AA-0240_v1_AA-0240_RNA_v1/AA-0240_v1_20170222204517518/analysis_downloads/currentTsv/AA-0240_v1_15393a43-fe03-4f34-ac3c-3f8f8fb9ea15-2017-02-23-12-30-21285.tsv
+./AA-0240_v1_AA-0240_RNA_v1/AA-0240_v1_20170222204517518/analysis_downloads/currentTsv/AA-0240_v1_15393a43-fe03-4f34-ac3c-3f8f8fb9ea15-2017-02-23-13-44-35771.tsv
+./AA-0275_v1_AA-0275_RNA_v1/AA-0275_v1_20170222204519352/analysis_downloads/currentTsv/AA-0275_v1_73f889a6-3f65-4ce1-9a00-69f82b1457a0-2017-02-23-13-45-41158.tsv
+./AA-0458_v1_AA-0458_RNA_v1/AA-0458_v1_20170222204521501/analysis_downloads/currentTsv/AA-0458_v1_9d159756-f60c-4850-8436-bc2f4881544f-2017-02-23-13-47-17810.tsv
+./AA-0558_v1_AA-0558_RNA_v1/AA-0558_v1_20170222204523402/analysis_downloads/currentTsv/AA-0558_v1_f8d9525a-ff29-4779-98a6-a5cf4d3254c6-2017-02-23-13-48-18009.tsv
+./AA-0768_v1_AA-0768_RNA_v1/AA-0768_v1_20170222204525118/analysis_downloads/currentTsv/AA-0768_v1_24c26b84-6d18-4d37-87f0-c71d0d9456bf-2017-02-23-13-50-18557.tsv
+
+
+```
+
+
+need to download all of the files
+
+```
+# rsync --dry-run -vrcahPl -e ssh username@server.org:/path/to/data/source /path/to/destination --exclude="*.bam" --exclude="*.fastq.gz" 
+
+# rsync --dry-run -vrcahPl -e ssh username@127.0.0.1:/data/IR/data/IR_Org/webuser IR_fusions_tables --exclude
+
+
+
+# get the list of files to download
+ssh username@127.0.0.1 'find /data/IR/data/IR_Org/webuser -path "*analysis_downloads/currentTsv*" -name "*.tsv"' > IR_fusions_tables_files.txt
+
+
+# downlaod only those files
+# rsync --dry-run -vrcahPl -e ssh username@127.0.0.1:/ IR_fusions_tables/ --files-from=IR_fusions_tables_files.txt
+rsync -vcahPl -e ssh username@127.0.0.1:/ IR_fusions_tables/ --files-from=IR_fusions_tables_files.txt
+```
+
+files downloaded in deep nested subdirs, need to move them all to same dir
+make sure that all files have unique filesnames
+
+```
+
+[2017-12-28 15:12:51]
+kellys04@phoenix2:~/projects/Clinical_580_gene_panel/molecpathlab/Oncomine-dev$ find IR_fusions_tables -type f -exec basename {} \; | wc -l
+1018
+
+[2017-12-28 15:12:56]
+kellys04@phoenix2:~/projects/Clinical_580_gene_panel/molecpathlab/Oncomine-dev$ find IR_fusions_tables -type f -exec basename {} \; | sort -u | wc -l
+1018
+```
+
+move all files to parent dir
+
+```
+
+kellys04@phoenix2:~/projects/Clinical_580_gene_panel/molecpathlab/Oncomine-dev$ find IR_fusions_tables -type f -exec mv {} IR_fusions_tables/ \;
+
+kellys04@phoenix2:~/projects/Clinical_580_gene_panel/molecpathlab/Oncomine-dev$ rm -rf IR_fusions_tables/data/
+
+```
+
+not all files are from fusion analyses; need to identify files that are from fusions only
+
+has a line that looks like this
+
+```
+##workflowName=Oncomine Focus - 520 - w2.1 - Fusions - Single Sample										
+```
+
+```
+find IR_fusions_tables -name "*.tsv" -exec grep -l -e '- Fusions -' {} \; > IR_fusions_files.txt
+```
+
+# Aggregate Data & Plot
+
+```{r}
+setwd("~/projects/Clinical_580_gene_panel/molecpathlab/Oncomine-dev")
+
+# list of filepaths the read in 
+files_list_file <- "IR_fusions_files.txt"
+# read in the list paths
+files_list <- readLines(files_list_file)
+
+
+read.IR.fusionTSV <- function(file){
+    # read an IonTorrent Suite Ion Reporter Fusion analysis TSV table
+    # its got a big long multi line header starting with ## that has single values which need to be included in the table
+    
+    message(file)
+    
+    # ~~~~~ PARSE HEADER ~~~~~ #
+    # read all lines in the file
+    file_lines <- readLines(file)
+    # get the header lines only
+    header_lines <- grep(pattern = '^##', x = file_lines, value = TRUE)
+    # trim the leading '##'
+    header_lines <- gsub(pattern = '^##', replacement = '', x = header_lines)
+    # convert the strings into a list of value pairs; split string on the first '=' (there are multiple '=' in some strings)
+    header_vals <- regmatches(header_lines, regexpr("=", header_lines), invert = TRUE)
+    
+    # ~~~~~ READ DATA ~~~~~ #
+    # load the rest of the data in the file
+    df <- read.delim(file = file, header = TRUE, sep = '\t', comment.char = '#', check.names = FALSE)
+    
+    # skip empty df's
+    if(nrow(df) < 1){
+        message("no entries in df, skipping")
+        return()
+    }
+    
+    # ~~~~~ ADD HEADER VALUES ~~~~~ #
+    # add the single values from the header back into the dataframe as a new column
+    for(i in seq(length(header_vals))){
+        header_value_name <- header_vals[[i]][1]
+        header_value_value <- header_vals[[i]][2]
+        # print(df)
+        df[[header_value_name]] <- header_value_value
+    }
+    
+    message("")
+    return(df)
+}
+
+# read all files into a list of df's
+fusion_dfs <- sapply(X = files_list, FUN = read.IR.fusionTSV)
+
+# concatenate all of the df's into a single df
+fusion_df <- do.call("rbind", fusion_dfs)
+
+# colnames(fusion_df)
+#  [1] "Locus"                   "Type"                    "Genes (Exons)"           "Read Counts"             "Oncomine Variant Class" 
+#  [6] "Oncomine Gene Class"     "Detection"               "3'/5' Imbalance"         "COSMIC/NCBI"             "Variant ID"             
+# [11] "Read Counts Per Million" "analysisDate"            "analyzedBy"              "exportDate"              "analysisName"           
+# [16] "workflowName"            "sampleNames"             "reference"               "variantGroup"            "filterChain"            
+# [21] "searchText"              "chromosome"              "totalVariantCount"       "filterInCount"           "filteredOutCount"       
+# [26] "hiddenVariantCount"   
+# 1e-10
+
+# this column has uneccessary text in '()' need to remove it
+fusion_df[["Genes"]] <- gsub( " *\\(.*?\\) *", "", as.character(fusion_df[["Genes (Exons)"]]))
+
+length(fusion_df[["Genes"]])
+# [1] 1211
+
+length(unique(fusion_df[["Genes"]]))
+# [1] 21
+
+
+# make the plot
+library("scales")
+library("ggplot2")
+library("plotly")
+
+g <- ggplot(data = fusion_df, aes(x = `Read Counts`, y = `Read Counts Per Million`, color = Genes, text = paste("Sample Name:", sampleNames) )) + 
+    geom_point() + 
+    geom_hline(yintercept = 1e-10, color = "red") +
+    # scale_x_log10(
+    #     breaks = scales::trans_breaks("log10", function(x) 10^x) #,labels = scales::trans_format("log10", scales::math_format(10^.x))
+    # ) +
+    # scale_y_log10(
+    #     breaks = scales::trans_breaks("log10", function(x) 10^x) #,labels = scales::trans_format("log10", scales::math_format(10^.x))
+    # ) +
+    scale_y_continuous(trans = 'log10', breaks = scales::trans_breaks("log10", function(x) 10^x)) +
+    scale_x_continuous(trans = 'log10', breaks = scales::trans_breaks("log10", function(x) 10^x)) +
+    ggtitle("IonTorrent Reporter Fusions Analysis")
+
+p <- ggplotly(g, tooltip = "all")
+htmlwidgets::saveWidget(as_widget(p), file = "Oncomine_IonReporter_fusions.html", selfcontained = TRUE)
+
+
+# options(scipen=500) # big number of digits
+write.table(x = fusion_df, file = "Oncomine_IonReporter_fusions.tsv", sep = '\t', row.names = FALSE, quote = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
