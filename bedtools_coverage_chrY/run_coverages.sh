@@ -18,20 +18,39 @@ run_cov () {
     local job_name="job_${sampleID}"
     local bamfile="$2"
     
-    # all covereage values for every base
-    local output_cov="${output_dir}/${sampleID}.chrY.cov.txt"
-    # coverage for all contiguously covered regions
-    local output_bedgraph="${output_dir}/${sampleID}.chrY.all.bedgraph"
     # the same as above but without 0 regions
     local output_good_bedgraph="${output_dir}/${sampleID}.chrY.bedgraph"
     
-    qsub -wd $PWD -o :${qsub_logdir}/ -e :${qsub_logdir}/ -j y -N "$job_name" <<E0F
+    # coverage for all contiguously covered regions
+    local output_bedgraph="${output_dir}/${sampleID}.chrY.all.bedgraph"
+    
+    # all covereage values for every base
+    local output_cov="${output_dir}/${sampleID}.chrY.cov.txt"
+    
+    
+    qsub -wd $PWD -o :${qsub_logdir}/ -e :${qsub_logdir}/ -j y -N "${job_name}.chrY.bedgraph" <<E0F
 
 module load bedtools/2.26.0
 set -x
 
 bedtools genomecov -ibam "$bamfile" -g "$hg19_chrY" -bg | grep -w 'chrY' > "$output_good_bedgraph"
+
+E0F
+
+    qsub -wd $PWD -o :${qsub_logdir}/ -e :${qsub_logdir}/ -j y -N "${job_name}.chrY.all.bedgraph" <<E0F
+
+module load bedtools/2.26.0
+set -x
+
 bedtools genomecov -ibam "$bamfile" -g "$hg19_chrY" -bga | grep -w 'chrY' > "$output_bedgraph"
+
+E0F
+
+    qsub -wd $PWD -o :${qsub_logdir}/ -e :${qsub_logdir}/ -j y -N "${job_name}.chrY.cov.txt" <<E0F
+
+module load bedtools/2.26.0
+set -x
+
 bedtools genomecov -ibam "$bamfile" -g "$hg19_chrY" -d | grep -w 'chrY' > "$output_cov"
 
 E0F
