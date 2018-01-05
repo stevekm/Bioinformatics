@@ -404,3 +404,231 @@ for(i in seq(nrow(samples))){
 dev.off()
 
 ```
+
+
+---------
+Jan 4 2018
+
+make some revisions as per Igor's advice to fix the plot and make a more useful table
+
+- use only the average cov column
+
+```{r}
+library("reshape2")
+library("ggplot2")
+# ~~~~~ FUNCTIONS ~~~~~ #
+chrom2cols <- function(df, col_name){
+    # split a column of genomic coordinates in a dataframe into separate columns
+    # example column to split format:
+    # chr10:100026989-100027328 
+    # need to make sure I save a copy of this function on GitHub because I use it constantly!
+    
+    # make sure its a character column
+    df[[col_name]] <- as.character(df[[col_name]])
+    
+    # split the first column
+    df_chrom <- as.data.frame(do.call(rbind, strsplit(df[[col_name]], ':')))
+    
+    # split the second column
+    df_chrom <- cbind(df_chrom[1], as.data.frame(do.call(rbind, strsplit(as.character(df_chrom$V2), '-'))))
+    
+    # rest the colnames
+    colnames(df_chrom) <- c("chrom", "start", "stop")
+    
+    # add to original df
+    df <- cbind(df_chrom, df)
+    return(df)
+}
+
+# ~~~~~ LOCATIONS ~~~~~ #
+output_dir <- "/ifs/data/molecpathlab/PNET_GYN/chrY_gene_coverage/output"
+
+
+
+# ~~~~~ LOAD ANNOTATIONS ~~~~~ # 
+# annotations file to use; they're all the same for all samples
+interval_annotations_file <- "/ifs/data/molecpathlab/PNET_GYN/chrY_gene_coverage/summary_interval_bed_ChIPPeakAnno/15-1067_annotations.tsv"
+interval_annotations <- read.delim(file = interval_annotations_file, header = TRUE, sep = '\t', check.names = FALSE)
+
+# need to adjust the coordinates; subtract 1 from start position to match the interval targets
+interval_annotations[["start"]] <- interval_annotations[["start"]] - 1
+
+# genes of interest
+matija_genes <- c("BPY2", "DAZ1", "DAZ2", "SRY", "UTY", "RBMY1A1", "ZFY", "TSPY1")
+
+# ~~~~~ LOAD SAMPLE DATA ~~~~~ # 
+# list of sample files + IDs to be processed
+sample_str <- "
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/250.sample_interval_summary	250
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/258.sample_interval_summary	258
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/254.sample_interval_summary	254
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/249.sample_interval_summary	249
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/248.sample_interval_summary	248
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/255.sample_interval_summary	255
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/257.sample_interval_summary	257
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/15-1067.sample_interval_summary	15-1067
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/260.sample_interval_summary	260
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/252.sample_interval_summary	252
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/259.sample_interval_summary	259
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/256.sample_interval_summary	256
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/253.sample_interval_summary	253
+/ifs/data/molecpathlab/PNET_GYN/sns_WES_copy-steve/QC-coverage/261.sample_interval_summary	261
+"
+samples <- read.table(textConnection(sample_str), sep = '\t', stringsAsFactors = FALSE)
+colnames(samples) <- c("file", "id")
+
+
+
+# ~~~~~ PROCESS SAMPLE DATA ~~~~~ # 
+# empty df to hold all samples final data
+all_samples_intervals <- data.frame()
+interval_cols <- c("chrom", "start", "stop", "Target", "external_gene_name")
+
+pdf(file = file.path(output_dir, "interval_avereage_coverages.pdf"), width = 10, height = 110)
+for(i in seq(nrow(samples))){
+    sampleID <- samples[["id"]][i]
+    sample_interval_summary_file <- samples[["file"]][i]
+    
+    message(sampleID)
+    
+    # ~~~~~~ IMPORT & CLEAN DATA ~~~~~ # 
+    # load the files
+    sample_interval_summary <- read.delim(file = sample_interval_summary_file, header = TRUE, check.names = FALSE, sep = ',')
+
+    # split the chrom cols
+    sample_interval_summary <- chrom2cols(df = sample_interval_summary, col_name = "Target")
+    
+    # subset for Y chromosome intervals only
+    sample_interval_summary <- sample_interval_summary[which(as.character(sample_interval_summary[["chrom"]]) == "chrY"), ]
+    nrow(sample_interval_summary)
+    # [1] 579
+    
+    
+    # merge in the annotations
+    sample_interval_summary <- merge(x = sample_interval_summary, 
+                                     y = interval_annotations[, c("seqnames", "start", "end", "external_gene_name")], 
+                                     by.x = c("chrom", "start", "stop"), 
+                                     by.y = c("seqnames", "start", "end"), 
+                                     all.x = TRUE)
+    
+    
+    
+    # make sure its ordered by numeric start coordinate, since we're only dealing with one chromosome here
+    sample_interval_summary[["start"]] <- as.numeric(as.character(sample_interval_summary[["start"]]))
+    sample_interval_summary <- sample_interval_summary[with(sample_interval_summary, order(start)), ]
+    
+    # dput(colnames(sample_interval_summary))
+#     c("chrom", "start", "stop", "Target", "total_coverage", "average_coverage", 
+# "261_total_cvg", "261_mean_cvg", "261_granular_Q1", "261_granular_median", 
+# "261_granular_Q3", "261_%_above_10", "261_%_above_50", "261_%_above_100", 
+# "261_%_above_500", "external_gene_name")
+    
+    
+    
+    # add the data to the all-samples df
+    # check for empty df
+    if(ncol(all_samples_intervals) < 1){
+        all_samples_intervals <- sample_interval_summary[, interval_cols]
+    }
+    sample_avg_colnames <- sprintf('%s', sampleID) # _average_coverage
+    all_samples_intervals[[sample_avg_colnames]] <- sample_interval_summary[["average_coverage"]]
+    
+    
+    
+    # ~~~~~~ FORMAT DATA FOR PLOT ~~~~~ # 
+    # subset for genes of interest
+    sample_interval_summary <- sample_interval_summary[which(as.character(sample_interval_summary[["external_gene_name"]]) %in% matija_genes), ]
+    # nrow(sample_interval_summary)
+    # [1] 138
+    
+    # need to melt down the two value categories we want to plot
+    sample_interval_summary_long <- reshape2::melt(data = sample_interval_summary[ , c("chrom", "start", "stop", "Target", "average_coverage", "external_gene_name")], 
+                                                   id.vars = c("chrom", "start", "stop", "Target", "external_gene_name"),
+                                                   variable.name = "type", 
+                                                   value.name = 'coverage') 
+    
+    plot_title <- sprintf("%s Average Interval Coverages", sampleID)
+    message(plot_title)
+    
+    cov_plot <- ggplot(data = sample_interval_summary_long, aes(x = Target, y = coverage)) + 
+        geom_bar(stat = 'identity', position = "dodge") + 
+        coord_cartesian(ylim = c(0, max(sample_interval_summary_long[["coverage"]]))) +
+        coord_flip() + 
+        facet_grid(external_gene_name ~ .) + 
+        ggtitle(plot_title) +
+        theme(axis.text=element_text(size=7))
+        
+    
+    print(cov_plot)
+    
+}
+dev.off()
+
+# save final all samples table
+write.table(x = all_samples_intervals, file = 'output/all_samples_average_intervals_chrY.tsv', quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+# make a heatmap
+# need to melt the gfinal table
+# dput(colnames(all_samples_intervals))
+# c("chrom", "start", "stop", "Target", "external_gene_name", "250", 
+# "258", "254", "249", "248", "255", "257", "15-1067", "260", "252", 
+# "259", "256", "253", "261")
+all_samples_intervals_long <- reshape2::melt(data = all_samples_intervals, 
+                                             id.vars = c("chrom", "start", "stop", "Target", "external_gene_name"),
+                                             variable.name = "sample", 
+                                             value.name = 'avg_coverage') 
+
+
+write.table(x = all_samples_intervals_long, file = 'output/all_samples_average_intervals_chrY_long.tsv', quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+# heatmap does not work too well dont make this plot
+# pdf(file = file.path(output_dir, "interval_avereage_coverages_heatmap.pdf"), width = 10, height = 300)
+# heatmap_plot <- ggplot(data = all_samples_intervals_long, aes(x = sample, y = Target, fill = avg_coverage)) + 
+#     geom_tile() + 
+#     facet_grid(external_gene_name ~ .) 
+# print(heatmap_plot)
+# dev.off()
+
+```
+
+
+
+----------
+Jan 5, 2018
+
+make some more plot adjustments
+plot all samples on the same plot
+
+start from the long table produced yesterday in the last step
+
+```{r}
+
+all_samples_intervals_long <- read.delim(file = 'output/all_samples_average_intervals_chrY_long.tsv', sep = '\t', header = TRUE)
+# dput(colnames(all_samples_intervals_long))
+# c("chrom", "start", "stop", "Target", "external_gene_name", "sample", 
+# "avg_coverage")
+
+str(all_samples_intervals_long)
+# 'data.frame':	8876 obs. of  7 variables:
+#  $ chrom             : Factor w/ 1 level "chrY": 1 1 1 1 1 1 1 1 1 1 ...
+#  $ start             : int  150855 155400 157315 158166 159702 165764 171426 174027 174399 178086 ...
+#  $ stop              : int  150981 155536 157443 158321 159885 166002 171864 174179 174547 178294 ...
+#  $ Target            : Factor w/ 579 levels "chrY:1264866-1265014",..: 107 142 148 150 152 157 178 179 180 181 ...
+#  $ external_gene_name: Factor w/ 59 levels "AC006156.1","AC007322.1",..: 39 39 39 39 39 39 39 39 39 39 ...
+#  $ sample            : Factor w/ 14 levels "15-1067","248",..: 4 4 4 4 4 4 4 4 4 4 ...
+#  $ avg_coverage      : num  0 0 0 0 0 0 0 0 0 0 ...
+
+pdf(file = "output/all_samples_interval_avereage_coverages.pdf") 
+for(gene in levels(all_samples_intervals_long[["external_gene_name"]])){
+    df <- droplevels(all_samples_intervals_long[which(all_samples_intervals_long[["external_gene_name"]] == gene), ])
+    
+    cov_plot <- ggplot(data = df, aes(x = Target, y = avg_coverage, fill = sample)) +
+        geom_bar(stat = 'identity', position = "dodge") + 
+        coord_flip() + 
+        ggtitle(gene)
+    print(cov_plot)
+}
+dev.off()
+
+
+```
+^^^ this is it, the best way to plot the data so far, looks much nicer
