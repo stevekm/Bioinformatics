@@ -13,3 +13,5 @@ list:
 
 genome.fa:
 	wget ftp://igenome:G3nom3s4u@ussd-ftp.illumina.com/Homo_sapiens/UCSC/hg19/Homo_sapiens_UCSC_hg19.tar.gz -O- | tar -ztvf - Homo_sapiens/UCSC/hg19/Sequence/WholeGenomeFasta/genome.fa
+
+# can also use this wget https://s3.amazonaws.com/reftransdata/Homo_sapiens_UCSC_hg19_small.tar.gz
