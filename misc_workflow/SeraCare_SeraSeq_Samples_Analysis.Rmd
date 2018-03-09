@@ -1,0 +1,283 @@
+---
+title: "SeraCare SeraSeq Samples Analysis"
+author: "Stephen Kelly"
+date: "3/9/2018"
+output:
+  html_document:
+    code_folding: hide
+    df_print: paged
+    fig_width: 10
+    fig_height: 10
+
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("ggplot2")
+library("data.table")
+library("binom")
+library("plotly")
+
+background_seq_error_rate <- 0.02
+power <- 0.95
+alpha <- 0.05
+conf_level <- 1 - alpha
+```
+
+Analysis of SeraCare SeraSeq synthetic DNA positive control target exome NGS580 panel analysis 
+
+# Setup
+
+- Load Data
+
+```{r, cache=TRUE}
+
+# file with paths to all SeraCare annotations files
+annot_list_file <- "workflow/annot.txt"
+
+# load the list of paths to files to be aggregated
+annot_list_files <- readLines(annot_list_file)
+
+# add all entries to common df
+annots <- data.frame()
+for(annot_file in annot_list_files){
+    # variant caller used
+    type <- basename(dirname(annot_file)) # "VCF-LoFreq-annot"
+    type <- gsub(pattern = 'VCF-', replacement = '', x = type)
+    type <- gsub(pattern = '-annot', replacement = '', x = type) # LoFreq
+    
+    # results ID
+    results <- basename(dirname(dirname(annot_file))) #  "results_2018-01-22_16-41-26"
+    
+    # run ID
+    run <- basename(dirname(dirname(dirname(annot_file)))) # "180112_NB501073_0029_AHT5KFBGX3"
+    
+    # load file 
+    df <- read.delim(file = annot_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE, check.names = FALSE)
+    
+    # add extra fields
+    sampleID <- unique(df[["SAMPLE"]]) # "SC-SERACARE"
+    sample_run <- sprintf('%s-%s', sampleID, run) # "SC-SERACARE-180112_NB501073_0029_AHT5KFBGX3"
+    df[["Run"]] <- run
+    df[["Type"]] <- type
+    df[["Results"]] <- results
+    df[["Sample_Run"]] <- sample_run
+    
+    # merge against the full df
+    cols1 <- colnames(annots)
+    cols2 <- colnames(df)
+    common_cols <- intersect(cols1, cols2)
+    diff_cols <- setdiff(cols1, cols2)
+    annots <- merge(x = annots, y = df, by = common_cols, all = TRUE)
+    
+}
+
+# fix some colnames
+setnames(x = annots, old = c('#MUT'), new = c('MUT'))
+
+# save a copy
+write.table(x = annots, file = "all_SeraCare_annotations.tsv", quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+saveRDS(object = annots, file = "all_SeraCare_annotations.Rds", compress = TRUE)
+```
+
+- Filter & Reformat
+
+```{r, cache=TRUE}
+# table with SeraCare SeraSeq mutations to filter the annotations against
+selected_mutations_file <- "SeraCare_mutation_match_list.Sheet1.tsv"
+selected_mutations <- read.delim(file = selected_mutations_file, header = TRUE, sep = '\t', stringsAsFactors = FALSE)
+
+# filter for only variants with Amino Acid change that matches SC mutations
+annots_match <- annots[annots[["AAChange.refGene"]] %in% selected_mutations[['NGS.580.LoFreq.Nomenclature']], ]
+
+# merge the tables to get the SC table fields in the annotations table
+annots_match_merge <- merge(x = annots_match, y = selected_mutations, by.x = "AAChange.refGene", by.y = 'NGS.580.LoFreq.Nomenclature', all.x = TRUE)
+
+# clean colnames 
+setnames(x = annots_match_merge, old = c("SeraCare.Ladder.Target.AF...."), new = c("True_AF"))
+
+# add factor level for true AF value
+annots_match_merge[["True_AF"]] <- factor(x = annots_match_merge[["True_AF"]], levels = sort(unique(annots_match_merge[["True_AF"]])))
+
+# add numeric value of true AF
+annots_match_merge[["True_AF_val"]] <- as.numeric(as.character(annots_match_merge[["True_AF"]])) / 100
+
+# create an ID for each mutation
+annots_match_merge[["MUT_ID"]] <- paste(annots_match_merge[["Gene.refGene"]], annots_match_merge[["SeraCare.HGVS.Nomenclature"]])
+
+
+
+annots_match_merge[["coverage_required"]] <- apply(X = annots_match_merge, MARGIN = 1, FUN = function(row){
+    coverage <- as.numeric(row["DEPTH"])
+    AF <- as.numeric(row["FREQ"])
+    True_AF <- as.numeric(row["True_AF_val"])
+    
+    coverage_required <- cloglog.sample.size(p.alt = True_AF, p = background_seq_error_rate, power = power, alpha = alpha)[["n"]]
+    return(coverage_required)
+})
+
+annots_match_merge[["CI_lower"]] <- apply(X = annots_match_merge, MARGIN = 1, FUN = function(row){
+    coverage <- as.numeric(row["DEPTH"])
+    AF <- as.numeric(row["FREQ"])
+    True_AF <- as.numeric(row["True_AF_val"])
+    
+    intervals <- binom.confint(x = True_AF * coverage, n = coverage, conf.level = conf_level, methods = "cloglog")
+    CI_lower <- intervals[["lower"]]
+    # CI_upper <- intervals[["upper"]]
+    return(CI_lower)
+})
+
+
+annots_match_merge[["CI_upper"]] <- apply(X = annots_match_merge, MARGIN = 1, FUN = function(row){
+    coverage <- as.numeric(row["DEPTH"])
+    AF <- as.numeric(row["FREQ"])
+    True_AF <- as.numeric(row["True_AF_val"])
+    
+    intervals <- binom.confint(x = True_AF * coverage, n = coverage, conf.level = conf_level, methods = "cloglog")
+    # CI_lower <- intervals[["lower"]]
+    CI_upper <- intervals[["upper"]]
+    return(CI_upper)
+})
+
+
+# rearrange columns
+annots_match_merge <- annots_match_merge[, c(colnames(annots_match_merge)[which(! colnames(annots_match_merge) %in% "AAChange.refGene")], "AAChange.refGene")]
+
+# save a copy
+write.table(x = annots_match_merge, file = "selected_SeraCare_annotations.tsv", quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+saveRDS(object = annots_match_merge, file = "selected_SeraCare_annotations.Rds", compress = TRUE)
+
+
+
+
+
+# function to apply more filters to the annotations
+filter_df <- function(df, type = "LoFreq"){
+    # filter for selected type of variant caller
+    df <- df[which(df[["Type"]] == type), ]
+    
+    # filter out dilution samples
+    df <- df[grep(pattern = "-1to4-", x = df[["SAMPLE"]], invert = TRUE), ]
+    df <- df[grep(pattern = "-1to2-", x = df[["SAMPLE"]], invert = TRUE), ]
+    df <- droplevels(df)
+    return(df)
+}
+
+# get just the matching LoFreq annotations
+caller_type <- "LoFreq" # "GATK-HC" # "LoFreq" # "GATK-HC" # "LoFreq"
+filtered_annot <- filter_df(annots_match_merge, type = caller_type)
+
+# save a copy
+write.table(x = filtered_annot, file = sprintf("%s_filtered_SeraCare_annotations.tsv", caller_type), quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+saveRDS(object = filtered_annot, file = sprintf("%s_filtered_SeraCare_annotations.Rds", caller_type), compress = TRUE)
+
+```
+
+- Make Plots
+
+```{r, warning=FALSE, message=FALSE}
+# Variant Allele Frequency Plot
+vaf_plot <- ggplot(data =  filtered_annot, 
+                   aes(y = FREQ, x = Sample_Run, color = MUT_ID, group = MUT_ID, 
+                       text = sprintf("True AF: %s\nQUAL: %s\nDEPTH: %s\nAA Change: %s", 
+                                      True_AF, QUAL, DEPTH, SeraCar.Amino.Acid)) ) + 
+    geom_point() +
+    geom_line(alpha = 0.3) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    scale_y_continuous(limits = c(0, NA), breaks = seq(0, max(filtered_annot[["FREQ"]]), 0.025)) +
+    ylab("Variant Allele Frequency") +
+    ggtitle(sprintf('%s Detected Variant Frequencies', caller_type)) + 
+    labs(color="Mutation")
+    
+
+pdf(file = sprintf("%s_vaf_plot.pdf", caller_type), height = 10, width = 10)
+print(vaf_plot)
+invisible(dev.off())
+vaf_plotly <- ggplotly(vaf_plot)
+htmlwidgets::saveWidget(as_widget(vaf_plotly), file = sprintf("%s_vaf_plot.html", caller_type), selfcontained = TRUE)
+
+
+# with 95% Confidence Intervals
+vaf_CI_plot <- vaf_plot + 
+    geom_linerange(aes(ymin = CI_lower, ymax = CI_upper)) +
+    facet_grid(MUT_ID~.) +
+    theme(strip.text.y = element_text(angle = 0)) +
+    theme(legend.position="none")
+
+pdf(file = sprintf("%s_vaf_CI_plot.pdf", caller_type), height = 40, width = 10)
+print(vaf_CI_plot)
+invisible(dev.off())
+
+
+# Depth of Coverage plot
+cov_plot <- ggplot(data =  filtered_annot, 
+                   aes(y = DEPTH, x = Sample_Run, color = MUT_ID, group = MUT_ID) ) + 
+    geom_point() +
+    geom_line(alpha = 0.3) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    scale_y_continuous(limits = c(0, NA)) +
+    ylab("Depth of Coverage") +
+    ggtitle(sprintf('%s Variant Depth of Coverage', caller_type))
+
+pdf(file = sprintf("%s_cov_plot.pdf", caller_type), height = 10, width = 10)
+print(cov_plot)
+invisible(dev.off())
+
+# Quality Scores Plot
+qual_plot <- ggplot(data =  filtered_annot, 
+                   aes(y = QUAL, x = Sample_Run, color = MUT_ID, group = MUT_ID) ) + 
+    geom_point() +
+    geom_line(alpha = 0.3) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    scale_y_continuous(limits = c(0, NA)) +
+    ylab("Quality Score") +
+    ggtitle(sprintf('%s Variant Quality Score', caller_type))
+
+pdf(file = sprintf("%s_qual_plot.pdf", caller_type), height = 10, width = 10)
+print(qual_plot)
+invisible(dev.off())
+
+```
+
+# Variants
+
+```{r}
+filtered_annot
+```
+
+# Variant Frequencies
+
+```{r}
+vaf_plot
+```
+
+## Frequencies with Confidence Intervals
+
+- dot: detected variant
+
+- vertical line: 95% Allele Frequency Confidence Interval for detected variant coverage
+
+```{r, fig.height=40}
+vaf_CI_plot
+```
+
+# Variant Depth of Coverage
+
+```{r}
+cov_plot
+```
+
+# Variant Quality Scores
+
+```{r}
+qual_plot
+```
+
+# Session
+
+```{r}
+sessionInfo()
+save.image()
+```
