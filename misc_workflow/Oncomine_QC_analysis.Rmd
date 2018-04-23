@@ -1,0 +1,129 @@
+---
+title: "Oncomine QC Analysis"
+author: "Stephen Kelly"
+date: "4/23/2018"
+output:
+  html_document:
+    fig_width: 10
+    fig_height: 8
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("data.table")
+library("reshape2")
+library("ggplot2")
+```
+
+Plots of variants frequency results for Oncomine, in the same fashion as SeraCare analysis plots.
+
+```{r}
+# load data from file provided
+freq_df <- read.delim(file = "QC.tsv", header = TRUE, sep = '\t', check.names = TRUE)
+# dim(freq_df)
+# [1]  9 24
+
+# clean up
+# dput(names(freq_df))
+# c("Variant.Id", "Gene.Name", "Mutation.CDS", "Mutation.AA", "X..allelic.freq.in.run.1", 
+# "X..allelic.freq.in.run.2", "X..allelic.freq.in.run.3", "X..allelic.freq.in.run.4", 
+# "X.allelic.freq.in.run.5", "X.allelic.freq.in.run.6", "X.allelic.freq.in.run.7", 
+# "X.allelic.freq.in.run.8", "X.allelic.freq.in.run.9", "X.allelic.freq.in.run.10", 
+# "X.allelic.freq.in.run.11", "X.allelic.freq.in.run.12", "X.allelic.freq.in.run.13", 
+# "X.allelic.freq.in.run.14", "X.allelic.freq.in.run.15", "X.allelic.freq.in.run.16", 
+# "X.allelic.freq.in.run.17", "X.allelic.freq.in.run.18", "X.allelic.freq.in.run.19", 
+# "X.allelic.freq.in.run.20")
+bad_names <- names(freq_df)[which(grepl(pattern = 'allelic.freq.in.run', x = names(freq_df)))]
+better_names <- gsub(pattern = '^.*run.([:digit:]*)', replacement = '\\1', x = bad_names)
+setnames(x = freq_df, old = bad_names, new = better_names)
+setnames(x = freq_df, new = c("CosmicID", "Gene", "Coding", "AAchange"), old = c("Variant.Id", "Gene.Name", "Mutation.CDS", "Mutation.AA"))
+
+freq_df[["Variant"]] <- sprintf("%s %s %s", freq_df[["Gene"]], freq_df[["Coding"]], freq_df[["AAchange"]])
+
+# dput(names(freq_df))
+# c("Variant.Id", "Gene.Name", "Mutation.CDS", "Mutation.AA", "1", 
+# "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", 
+# "14", "15", "16", "17", "18", "19", "20")
+
+freq_df_long <- melt(freq_df, id.vars = c("CosmicID", "Gene", "Coding", "AAchange", "Variant"), 
+                     variable.name = "Run", 
+                     value.name = "Frequency_pcnt")
+
+# dim(freq_df_long)
+# [1] 180   6
+# dput(names(freq_df_long))
+# c("CosmicID", "Gene", "Coding", "AAchange", "Variant", "Run", 
+# "Frequency_pcnt", "Frequency")
+freq_df_long[["Frequency"]] <- freq_df_long[["Frequency_pcnt"]] / 100
+
+
+# calculate per-group metrics
+freq_aggr <- do.call(data.frame, aggregate(Frequency ~ Variant, data = freq_df_long, FUN = function(x){
+    sd_upper <- mean(x) + (2 * sd(x))
+    sd_lower <- mean(x) - (2 * sd(x))
+    return(c(mean = mean(x), 
+             sd = sd(x),
+             sd_upper = sd_upper,
+             sd_lower = sd_lower
+             ))
+}))
+
+freq_merged <- merge(x = freq_df_long, y = freq_aggr, by = "Variant", all.x = TRUE)
+# dim(freq_merged)
+# [1] 180  12
+# 
+# dput(names(freq_merged))
+# c("Variant", "CosmicID", "Gene", "Coding", "AAchange", "Run", 
+# "Frequency_pcnt", "Frequency", "Frequency.mean", "Frequency.sd", 
+# "Frequency.sd_upper", "Frequency.sd_lower")
+
+
+write.table(x = freq_merged, file = "Oncomine_QC_final.tsv", quote = FALSE, sep = '\t')
+
+# plot
+# all values
+freq_plot <- ggplot(data = freq_merged, aes(y = Frequency, x = Run, color = Variant, group = Variant)) + 
+    geom_point() + 
+    geom_line(alpha = 0.3) +
+    theme_bw() +
+    theme(panel.grid.minor = element_blank()) +
+    ggtitle('Detected Variant Frequencies')
+
+
+pdf(file = "freq_plot.pdf", height = 10, width = 10)
+print(freq_plot)
+invisible(dev.off())
+
+# faceted
+freq_plot_long <- ggplot(data = freq_merged, aes(y = Frequency, x = Run, color = Variant, group = Variant)) + 
+    geom_point() +
+    geom_line(alpha = 0.3) +
+    geom_line(aes(y = Frequency.mean), linetype="dotted") +
+    geom_line(size = 1, aes(y = Frequency.sd_upper), alpha = 0.5) +
+    geom_line(size = 1, aes(y = Frequency.sd_lower), alpha = 0.5) +
+    facet_grid(Variant~.) +
+    theme_bw() +
+    # theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    scale_y_continuous(limits = c(0, NA), 
+                       breaks = seq(0, max(max(freq_merged[["Frequency.sd_upper"]]), 
+                                           max(freq_merged[["Frequency"]])), 0.025)) +
+    ggtitle('Detected Variant Frequencies') +
+    labs(color="Variant") +
+    theme(strip.text.y = element_text(angle = 0)) +
+    theme(panel.grid.minor = element_blank()) +
+    theme(legend.position="none")
+
+pdf(file = "freq_SD_plot.pdf", height = 40, width = 10)
+print(freq_plot_long)
+invisible(dev.off())
+
+```
+
+```{r}
+freq_plot
+```
+
+```{r, fig.height=25}
+freq_plot_long
+```
