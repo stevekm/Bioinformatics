@@ -1,0 +1,81 @@
+---
+title: "Oncomine Positive RNA controls tracked fusions"
+author: "Stephen Kelly"
+date: "5/2/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library("data.table")
+library("reshape2")
+library("ggplot2")
+```
+
+```{r}
+reads_df <- read.delim(file = "Positive_RNA_controls_tracked_fusions.txt", header = TRUE, sep = '\t', check.names = TRUE)
+# dput(names(reads_df))
+# c("Variant.Id", "X5..Partner", "X5..Partner.Chromosome", "X3..Partner", 
+# "cosmic.ID", "X3..Partner.Chromosome", "Run..1...fusion.read.counts", 
+# "Run..2..fusion..read.counts", "Run..3..fusion.read", "Run..4..fusion.read", 
+# "Run..15..fusion.read", "Run..16..fusion.read", "Run..17..fusion.read", 
+# "Run..18.fusion.read", "Run..19.fusion.read", "Run.20.fusion.read"
+# )
+
+setnames(x = reads_df, old = c("Variant.Id", "X5..Partner", "X5..Partner.Chromosome", "X3..Partner", 
+"cosmic.ID", "X3..Partner.Chromosome", "Run..1...fusion.read.counts", 
+"Run..2..fusion..read.counts", "Run..3..fusion.read", "Run..4..fusion.read", 
+"Run..15..fusion.read", "Run..16..fusion.read", "Run..17..fusion.read", 
+"Run..18.fusion.read", "Run..19.fusion.read", "Run.20.fusion.read"
+), 
+new = c("Variant", "5primePartner", "5primePartnerChromosome", "3primePartner", 
+"CosmicID", "3primePartnerChromosome", "1", "2", "3", "4", "15", "16", "17", "18", "19", "20"))
+
+write.table(x = reads_df, file = 'RNA_fusions.tsv', quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+reads_df_long <- melt(reads_df, 
+                     id.vars = c("Variant", "5primePartner", 
+                                 "5primePartnerChromosome", "3primePartner", 
+                                 "CosmicID", "3primePartnerChromosome"), 
+                     variable.name = "Run", 
+                     value.name = "Reads")
+
+write.table(x = reads_df_long, file = 'RNA_fusions_long.tsv', quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+
+reads_plot <- ggplot(data = reads_df_long, aes(y = Reads, x = Run, color = Variant, group = Variant)) + 
+    geom_point() + 
+    geom_line(alpha = 0.3) +
+    theme_bw() +
+    theme(panel.grid.minor = element_blank()) +
+    ggtitle('Fusion Reads')
+
+pdf(file = "reads_plot.pdf", height = 8, width = 8)
+print(reads_plot)
+invisible(dev.off())
+
+
+reads_plot_long <- ggplot(data = reads_df_long, aes(y = Reads, x = Run, color = Variant, group = Variant)) + 
+    geom_point() + 
+    geom_line(alpha = 0.3) +
+    theme_bw() +
+    theme(panel.grid.minor = element_blank()) +
+    ggtitle('Fusion Reads') +
+    facet_grid(Variant~.) +
+    labs(color="Variant") +
+    theme(strip.text.y = element_text(angle = 0)) +
+    theme(panel.grid.minor = element_blank()) +
+    theme(legend.position="none")
+
+pdf(file = "reads_plot_long.pdf", height = 12, width = 8)
+print(reads_plot_long)
+invisible(dev.off())
+
+```
+
+```{r}
+reads_plot
+```
+
+```{r, fig.height=10}
+reads_plot_long
+```
