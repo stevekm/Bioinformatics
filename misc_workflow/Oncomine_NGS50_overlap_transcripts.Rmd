@@ -1,0 +1,58 @@
+---
+title: "NGS50 Oncomine Overlap"
+author: "Stephen Kelly"
+date: "7/25/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Need to overlap all the variants from Oncomine with the variants from NGS50 IonTorrent analysis
+
+Overlap based on the transcript IDs
+
+```{r}
+# load data
+oncomine_file <- "Oncomine_all_filtered_annotations.tsv"
+oncomine_variants <- read.delim(file = oncomine_file, header = TRUE, sep = '\t', check.names = FALSE)
+oncomine_transcripts <- as.character(unique(oncomine_variants[["FUNC1.transcript"]]))
+# remove '.'
+oncomine_transcripts <- oncomine_transcripts[which(!oncomine_transcripts == '.')]
+# strip decimal version numbers
+oncomine_transcripts <- gsub(pattern = '\\.\\d+$', replacement = '', x = oncomine_transcripts)
+
+NGS50_file <- "NGS50_all_summary_version_2018-07-07_11-33-32.tsv"
+NGS50_variants <- read.delim(file = NGS50_file, header = TRUE, sep = '\t')
+NGS50_transcripts <- unique(as.character(NGS50_variants[["Transcript"]]))
+
+# make list for overlapping
+transcripts <- list(
+    Oncomine = oncomine_transcripts,
+    NGS50 = NGS50_transcripts
+)
+
+# both sets of transcripts
+transcripts
+
+library(VennDiagram)
+overlap <- calculate.overlap(transcripts)
+venn_plot <- venn.diagram(x = transcripts, 
+                                  filename = NULL)
+grid.draw(venn_plot)
+
+# a1 = group 1, a2 = group 2, a3 = overlap
+overlap
+
+# unique to Oncomine
+setdiff(oncomine_transcripts, NGS50_transcripts)
+
+# unqiue to NGS50
+setdiff(NGS50_transcripts, oncomine_transcripts)
+
+# overlap
+intersect(NGS50_transcripts, oncomine_transcripts)
+```
+
+
