@@ -1,0 +1,227 @@
+---
+title: "NGS50 vs. Oncomine Comparison"
+author: "Stephen Kelly"
+date: "9/21/2018"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+    df_print: paged
+---
+
+# Setup
+
+Project for comparing Ion Torrent NGS50 analysis variants to Ion Reporter Oncomine analysis variants
+
+Got list of Oncomine IDs and .tsv export files matched with NGS50 ID's; use NGS50 Master List all-variants .tsv file
+
+## Load the data
+```{r}
+# https://cran.r-project.org/web/packages/VennDiagram/VennDiagram.pdf
+library("VennDiagram")
+
+# read in the index file
+index <- read.delim(file = 'Oncomine_vs_NGS50_ID_and_tsv_file_match_9-19-2018.csv', sep = ',', check.names = FALSE)
+names(index) <- c('OncomineID', 'OncomineFile', 'TSID', 'NGS50ID', 'NGS50File')
+index[["NGS50_OncomineID"]] <- sprintf('%s.%s', index[["NGS50ID"]], index[["OncomineFile"]])
+write.table(x = index, file = 'Oncomine_NGS50_index.tsv', sep = '\t', row.names = FALSE, col.names = TRUE, na = '.')
+
+# read in the Oncomine variants file
+oncomine <- read.delim(file = "workflow-clean-IonReporter-files/output/Oncomine_all_filtered_annotations.tsv", header = TRUE, sep = '\t', check.names = FALSE)
+
+
+# read in the NGS50 file
+NGS50 <- read.delim(file = "NGS50_files/NGS50_all_summary_version_2018-09-19_14-19-52.tsv", header = TRUE, sep = '\t', check.names = FALSE)
+
+# add unique variant IDs
+NGS50[["VariantID"]] <- sprintf('%s:%s %s>%s', NGS50[["Chrom"]], NGS50[["Position"]], NGS50[["Ref"]], NGS50[["Variant"]])
+oncomine[["VariantID"]] <- sprintf('%s:%s %s>%s', oncomine[["CHROM"]], oncomine[["POS"]], oncomine[["REF"]], oncomine[["ALT"]])
+
+
+# subset NGS50 in Oncomine index, merge the Oncomine ID, make new unique variant IDs
+NGS50_Oncomine <- NGS50[NGS50[["Sample Name"]] %in% levels(index[["NGS50ID"]]), ] # c("VariantID", "Sample Name")
+NGS50_Oncomine <- merge(x = NGS50_Oncomine, y = index[,c("NGS50_OncomineID", "NGS50ID")], by.x = "Sample Name", by.y = "NGS50ID" )
+NGS50_Oncomine[["IndexVariantID"]] <- sprintf('%s %s', NGS50_Oncomine[["VariantID"]], NGS50_Oncomine[["NGS50_OncomineID"]])
+write.table(x = NGS50_Oncomine, file = "NGS50_in_Oncomine.tsv", sep = '\t', row.names = FALSE, col.names = TRUE)
+
+# subset Oncomine in NGS50 index
+Oncomine_NGS50 <- oncomine[oncomine[["Source"]] %in% levels(index[["OncomineFile"]]), ] # c("VariantID", "Source")
+Oncomine_NGS50 <- merge(x = Oncomine_NGS50, y = index[,c("NGS50_OncomineID", "OncomineFile")], by.x = 'Source', by.y = 'OncomineFile')
+Oncomine_NGS50[["IndexVariantID"]] <- sprintf('%s %s', Oncomine_NGS50[["VariantID"]], Oncomine_NGS50[["NGS50_OncomineID"]])
+write.table(x = Oncomine_NGS50, file = "Oncomine_in_NGS50.tsv", sep = '\t', row.names = FALSE, col.names = TRUE)
+
+# variants <- list(
+#     "NGS50" = NGS50_Oncomine[["IndexVariantID"]],
+#     "Oncomine" = Oncomine_NGS50[["IndexVariantID"]]
+# )
+# 
+# venn_plot <- venn.diagram(x = variants, 
+#                                   filename = NULL, 
+#                                   # main = sample_name, 
+#                                   # fill = venn_colors, 
+#                                   # col = venn_colors, 
+#                                   # cat.col = venn_colors, 
+#                                   # alpha = alpha_values, 
+#                                   scaled = TRUE)
+# 
+# overlaps <- calculate.overlap(variants)
+# 
+# # https://github.com/stevekm/Bioinformatics/blob/7b07e92cff95d77f6af09e1618a551f802fec0ff/misc_workflow/variant_filtering_venn.Rmd#L158
+# pdf(file = "Oncomine_NGS50_venn.pdf")
+# grid.draw(venn_plot)
+# # grid.newpage()
+# dev.off()
+
+
+
+
+# # # # # # # # # # # ## # # # # # # # 
+# # # # # # # # # # # ## # # # # # # # 
+# # # # # # # # # # # ## # # # # # # # 
+# subset for only SNPs & indels in Oncomine
+remove_types <- c("CNV", "fusion", "mnp")
+Oncomine_NGS50_snp <- Oncomine_NGS50[which(! Oncomine_NGS50[["rowtype"]] %in% remove_types), ]
+
+# ONCOMINE VARIANTS NEED TO BE RIGHT_SHIFTED
+Oncomine_NGS50_snp <- cbind(Oncomine_NGS50_snp, do.call('rbind', apply(X = Oncomine_NGS50_snp, MARGIN = 1, FUN = function(x){
+    
+    ref <- x[["REF"]] # "ACTG"
+    alt <- x[["ALT"]] # "CCTG"
+    # ref <- "ACTG"
+    # alt <- "CCTG"
+    
+    ref_len <- nchar(ref)
+    alt_len <- nchar(alt)
+
+    # default output; return input
+    output <- list(
+        'REF_shift' = ref, 
+        'ALT_shift' = alt
+        )
+    
+    if(ref_len == alt_len & ref_len > 1 & alt_len > 1){
+        # iterate over the characters in the ref and alt, starting from right side
+        # i <- 4
+        for( i in seq(from = ref_len, to = 2) ){
+            # print(i)
+            # check the last i'th character
+            ref_substr <- substr(x = ref, start = i, stop = i)
+            alt_substr <- substr(x = alt, start = i, stop = i)
+            # print(sprintf('%s-%s %s-%s', ref, ref_substr, alt, alt_substr))
+            if( ref_substr == alt_substr ){
+                # remove character
+                alt <- substr(x = alt, start = 1, stop = nchar(alt) - 1)
+                ref <- substr(x = ref, start = 1, stop = nchar(ref) - 1)
+                # print(sprintf('%s %s', ref, alt))
+            }
+            
+            # return the new outputs
+            output <- list(
+                'REF_shift' = ref,
+                'ALT_shift' = alt
+            )
+        }
+    }
+    return(as.data.frame(output))
+})))
+
+# create a new column based on length of the mutation; 1 = SNP, >1 = INDEL
+Oncomine_NGS50_snp <- cbind(Oncomine_NGS50_snp, do.call('rbind', apply(X = Oncomine_NGS50_snp, MARGIN = 1, FUN = function(x){
+    ref <- x[["REF_shift"]] # "ACTG"
+    alt <- x[["ALT_shift"]] # "CCTG"
+    ref_len <- nchar(ref)
+    alt_len <- nchar(alt)
+    var_len <-  alt_len - ref_len
+    
+    # SNP by default
+    output <- list(
+        "Type" = "SNP", 
+        "VarLen" = var_len
+    )
+    
+    if( var_len != 0 ){
+        output <- list(
+        "Type" = "INDEL",
+        "VarLen" = var_len
+        )
+    }
+    return(as.data.frame(output, drop = FALSE))
+}))) 
+
+# rebuild the variant IDs
+Oncomine_NGS50_snp[["VariantID"]] <- sprintf('%s:%s %s>%s', Oncomine_NGS50_snp[["CHROM"]], Oncomine_NGS50_snp[["POS"]], Oncomine_NGS50_snp[["REF_shift"]], Oncomine_NGS50_snp[["ALT_shift"]])
+Oncomine_NGS50_snp[["IndexVariantID"]] <- sprintf('%s %s', Oncomine_NGS50_snp[["VariantID"]], Oncomine_NGS50_snp[["NGS50_OncomineID"]])
+# Oncomine_NGS50_snp[["ALT_shift"]]
+
+# add count col for aggregation later
+Oncomine_NGS50_snp[["count"]] <- 1
+
+# remove all entries with '.' as FUNC1.coding
+# Oncomine_NGS50_snp <- droplevels(Oncomine_NGS50_snp[which(Oncomine_NGS50_snp[["FUNC1.coding"]] != '.'), ]) # [["FUNC1.coding"]]
+# no dont do this oops
+
+# save copy of the table
+write.table(x = Oncomine_NGS50_snp, file = "Oncomine_in_NGS50_snp_indel_shifted.tsv", sep = '\t', row.names = FALSE, col.names = TRUE)
+
+variants_snp <- list(
+    "NGS50" = unique(NGS50_Oncomine[["IndexVariantID"]]),
+    "Oncomine" = unique(Oncomine_NGS50_snp[["IndexVariantID"]])
+)
+```
+
+# Overlap Variants
+
+## Plot
+```{r}
+
+venn_plot_snp <- venn.diagram(x = variants_snp, 
+                              filename = NULL, 
+                              main = "Oncomine vs NGS50; Unique SNPs & Indels overlap",
+                              fill = c("blue", "red"),
+                              scaled = TRUE)
+
+pdf(file = "Oncomine_NGS50_snp_indel_venn.pdf")
+grid.draw(venn_plot_snp)
+dev.off()
+
+grid.draw(venn_plot_snp)
+
+# get the overlapping 
+# overlaps_snp <- calculate.overlap(variants_snp)
+# names(overlaps_snp) <- c(names(variants_snp), "overlap")
+# overlaps_snp[["overlap"]]
+
+# write list of variants that did not overlap!
+fileConn<-file("Oncomine_not_in_NGS50.tsv")
+writeLines(text = setdiff(unique(Oncomine_NGS50_snp[["IndexVariantID"]]), unique(NGS50_Oncomine[["IndexVariantID"]])), con = fileConn)
+close(fileConn)
+
+fileConn<-file("NGS50_not_in_Oncomine.tsv")
+writeLines(text = setdiff(unique(NGS50_Oncomine[["IndexVariantID"]]), unique(Oncomine_NGS50_snp[["IndexVariantID"]])), con = fileConn)
+close(fileConn)
+
+# mark entries in Oncomine that are in NGS50
+Oncomine_NGS50_snp[["in_NGS50"]] <- "NO"
+Oncomine_NGS50_snp[which(Oncomine_NGS50_snp[["IndexVariantID"]] %in% unique(NGS50_Oncomine[["IndexVariantID"]])), ][["in_NGS50"]] <- "YES"
+```
+
+## Aggregate Tables
+
+Oncomine variants aggregated across gene, variant type, sample
+
+```{r rows.print=50, cols.print = 5}
+# Get the variant breakdown aggregate
+# number of variants per gene
+aggregate( count ~ FUNC1.gene, data = Oncomine_NGS50_snp, FUN = sum)
+
+aggregate( count ~ FUNC1.gene + Type, data = Oncomine_NGS50_snp, FUN = sum)
+
+aggregate( count ~ FUNC1.gene + Type + in_NGS50, data = Oncomine_NGS50_snp, FUN = sum)
+```
+
+```{r cols.print = 5}
+aggregate( count ~ FUNC1.gene + Type + VariantID + Source + in_NGS50, data = Oncomine_NGS50_snp, FUN = sum)
+
+save.image()
+```
+
