@@ -11,9 +11,13 @@ output:
 
 # Setup
 
-Project for comparing Ion Torrent NGS50 analysis variants to Ion Reporter Oncomine analysis variants
+Project for comparing ThermoFisher Ion Torrent PGM NGS50 analysis variants to Ion Torrent S5 Ion Reporter Oncomine analysis variants
 
-Got list of Oncomine IDs and .tsv export files matched with NGS50 ID's; use NGS50 Master List all-variants .tsv file
+Got list of Oncomine IDs and .tsv export files matched with NGS50 ID's; use NGS50 Master List all-variants .tsv file generated from [reportIT Ion Torrent reporter pipeline](https://github.com/stevekm/reportIT/). Oncomine data includes per-sample manually filtered variant .tsv files.
+
+Sample ID's between IR Oncomine and NGS50 panels do not match; need to use manually curated index sheet to match the Oncomine ID <- Oncomine exported .tsv file <-> NGS50 ID
+
+Compare the variant calling performance between legacy NGS50 panel and new Oncomine analysis panel.
 
 ## Load the data
 ```{r}
@@ -162,17 +166,17 @@ Oncomine_NGS50_snp[["count"]] <- 1
 
 # save copy of the table
 write.table(x = Oncomine_NGS50_snp, file = "Oncomine_in_NGS50_snp_indel_shifted.tsv", sep = '\t', row.names = FALSE, col.names = TRUE)
-
-variants_snp <- list(
-    "NGS50" = unique(NGS50_Oncomine[["IndexVariantID"]]),
-    "Oncomine" = unique(Oncomine_NGS50_snp[["IndexVariantID"]])
-)
 ```
 
 # Overlap Variants
 
-## Plot
+## All Overlaps Between Selected Samples
+
 ```{r}
+variants_snp <- list(
+    "NGS50" = unique(NGS50_Oncomine[["IndexVariantID"]]),
+    "Oncomine" = unique(Oncomine_NGS50_snp[["IndexVariantID"]])
+)
 
 venn_plot_snp <- venn.diagram(x = variants_snp, 
                               filename = NULL, 
@@ -205,23 +209,240 @@ Oncomine_NGS50_snp[["in_NGS50"]] <- "NO"
 Oncomine_NGS50_snp[which(Oncomine_NGS50_snp[["IndexVariantID"]] %in% unique(NGS50_Oncomine[["IndexVariantID"]])), ][["in_NGS50"]] <- "YES"
 ```
 
-## Aggregate Tables
+## Overlap For Variants in Common Genes
 
-Oncomine variants aggregated across gene, variant type, sample
+NGS50 and Oncomine analysis may be targetting different sets of genes; check the overlap in variants only in genes that the two have in common.
+
+```{r}
+common_genes <- calculate.overlap(x = list('Oncomine' = levels(Oncomine_NGS50_snp[["FUNC1.gene"]]), 'NGS50' = levels(NGS50_Oncomine[["Gene"]])))[["a3"]]
+
+Oncomine_NGS50_snp_commongenes <- Oncomine_NGS50_snp[which(Oncomine_NGS50_snp[["FUNC1.gene"]] %in% common_genes), ]
+NGS50_Oncomine_commongenes <- NGS50_Oncomine[which(NGS50_Oncomine[["Gene"]] %in% common_genes ), ]
+
+variants_snp_commongenes <- list(
+    "NGS50" = unique(NGS50_Oncomine_commongenes[["IndexVariantID"]]),
+    "Oncomine" = unique(Oncomine_NGS50_snp_commongenes[["IndexVariantID"]])
+)
+
+venn_plot_snp_commongenes <- venn.diagram(x = variants_snp_commongenes, 
+                              filename = NULL, 
+                              main = "Oncomine vs NGS50; Unique SNPs & Indels overlap for common genes",
+                              fill = c("blue", "red"),
+                              scaled = TRUE)
+
+pdf(file = "Oncomine_NGS50_snp_indel_commongenes_venn.pdf")
+grid.draw(venn_plot_snp_commongenes)
+dev.off()
+
+grid.draw(venn_plot_snp_commongenes)
+
+```
+
+# Gene and Variant Counts
+
+## All Oncomine Genes
+
+Counts of Oncomine variants aggregated across gene, variant type, sample, for all Oncomine variants
 
 ```{r rows.print=50, cols.print = 5}
 # Get the variant breakdown aggregate
 # number of variants per gene
-aggregate( count ~ FUNC1.gene, data = Oncomine_NGS50_snp, FUN = sum)
+gene_counts_Oncomine_all <- aggregate( count ~ FUNC1.gene, data = Oncomine_NGS50_snp, FUN = sum)
+write.table(x = gene_counts_Oncomine_all, file = "gene_counts_Oncomine_all.tsv", sep = '\t', row.names = FALSE)
+gene_counts_Oncomine_all
 
-aggregate( count ~ FUNC1.gene + Type, data = Oncomine_NGS50_snp, FUN = sum)
+gene_counts_per_type_Oncomine_all <- aggregate( count ~ FUNC1.gene + Type, data = Oncomine_NGS50_snp, FUN = sum)
+write.table(x = gene_counts_per_type_Oncomine_all, file = "gene_counts_per_type_Oncomine_all.tsv", sep = '\t', row.names = FALSE)
+gene_counts_per_type_Oncomine_all
 
-aggregate( count ~ FUNC1.gene + Type + in_NGS50, data = Oncomine_NGS50_snp, FUN = sum)
+gene_counts_per_type_inNGS50_Oncomine_all <- aggregate( count ~ FUNC1.gene + Type + in_NGS50, data = Oncomine_NGS50_snp, FUN = sum)
+write.table(x = gene_counts_per_type_inNGS50_Oncomine_all, file = "gene_counts_per_type_inNGS50_Oncomine_all.tsv", sep = '\t', row.names = FALSE)
+gene_counts_per_type_inNGS50_Oncomine_all
+
+# aggregate( count ~ FUNC1.gene + Type + VariantID + Source + in_NGS50, data = NGS50_Oncomine_commongenes, FUN = sum)
 ```
 
-```{r cols.print = 5}
-aggregate( count ~ FUNC1.gene + Type + VariantID + Source + in_NGS50, data = Oncomine_NGS50_snp, FUN = sum)
+## Oncomine - NGS50 Common Genes
 
+Aggregate variants for only Oncomine variants in genes that were in common between NGS50 and Oncomine
+
+```{r rows.print=50, cols.print = 5}
+# Get the variant breakdown aggregate
+# number of variants per gene
+gene_counts_Oncomine_commongenes <- aggregate( count ~ FUNC1.gene, data = Oncomine_NGS50_snp_commongenes, FUN = sum)
+write.table(x = gene_counts_Oncomine_commongenes, file = "gene_counts_Oncomine_commongenes.tsv", sep = '\t', row.names = FALSE)
+gene_counts_Oncomine_commongenes
+
+gene_counts_per_type_Oncomine_commongenes <- aggregate( count ~ FUNC1.gene + Type, data = Oncomine_NGS50_snp_commongenes, FUN = sum)
+write.table(x = gene_counts_per_type_Oncomine_commongenes, file = "gene_counts_per_type_Oncomine_commongenes.tsv", sep = '\t', row.names = FALSE)
+gene_counts_per_type_Oncomine_commongenes
+
+gene_counts_per_type_inNGS50_Oncomine_commongenes <- aggregate( count ~ FUNC1.gene + Type + in_NGS50, data = Oncomine_NGS50_snp_commongenes, FUN = sum)
+write.table(x = gene_counts_per_type_inNGS50_Oncomine_commongenes, file = "gene_counts_per_type_inNGS50_Oncomine_commongenes.tsv", sep = '\t', row.names = FALSE)
+gene_counts_per_type_inNGS50_Oncomine_commongenes
+
+
+# aggregate( count ~ FUNC1.gene + Type + VariantID + Source + in_NGS50, data = NGS50_Oncomine_commongenes, FUN = sum)
+```
+
+
+# Comparative Analysis
+
+Compare the variant allele frequency, coverage, and strand bias of the variants that were in common between NGS50 and Oncomine, for the genes in common.
+
+Do a final clean of the data to remove duplicate entries due to re-runs, merge tables together
+
+```{r}
+# get the variants that are in common between the datasets
+overlap_variants <- calculate.overlap(variants_snp_commongenes)[["a3"]]
+
+# subset the datasets for just those variants
+Oncomine_NGS50_overlap <- Oncomine_NGS50_snp_commongenes[which(Oncomine_NGS50_snp_commongenes[["IndexVariantID"]] %in% overlap_variants), ]
+NGS50_Oncomine_overlap <- NGS50_Oncomine_commongenes[which(NGS50_Oncomine_commongenes[["IndexVariantID"]] %in% overlap_variants), ]
+
+# remove duplicate rows
+# many duplicate entries from samples that were re-run due to failed runs; take best variant
+NGS50_Oncomine_overlap <- NGS50_Oncomine_overlap[which(! duplicated(NGS50_Oncomine_overlap)), ]
+NGS50_Oncomine_overlap[["n"]] <- 1
+NGS50_Oncomine_overlap_aggr <- aggregate(n ~ IndexVariantID, data = NGS50_Oncomine_overlap, FUN = sum)
+NGS50_Oncomine_overlap_dupes <- NGS50_Oncomine_overlap_aggr[which(NGS50_Oncomine_overlap_aggr[["n"]] > 1 ), ][["IndexVariantID"]]
+library("data.table")
+NGS50_Oncomine_overlap_dt <- data.table(NGS50_Oncomine_overlap)
+# take the highest qualitry variant from the duplicates
+NGS50_Oncomine_overlap_dt <- NGS50_Oncomine_overlap_dt[,.SD[order(-Quality)[1:1]], by = (IndexVariantID) ]
+setDF(NGS50_Oncomine_overlap_dt)
+
+# 1 exact duplicate entry, diff 'OID.idx' values; remove
+Oncomine_NGS50_overlap <- Oncomine_NGS50_overlap[which(! duplicated(Oncomine_NGS50_overlap)), ]
+Oncomine_NGS50_overlap <- Oncomine_NGS50_overlap[which(! duplicated(Oncomine_NGS50_overlap[["IndexVariantID"]])), ]
+
+# save copies of each table
+write.table(x = NGS50_Oncomine_overlap_dt, file = "NGS50_Oncomine_overlap.tsv", sep = '\t', row.names = FALSE)
+write.table(x = Oncomine_NGS50_overlap, file = "Oncomine_NGS50_overlap.tsv", sep = '\t', row.names = FALSE)
+
+# check the number of rows, should be the same!
+nrow(NGS50_Oncomine_overlap_dt)
+nrow(Oncomine_NGS50_overlap)
+
+nrow(Oncomine_NGS50_overlap) == nrow(NGS50_Oncomine_overlap_dt)
+
+# merge the tables
+NGS50_Oncomine_merged <- merge(x = NGS50_Oncomine_overlap_dt, y = Oncomine_NGS50_overlap, by = 'IndexVariantID', suffixes = c('.NGS50', '.Oncomine'))
+write.table(x = NGS50_Oncomine_merged, file = "NGS50_Oncomine_merged.tsv", sep = '\t', row.names = FALSE)
+```
+
+## Coverage Change
+
+- __IMPORTANT NOTE:__ The variant callers for both Oncomine analysis and NGS50 analysis down-sample variants to 2000x coverage! ("evaluated coverage")
+
+```{r}
+library("ggplot2")
+n_bins = nrow(NGS50_Oncomine_merged)
+
+# calculate coverage change; Oncomine - NGS50
+# !!! NGS50 system downsamples all coverages to 2000 !!! ; Coverage
+# !!! Oncomine appears to do the same; INFO.1.FDP vs. INFO.1.DP
+# NGS50_Oncomine_merged[["Coverage"]]
+NGS50_Oncomine_merged[["CoverageChange"]] <- as.numeric(as.character(NGS50_Oncomine_merged[["INFO.1.FDP"]])) - NGS50_Oncomine_merged[["Coverage"]]
+NGS50_Oncomine_merged[["CoverageChangePcnt"]] <- ( NGS50_Oncomine_merged[["CoverageChange"]] / as.numeric(as.character(NGS50_Oncomine_merged[["INFO.1.FDP"]])) ) * 100
+
+cov_change_hist <- ggplot(NGS50_Oncomine_merged, aes(x = CoverageChangePcnt, fill=..x..)) + 
+    geom_histogram() + # bins = n_bins
+    scale_fill_gradient2(low='blue', mid='grey', high='red', midpoint=0) + 
+    theme_bw() + 
+    ggtitle(sprintf("Oncomine vs. NGS50 Variant Calling: Change in Evaluated Coverage (n = %s)", n_bins)) + 
+    xlab("% Change")
+
+pdf("cov_change_hist.pdf")
+print(cov_change_hist)
+dev.off()
+print(cov_change_hist)
+
+summary(NGS50_Oncomine_merged[c('CoverageChange')])
+summary(NGS50_Oncomine_merged[c('CoverageChangePcnt')])
+t.test(as.numeric(as.character(NGS50_Oncomine_merged[["INFO.1.FDP"]])), NGS50_Oncomine_merged[["Coverage"]], paired = TRUE, alternative = "two.sided") # [["p.value"]]
+```
+
+## Allele Frequency
+
+```{r}
+# allele frequency
+# Oncomine; FORMAT.A.AF, INFO.A.AF
+# NGS50; Frequency
+NGS50_Oncomine_merged[["AlleleFreqChange"]] <- as.numeric(as.character(NGS50_Oncomine_merged[["INFO.A.AF"]])) - NGS50_Oncomine_merged[["Frequency"]]
+NGS50_Oncomine_merged[["AlleleFreqChangePcnt"]] <- ( NGS50_Oncomine_merged[["AlleleFreqChange"]] / as.numeric(as.character(NGS50_Oncomine_merged[["INFO.A.AF"]])) ) * 100
+
+af_change_hist <- ggplot(NGS50_Oncomine_merged, aes(x = AlleleFreqChangePcnt, fill=..x..)) + 
+    geom_histogram() + # bins = n_bins
+    scale_fill_gradient2(low='blue', mid='grey', high='red', midpoint=0) + 
+    theme_bw() + 
+    ggtitle(sprintf("Oncomine vs. NGS50 Variant Calling: Change in Allele Frequency (n = %s)", n_bins)) + 
+    xlab("% Change")
+
+pdf(file = "af_change_hist.pdf")
+print(af_change_hist)
+dev.off()
+print(af_change_hist)
+
+summary(NGS50_Oncomine_merged[c('AlleleFreqChange')])
+summary(NGS50_Oncomine_merged[c('AlleleFreqChangePcnt')])
+t.test(as.numeric(as.character(NGS50_Oncomine_merged[["INFO.A.AF"]])), NGS50_Oncomine_merged[["Frequency"]], paired = TRUE, alternative = "two.sided")
+
+```
+
+## Strand Bias
+
+```{r}
+# Strand Bias;
+# NGS50; Strand Bias
+# Oncomine; INFO.A.STB
+NGS50_Oncomine_merged[["StrandBiasChange"]] <- as.numeric(as.character(NGS50_Oncomine_merged[["INFO.A.STB"]])) - NGS50_Oncomine_merged[["Strand Bias"]]
+NGS50_Oncomine_merged[["StrandBiasChangePcnt"]] <- ( NGS50_Oncomine_merged[["StrandBiasChange"]] / as.numeric(as.character(NGS50_Oncomine_merged[["INFO.A.STB"]])) ) * 100
+
+sb_change_hist <- ggplot(NGS50_Oncomine_merged, aes(x = StrandBiasChangePcnt, fill=..x..)) + 
+    geom_histogram() + # bins = n_bins
+    scale_fill_gradient2(low='blue', mid='grey', high='red', midpoint=0) + 
+    theme_bw() + 
+    ggtitle(sprintf("Oncomine vs. NGS50 Variant Calling: Change in Strand Bias (n = %s)", n_bins)) + 
+    xlab("% Change")
+
+pdf(file = "sb_change_hist.pdf")
+print(sb_change_hist)
+dev.off()
+print(sb_change_hist)
+
+summary(NGS50_Oncomine_merged[c('StrandBiasChange')])
+summary(NGS50_Oncomine_merged[c('StrandBiasChangePcnt')])
+t.test(as.numeric(as.character(NGS50_Oncomine_merged[["INFO.A.STB"]])), NGS50_Oncomine_merged[["Strand Bias"]], paired = TRUE, alternative = "two.sided")
+```
+
+## All Metrics
+
+```{r}
+# make a single box plot with the change % values
+library("reshape2")
+# dates_df_long <- reshape2::melt(dates_df,id.vars='V1', value.name = "userID")
+percent_changes <- reshape2::melt(NGS50_Oncomine_merged[c('StrandBiasChangePcnt', 'AlleleFreqChangePcnt', 'CoverageChangePcnt')], value.name = "value") # id.vars='type',
+percent_changes_box <- ggplot(percent_changes, aes(x = variable, y = value)) + 
+    geom_boxplot() + 
+    ggtitle("Oncomine vs. NGS50: Comparative Metrics") + 
+    ylab("% Change") + 
+    xlab("Metric")
+
+pdf("percent_changes_box.pdf")
+print(percent_changes_box)
+dev.off()
+print(percent_changes_box)
+```
+
+
+
+
+
+```{r cols.print = 5}
 save.image()
 ```
 
+```{r engine='bash'}
+zip NGS50_Oncomine_results.zip percent_changes_box.pdf sb_change_hist.pdf af_change_hist.pdf cov_change_hist.pdf NGS50_Oncomine_merged.tsv Oncomine_NGS50_overlap.tsv NGS50_Oncomine_overlap.tsv Oncomine_NGS50_snp_indel_commongenes_venn.pdf Oncomine_NGS50_snp_indel_venn.pdf Oncomine_in_NGS50_snp_indel_shifted.tsv NGS50_in_Oncomine.tsv gene_counts_Oncomine_all.tsv gene_counts_per_type_Oncomine_all.tsv gene_counts_per_type_inNGS50_Oncomine_all.tsv gene_counts_Oncomine_commongenes.tsv gene_counts_per_type_Oncomine_commongenes.tsv gene_counts_per_type_inNGS50_Oncomine_commongenes.tsv
+```
