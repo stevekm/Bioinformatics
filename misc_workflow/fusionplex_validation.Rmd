@@ -1,0 +1,276 @@
+---
+title: "FusionPlex Validation"
+author: "Stephen Kelly"
+date: "12/31/2018"
+output: 
+  html_document:
+    df_print: kable
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("ggplot2")
+library("reshape2")
+output_dir = "output"
+```
+
+Need to plot: 
+
+- NC over runs
+- NTC over runs
+- Pos. controls over runs
+
+
+# NC Over Runs
+
+```{r}
+nc_file <- "data/NC_over_runs.csv"
+nc_df <- read.delim(nc_file, header = TRUE, sep = ',', stringsAsFactors = FALSE)
+
+# need to fix the values for this column because its a string with commas
+nc_df[["RNA_Reads"]] <- as.numeric(gsub(pattern = ',', replacement = '', x = nc_df[["RNA_Reads"]]))
+nc_df[["Unique_RNA_reads"]] <- as.numeric(gsub(pattern = ',', replacement = '', x = nc_df[["Unique_RNA_reads"]]))
+
+# convert run to factor levels
+nc_df[["Run"]] <- as.factor(nc_df[["Run"]])
+
+# convert to long format
+nc_df <- reshape2::melt(nc_df, id.vars = 'Run', value.name = 'value')
+
+# add all runs factor level for plotting
+nc_df[["AllRuns"]] <- factor('')
+
+write.table(x = nc_df, file = file.path(output_dir, "nc_long.csv"), sep = ',', row.names = FALSE, col.names = TRUE)
+
+# make summary table
+nc_summary <- aggregate(value ~ variable, data = nc_df, FUN = mean)
+nc_summary <- cbind(nc_summary, aggregate(value ~ variable, data = nc_df, FUN = sd)["value"])
+names(nc_summary) <- c("variable", "mean", "sd")
+
+nc_summary
+write.table(x = nc_summary, file = file.path(output_dir, "nc_summary.csv"), sep = ',', row.names = FALSE, col.names = TRUE)
+
+
+# trying to tweak the table for plotting..
+# nc_summary[["AllRuns"]] <- factor('')
+# nc_summary[["value"]] <- 0
+
+nc_reads_bar <- ggplot(data = nc_df[which(nc_df[["variable"]] %in% c("RNA_Reads", "Unique_RNA_reads") ), ], 
+       aes(x = Run, y = value, fill = variable)) + 
+    geom_bar(stat = 'identity', position = 'dodge') + 
+    coord_flip() + 
+    ylab("Reads") + 
+    theme_bw() +
+    ggtitle("NC Reads per Run")
+
+nc_reads_bar
+pdf(file = file.path(output_dir, 'nc_reads_bar.pdf'))
+print(nc_reads_bar)
+dev.off()
+
+nc_reads_box <- ggplot(data = nc_df[which(nc_df[["variable"]] %in% c("Unique_RNA_reads", "RNA_Reads") ), ], 
+       aes(x = AllRuns, y = value, fill = variable)) + 
+    geom_boxplot() + 
+    ylab("Reads") + 
+    xlab("All Runs") +
+    theme_bw() +
+    ggtitle("NC Reads")
+    # ggtitle("NC Reads") + 
+    # geom_errorbar(data = nc_summary[which(nc_summary[["variable"]] %in% c("RNA_Reads", "Unique_RNA_reads") ), ],
+    #               aes(ymin=max(-2*sd, 0), ymax=2*sd, color = variable), colour="black", width=.1)
+nc_reads_box
+pdf(file = file.path(output_dir, 'nc_reads_box.pdf'))
+print(nc_reads_box)
+dev.off()
+
+
+nc_gsp2_bar <- ggplot(data = nc_df[which(nc_df[["variable"]] %in% c("Avg_Unique_RNA_Start_Sites_per_GSP2_Control") ), ], 
+       aes(x = Run, y = value, fill = variable)) + 
+    geom_bar(stat = 'identity', position = 'dodge') + 
+    coord_flip() + 
+    ylab("Number of Sites") + 
+    theme_bw() +
+    theme(legend.position="none") +
+    ggtitle("NC Avg. Unique RNA Start Sites per GSP2 Control")
+
+nc_gsp2_bar
+pdf(file = file.path(output_dir, 'nc_gsp2_bar.pdf'))
+print(nc_gsp2_bar)
+dev.off()
+
+nc_gsp2_box <- ggplot(data = nc_df[which(nc_df[["variable"]] %in% c("Avg_Unique_RNA_Start_Sites_per_GSP2_Control") ), ], 
+       aes(x = AllRuns, y = value, fill = variable)) + 
+    geom_boxplot() + 
+    ylab("Number of Sites") + 
+    xlab("All Runs") +
+    theme_bw() +
+    theme(legend.position="none") +
+    ggtitle("NC Avg. Unique RNA Start Sites per GSP2 Control")
+
+nc_gsp2_box
+pdf(file = file.path(output_dir, 'nc_gsp2_box.pdf'))
+print(nc_gsp2_box)
+dev.off()
+
+```
+
+# NTC Over Runs
+
+```{r}
+ntc_file <- "data/NTC_reads_over_runs.csv"
+ntc_df <- read.delim(ntc_file, header = TRUE, sep = ',', stringsAsFactors = FALSE)
+
+# convert run to factor levels
+ntc_df[["Run"]] <- as.factor(ntc_df[["Run"]])
+
+# convert to long format
+ntc_df <- reshape2::melt(ntc_df, id.vars = 'Run', value.name = 'value')
+
+# add all runs factor level for plotting
+ntc_df[["AllRuns"]] <- factor('')
+
+write.table(x = ntc_df, file = file.path(output_dir, "ntc_long.csv"), sep = ',', row.names = FALSE, col.names = TRUE)
+
+# make summary table
+ntc_summary <- aggregate(value ~ variable, data = ntc_df, FUN = mean)
+ntc_summary <- cbind(ntc_summary, aggregate(value ~ variable, data = ntc_df, FUN = sd)["value"])
+names(ntc_summary) <- c("variable", "mean", "sd")
+
+ntc_summary
+write.table(x = ntc_summary, file = file.path(output_dir, "ntc_summary.csv"), sep = ',', row.names = FALSE, col.names = TRUE)
+
+ntc_reads_bar <- ggplot(data = ntc_df[which(ntc_df[["variable"]] %in% c("RNA_Reads", "Unique_RNA_reads") ), ], 
+       aes(x = Run, y = value, fill = variable)) + 
+    geom_bar(stat = 'identity', position = 'dodge') + 
+    coord_flip() + 
+    ylab("Reads") + 
+    theme_bw() +
+    ggtitle("NTC Reads per Run")
+
+ntc_reads_bar
+pdf(file = file.path(output_dir, 'ntc_reads_bar.pdf'))
+print(ntc_reads_bar)
+dev.off()
+
+ntc_reads_box <- ggplot(data = ntc_df[which(ntc_df[["variable"]] %in% c("RNA_Reads", "Unique_RNA_reads") ), ], 
+       aes(x = AllRuns, y = value, fill = variable)) + 
+    geom_boxplot() + 
+    ylab("Reads") + 
+    xlab("All Runs") +
+    theme_bw() +
+    ggtitle("NTC Reads")
+
+ntc_reads_box
+pdf(file = file.path(output_dir, 'ntc_reads_box.pdf'))
+print(ntc_reads_box)
+dev.off()
+
+ntc_gsp2_bar <- ggplot(data = ntc_df[which(ntc_df[["variable"]] %in% c("Avg_Unique_RNA_Start_Sites_Per_GSP2_Control") ), ], 
+       aes(x = Run, y = value, fill = variable)) + 
+    geom_bar(stat = 'identity', position = 'dodge') + 
+    coord_flip() + 
+    ylab("Number of Sites") + 
+    theme_bw() +
+    theme(legend.position="none") +
+    ggtitle("NTC Avg. Unique RNA Start Sites per GSP2 Control")
+
+ntc_gsp2_bar
+pdf(file = file.path(output_dir, 'ntc_gsp2_bar.pdf'))
+print(ntc_gsp2_bar)
+dev.off()
+
+ntc_gsp2_box <- ggplot(data = ntc_df[which(ntc_df[["variable"]] %in% c("Avg_Unique_RNA_Start_Sites_Per_GSP2_Control") ), ], 
+       aes(x = AllRuns, y = value, fill = variable)) + 
+    geom_boxplot() + 
+    ylab("Number of Sites") + 
+    xlab("All Runs") +
+    theme_bw() +
+    theme(legend.position="none") +
+    ggtitle("NTC Avg. Unique RNA Start Sites per GSP2 Control")
+
+ntc_gsp2_box
+pdf(file = file.path(output_dir, 'ntc_gsp2_box.pdf'))
+print(ntc_gsp2_box)
+dev.off()
+
+```
+
+# Pos. controls over runs
+
+```{r}
+sc_file <- "data/Positive_controls_over_runs_SC.csv"
+sc_df <- read.delim(sc_file, header = TRUE, sep = ',', stringsAsFactors = FALSE)
+
+# replace these weird arrow characters in the table
+sc_df[["Fusion"]] <- gsub(pattern = '→', replacement = '-', x = sc_df[["Fusion"]])
+
+# convert to factor levels
+sc_df[["Run"]] <- as.factor(sc_df[["Run"]])
+sc_df[["Fusion"]] <- as.factor(sc_df[["Fusion"]])
+
+# convert to long format
+sc_df <- reshape2::melt(sc_df, id.vars = c('Run', 'Fusion', 'RefSeq'), value.name = 'value')
+write.table(x = sc_df, file = file.path(output_dir, "sc_long.csv"), sep = ',', row.names = FALSE, col.names = TRUE)
+
+
+# make summary table
+sc_summary <- aggregate(value ~ Fusion + variable, data = sc_df, FUN = mean)
+sc_summary <- cbind(sc_summary, aggregate(value ~ Fusion + variable, data = sc_df, FUN = sd)["value"])
+names(sc_summary) <- c("Fusion", "variable", "mean", "sd")
+
+write.table(x = sc_summary, file = file.path(output_dir, "sc_summary.csv"), sep = ',', row.names = FALSE, col.names = TRUE)
+
+sc_reads_box <- ggplot(data = sc_df[which(sc_df[["variable"]] %in% c("Reads_with_Unique_Start_Sites") ), ], 
+       aes(x = Fusion, y = value, fill = Fusion)) + 
+    geom_boxplot() + 
+    coord_flip() + 
+    ylab('Reads with Unique Start Sites') +
+    ggtitle('Positive Controls across all Runs') +
+    theme_bw() +
+    theme(legend.position="none")
+
+sc_reads_box
+pdf(file = file.path(output_dir, 'sc_reads_box.pdf'))
+print(sc_reads_box)
+dev.off()
+
+sc_uniq_box <- ggplot(data = sc_df[which(sc_df[["variable"]] %in% c("Unique_.Reads_supporting_fusion") ), ], 
+       aes(x = Fusion, y = value, fill = Fusion)) + 
+    geom_boxplot() + 
+    coord_flip() + 
+    ylab('Unique Reads supporting fusion') +
+    ggtitle('Positive Controls across all Runs') +
+    theme_bw() +
+    theme(legend.position="none")
+
+sc_uniq_box
+pdf(file = file.path(output_dir, 'sc_uniq_box.pdf'))
+print(sc_uniq_box)
+dev.off()
+
+sc_pcnt_box <- ggplot(data = sc_df[which(sc_df[["variable"]] %in% c("Pcnt_RNA_Reads_supporting_event") ), ], 
+       aes(x = Fusion, y = value, fill = Fusion)) + 
+    geom_boxplot() + 
+    coord_flip() + 
+    ylab('Percent  RNA Reads supporting event') +
+    ggtitle('Positive Controls across all Runs') +
+    theme_bw() +
+    theme(legend.position="none")
+
+sc_pcnt_box
+pdf(file = file.path(output_dir, 'sc_pcnt_box.pdf'))
+print(sc_pcnt_box)
+dev.off()
+
+```
+
+```{r}
+save.image(compress = TRUE)
+```
+
+```{r engine='bash'}
+zip -r fusionplex_validation_workflow_data.zip data
+zip -r fusionplex_validation_workflow_output.zip output
+```
