@@ -1,0 +1,93 @@
+---
+title: "Melanoma Signatures Analysis"
+author: "Stephen Kelly"
+date: "2/21/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# source("https://bioconductor.org/biocLite.R")
+# biocLite("BSgenome.Hsapiens.UCSC.hg19")
+# install.packages("deconstructSigs")
+library("BSgenome.Hsapiens.UCSC.hg19")
+library("deconstructSigs")
+
+variants <- read.delim(file = "data/variants.tsv", header = TRUE, sep = '\t')
+variants[["Sample"]] <- "Cohort"
+
+# keep only entries with chroms in the reference data
+variants <- variants[which(as.character(variants[["Chr"]]) %in% seqnames(BSgenome.Hsapiens.UCSC.hg19::Hsapiens)), ]
+
+# convert to signatures format
+sigs.input <- mut.to.sigs.input(mut.ref = variants,
+                                sample.id = "Sample",
+                                chr = "Chr",
+                                pos = "Start",
+                                ref = "REF",
+                                alt = "ALT")
+
+# make the signatures
+signatures <- whichSignatures(tumor.ref = sigs.input,
+                              signatures.ref = signatures.cosmic,
+                              sample.id = "Cohort",
+                              contexts.needed = TRUE,
+                              tri.counts.method = 'default')
+ 
+# make plots
+# https://stackoverflow.com/a/29583945/5359531
+pdf(file = "signatures.plot.pdf", width = 12, height = 15)
+# dev.control(displaylist="enable")
+print(plotSignatures(signatures, sub = 'signatures.cosmic'))
+# saveRDS(object = recordPlot(), file = signatures_plot_Rds)
+dev.off()
+
+pdf(file = "signatures.pie.pdf", width = 8, height = 8)
+# dev.control(displaylist="enable")
+print(makePie(signatures, sub = 'signatures.cosmic'))
+# saveRDS(object = recordPlot(), file = signatures_pie_plot_Rds)
+dev.off()
+
+# save the weights
+write.table(x = t(signatures$weights), file = "signatures.weights.tsv", sep = '\t', col.names = TRUE)
+
+```
+
+Signature definitions; https://cancer.sanger.ac.uk/cosmic/signatures
+
+
+
+```
+> sessionInfo()
+R version 3.4.0 (2017-04-21)
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+Running under: macOS Sierra 10.12.6
+
+Matrix products: default
+BLAS: /System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBLAS.dylib
+LAPACK: /Library/Frameworks/R.framework/Versions/3.4/Resources/lib/libRlapack.dylib
+
+locale:
+[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+
+attached base packages:
+[1] stats4    parallel  stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] deconstructSigs_1.8.0             BSgenome.Hsapiens.UCSC.hg19_1.4.0 BSgenome_1.46.0                  
+ [4] rtracklayer_1.38.3                Biostrings_2.46.0                 XVector_0.18.0                   
+ [7] GenomicRanges_1.30.3              GenomeInfoDb_1.14.0               IRanges_2.12.0                   
+[10] S4Vectors_0.16.0                  BiocGenerics_0.24.0              
+
+loaded via a namespace (and not attached):
+ [1] Rcpp_0.12.11               magrittr_1.5               knitr_1.20                 zlibbioc_1.24.0           
+ [5] GenomicAlignments_1.14.2   BiocParallel_1.12.0        lattice_0.20-35            stringr_1.2.0             
+ [9] plyr_1.8.4                 tools_3.4.0                SummarizedExperiment_1.8.1 grid_3.4.0                
+[13] Biobase_2.38.0             matrixStats_0.53.1         yaml_2.1.14                Matrix_1.2-10             
+[17] GenomeInfoDbData_1.0.0     reshape2_1.4.2             bitops_1.0-6               RCurl_1.95-4.11           
+[21] stringi_1.1.5              DelayedArray_0.4.1         compiler_3.4.0             Rsamtools_1.30.0          
+[25] XML_3.98-1.7     
+```
