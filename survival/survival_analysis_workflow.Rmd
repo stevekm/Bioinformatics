@@ -1,0 +1,213 @@
+---
+title: "Survival Analysis"
+author: "Stephen Kelly"
+date: '`r format(Sys.time(), "%B %d, %Y")`'
+output:
+  html_document:
+    keep_md: yes
+    number_sections: yes
+    toc: yes
+---
+
+Example survival analysis workflow. Comparing the survival of patients with different mutational states in various genes; BRCA, EGFR, SOX9. 
+
+(Simulated synthetic data shown)
+
+```{r setup, include=TRUE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width=10)
+knitr::opts_chunk$set(fig.height=10)
+suppressPackageStartupMessages(library("ggplot2"))
+suppressPackageStartupMessages(library("FSA"))
+suppressPackageStartupMessages(library("knitr"))
+suppressPackageStartupMessages(library("gplots"))
+suppressPackageStartupMessages(library("corrplot"))
+suppressPackageStartupMessages(library("survival"))
+suppressPackageStartupMessages(library("survminer"))
+
+```
+
+Load data and define a custom mutational state "`BRCA_EGFR_State`" based on the presence of mutations in BRCA, EGFR, and SOX9.
+
+```{r}
+# load data
+surv_dat <- read.delim(file = "survival_data.tsv", header = TRUE, sep = '\t')
+
+# add "BRCA vs. EGFR" state factor level for comparison
+# - BRCA_MUT: BRCA 1, EGFR & SOX9 0
+# - EGFR_MUT: EGFR 1, BRCA & SOX9 0
+# 0: no mutation
+# 1: mutation
+surv_dat[["BRCA_EGFR_State"]] <- NA
+for(i in seq(nrow(surv_dat))){
+    BRCA <- surv_dat[i, "BRCA"]
+    EGFR <- surv_dat[i, "EGFR"]
+    SOX9 <- surv_dat[i, "SOX9"]
+    if(BRCA == 1 & EGFR == 0 & SOX9 == 0){
+        surv_dat[i, "BRCA_EGFR_State"] <- "BRCA_MUT"
+    } else if(EGFR == 1 & SOX9 == 0 & BRCA == 0 ){
+        surv_dat[i, "BRCA_EGFR_State"] <- "EGFR_MUT"
+    } else if(EGFR == 1 & SOX9 == 1 & BRCA == 0 ){
+        surv_dat[i, "BRCA_EGFR_State"] <- "EGFR_SOX9_MUT"
+    } else {
+        surv_dat[i, "BRCA_EGFR_State"] <- NA
+    }
+}
+
+# convert to factor level
+surv_dat[["BRCA_EGFR_State"]] <- factor(x = surv_dat[["BRCA_EGFR_State"]], levels = unique(surv_dat[["BRCA_EGFR_State"]]))
+surv_dat[["Response_to_Treatment"]] <- factor(x = surv_dat[["Response_to_Treatment"]], levels = unique(surv_dat[["Response_to_Treatment"]]))
+surv_dat[["Toxicity"]] <- factor(x = surv_dat[["Toxicity"]], levels = unique(surv_dat[["Toxicity"]]))
+surv_dat[["Gender"]] <- factor(x = surv_dat[["Gender"]], levels = unique(surv_dat[["Gender"]]))
+surv_dat[["Baseline_LDH_at_Treatment_Initiation"]] <- factor(x = surv_dat[["Baseline_LDH_at_Treatment_Initiation"]], levels = unique(surv_dat[["Baseline_LDH_at_Treatment_Initiation"]]))
+surv_dat[["Stage"]] <- factor(x = surv_dat[["Stage"]], levels = unique(surv_dat[["Stage"]]))
+surv_dat[["Treatment_Type"]] <- factor(x = surv_dat[["Treatment_Type"]], levels = unique(surv_dat[["Treatment_Type"]]))
+
+```
+
+# Age
+
+Compare age distribution between groups and check for statistical significance.
+
+```{r}
+ggplot(data = surv_dat[which(!is.na(surv_dat[["BRCA_EGFR_State"]])), ], 
+       aes(x = BRCA_EGFR_State, y = Age_at_Initiation, fill = BRCA_EGFR_State)) + 
+    geom_boxplot() +
+    ggtitle("Age") +
+    theme_bw() +
+    guides(fill=FALSE) +
+    theme(panel.grid.minor = element_blank())
+
+kruskal.test(Age_at_Initiation ~ BRCA_EGFR_State, 
+             data = surv_dat[which(!is.na(surv_dat[["BRCA_EGFR_State"]])), ])
+
+# only works for >2 levels in BRCA_EGFR_State
+dunnTest(Age_at_Initiation ~ BRCA_EGFR_State, method = "by",
+         data = surv_dat[which(!is.na(surv_dat[["BRCA_EGFR_State"]])), ])
+
+```
+
+# ANOVA
+
+Check if there is statistical difference between group
+
+```{r}
+fit <- aov(TMB ~ BRCA_EGFR_State, data = surv_dat) 
+print(fit)
+summary(fit)
+TukeyHSD(fit)
+```
+
+# Kruskal-Wallis
+
+Check if there is statistical difference between group using non-parametric test
+
+```{r}
+kruskal.test(TMB ~ BRCA_EGFR_State, data = surv_dat)
+
+# only works for >2 levels in BRCA_EGFR_State
+dunnTest(TMB ~ BRCA_EGFR_State, data = surv_dat, method = "by")
+
+```
+
+
+# Response to Immunotherapy Treatment
+
+Test for differences in response to treatment. 
+
+- `Response_to_Treatment`: 1 = Responder, 2 = non-responder; exclude NA, '9'
+- `Response_to_Treatment` vs `BRCA_EGFR_State`
+
+### Chi Square
+
+```{r}
+# build contingency table
+treatment_table <- table(surv_dat[, c('Response_to_Treatment', 'BRCA_EGFR_State')])
+print(treatment_table)
+
+balloonplot(treatment_table, 
+            main ="Response to Immunotherapy Treatment\nContingency Table", 
+            xlab ="Responder (1) \nvs.\nNon-Responder (2)", 
+            ylab="Mutation Status"
+            )
+
+fit <- chisq.test(treatment_table)
+fit
+
+# observed counts
+fit[["observed"]] 
+
+# counts under the null
+kable(round(fit[["expected"]], digits = 2))
+
+# standardized residuals
+kable(round(fit[["stdres"]] , digits = 2))
+
+# Pearson residuals
+kable(round(fit[["residuals"]] , digits = 2))
+
+# visualization of the residuals to interpret the association between rows and columns
+# # For a given cell, the size of the circle is proportional to the amount of the cell contribution.
+# # Positive residuals are in blue. Positive values in cells specify an attraction (positive association) between the corresponding row and column variables.
+# # Negative residuals are in red. This implies a repulsion (negative association) between the corresponding row and column variables.
+corrplot(corr = fit[["residuals"]], is.cor = FALSE)
+```
+
+### Fisher Exact Test
+
+```{r}
+fisher_fit <- fisher.test(treatment_table)
+fisher_fit
+```
+
+# Overall Survival
+
+Track overall survival amount patients based on mutational state using Kaplan Meier survival curve.
+
+
+```{r}
+# 0=alive, 1=dead
+# BRCA_EGFR_State 0=Wild Type, 1=Mutant
+# 'event' must be a numeric or boolean
+
+# fit the survival model
+os_surv <- survfit(
+    Surv(Months_of_follow_up_from_initial_diagnosis, Alive_with_last_f_up) ~ BRCA_EGFR_State,
+    type="kaplan-meier",
+    conf.type="log",
+    data=surv_dat)
+
+summary(os_surv)
+
+survdiff(Surv(Months_of_follow_up_from_initial_diagnosis, Alive_with_last_f_up) ~ BRCA_EGFR_State, data=surv_dat)
+
+plot(os_surv,
+     col = seq_along(levels(surv_dat[["BRCA_EGFR_State"]])),
+     lwd = 2,
+     xlab="Months of Follow-up",
+     ylab="Survival",
+     main = "Overall Survival")
+legend(x="topright",
+       col=seq_along(levels(surv_dat[["BRCA_EGFR_State"]])),
+       lwd=2,
+       legend=levels(surv_dat[["BRCA_EGFR_State"]])
+       )
+```
+
+
+# Is BRCA mutation an independent prognostic marker?
+
+```{r}
+surv_dat_subset <- surv_dat[surv_dat[["Baseline_LDH_at_Treatment_Initiation"]] %in% c(0,1), ]
+
+res.cox <- coxph(Surv(Months_of_follow_up_from_initial_diagnosis, Alive_with_last_f_up) ~ BRCA_EGFR_State + Age_at_Initiation + Gender + Stage + Baseline_LDH_at_Treatment_Initiation, 
+                 data =  surv_dat_subset)
+summary(res.cox)
+```
+
+# Session
+
+```{r}
+sessionInfo()
+```
