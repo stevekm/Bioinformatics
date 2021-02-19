@@ -14,8 +14,10 @@ Setup with `make install singularity-pull`, run with `make run`, and plot with `
 
 ## Results
 
+Tested with maf file containing 417632 variants, and 48 targeted exome sequencing .bam files ranging from 600MB - 8GB in size
+
 - `aggregate.tsv`: metrics showing mean execution time per sample
 
 - `total_time.pdf`: total execution time for HPC jobs with varying numbers of samples and CPU threads
 
-- `time_per_sample.pdf`: mean execution time per sample 
+- `time_per_sample.pdf`: mean execution time per sample
